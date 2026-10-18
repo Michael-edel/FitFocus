@@ -87,6 +87,37 @@ describe('auth session transport', () => {
     }));
     expect(requestIdFromCall(fetchImpl)).toMatch(/^web-/);
   });
+
+  it.each(['beforeunload', 'pagehide'])('aborts invite validation on %s without publishing a stale error', async (eventName) => {
+    const page = new EventTarget();
+    vi.stubGlobal('window', page);
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const fetchImpl = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      markStarted();
+    }));
+    const setInviteError = vi.fn();
+    const setInviteChecking = vi.fn();
+
+    const validation = ensureInviteCodeIsValid({
+      requireInvite: true,
+      inviteCode: 'BETA-123',
+      setInviteError,
+      setInviteChecking,
+      fetchImpl,
+    });
+
+    await started;
+    page.dispatchEvent(new Event(eventName));
+
+    await expect(validation).resolves.toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(setInviteError).toHaveBeenCalledTimes(1);
+    expect(setInviteError).toHaveBeenCalledWith(null);
+    expect(setInviteChecking).toHaveBeenCalledTimes(1);
+    expect(setInviteChecking).toHaveBeenCalledWith(true);
+  });
 });
 
 

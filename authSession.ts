@@ -4,7 +4,8 @@ import { normalizeUserProfiles } from './storage/hybrid';
 import { readOwnedProfile } from './storage/profileState';
 import { UserStateRepository } from './storage/userStateRepository';
 import { isUserProfilePayload } from './profileValidation';
-import { fetchWithResilience } from './services/httpClient';
+import { fetchWithResilience, HttpRequestError } from './services/httpClient';
+import { listenForPageExit } from './storage/sessionTransport';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { verifyReadSession, readScopedJson, assertReadSession, SessionReadError } from './storage/sessionRead';
 
@@ -282,6 +283,12 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
   }
 
   const fetchFn = params.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  let active = true;
+  const removePageExit = listenForPageExit(() => {
+    active = false;
+    controller.abort();
+  });
   params.setInviteChecking?.(true);
   params.setInviteError(null);
   try {
@@ -290,20 +297,25 @@ export async function ensureInviteCodeIsValid(params: InviteCheckParams): Promis
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ code }),
+      signal: controller.signal,
     }, {
       fetchImpl: fetchFn,
     });
+    if (!active) return false;
     const j = await readJsonRecord(r);
+    if (!active) return false;
     if (!r.ok || j?.valid !== true) {
       params.setInviteError('Код приглашения недействителен или уже использован.');
       return false;
     }
     return true;
-  } catch {
+  } catch (error) {
+    if (!active || (error instanceof HttpRequestError && error.kind === 'aborted')) return false;
     params.setInviteError('Не удалось проверить код приглашения. Проверьте сервер.');
     return false;
   } finally {
-    params.setInviteChecking?.(false);
+    removePageExit();
+    if (active) params.setInviteChecking?.(false);
   }
 }
 

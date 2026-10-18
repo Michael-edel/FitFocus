@@ -50,6 +50,7 @@ import {
 import { analyzeFoodPhoto, generatePersonalPlan, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
 import { fetchWithResilience } from './services/httpClient';
+import { listenForPageExit } from './storage/sessionTransport';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
@@ -1266,14 +1267,25 @@ const App: React.FC = () => {
 
   // Load public env flags (no auth)
   useEffect(() => {
-    (async () => {
+    const controller = new AbortController();
+    let active = true;
+    const removePageExit = listenForPageExit(() => {
+      active = false;
+      controller.abort();
+    });
+    void (async () => {
       try {
-        const r = await fetchWithResilience('/api/env', { credentials: 'include' }, { retries: 1 });
-        if (!r.ok) return;
+        const r = await fetchWithResilience('/api/env', { credentials: 'include', signal: controller.signal }, { retries: 1 });
+        if (!active || !r.ok) return;
         const raw = await r.json().catch(() => null) as unknown;
-        if (isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
+        if (active && isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
       } catch {}
     })();
+    return () => {
+      active = false;
+      removePageExit();
+      controller.abort();
+    };
   }, []);
 
   const ensureInviteOk = useCallback(async (): Promise<boolean> => {
