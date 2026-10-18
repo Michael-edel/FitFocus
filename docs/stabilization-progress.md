@@ -6908,3 +6908,22 @@ bootstrap/profile/state/push-status — 401 без redirect и `Set-Cookie`.
 `/assets/index-BDc4XSZj.js` содержит SHA
 `a739c1e151d5bf33a99346ba24d95368272ecb10`. Это branch preview, не выделенное
 staging; реальные OAuth, D1, авторизованные запросы и релиз остаются открыты.
+
+## P0.9 — отмена Admin transport при уходе со страницы, `931779e`, 19.10.2026
+
+`requestAdminResponse` уже отменял текущий запрос на `pagehide`; теперь он
+отменяет его и на `beforeunload`, снимая оба временных listener в `finally`.
+Отменяется только request-specific controller: controller долговечной
+`AdminSession` остаётся активным, и тест после каждого события отправляет новый
+scoped запрос. Это сохраняет возможность продолжить работу после возврата из
+BFCache.
+
+`tests/admin_session_transport.test.ts` прошёл 13/13; вместе с
+`support_session_transport.test.ts` — 28/28. `npm run typecheck`,
+`npm run typecheck:storage-strict` и `git diff --check` прошли локально. Проверка
+посылает lifecycle events в unit-тесте и не доказывает реальный BFCache,
+физический браузер или staging. Точный CI для опубликованного коммита
+[`931779e`](https://github.com/Michael-edel/FitFocus/commit/931779ef9899366f0a6a812ada054b8c2fff3167)
+для него был создан [run #1653](https://github.com/Michael-edel/FitFocus/actions/runs/39162383939).
+После документационного follow-up точная проверка latest PR head отслеживается
+по workflow в PR #93.

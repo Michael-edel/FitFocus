@@ -1,37 +1,34 @@
 # Текущее состояние FitFocus
 
-Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
+Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
+[`TASKS.md`](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
 
-Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`; он зависит от PR #94 и #90. Последний локально
-проверенный code/test SHA — [`d9317f7`](https://github.com/Michael-edel/FitFocus/commit/d9317f7).
-Он добавляет раннюю отмену support JSON/media запросов и action controllers на
-`beforeunload`, при этом временные listeners снимаются после ответа. Support
-transport — 15/15, ticket/reply attachments E2E — 7/7 browser/PWA проектов,
-root и storage-strict typecheck прошли. Предыдущий follow-up [`aab209f`](https://github.com/Michael-edel/FitFocus/commit/aab209f)
-покрывает unload AI-задачи плато во время hydration (7/7 E2E, 44 связанных
-unit-теста). Точный CI нового PR HEAD проверяется после push.
-Родительский кодовый SHA `a739c1e` подтверждён успешным [точным CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
-1391 unit в 215 файлах, 1058 browser passed / 307 skipped за 44,7 минуты без
-retries, audit, guards, три typecheck, build и rollback/CAS gate на 23 HTTP/D1-
-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
+## Текущая стадия
+
+Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
+ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
+открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
+[`931779e`](https://github.com/Michael-edel/FitFocus/commit/931779ef9899366f0a6a812ada054b8c2fff3167)
+добавляет отмену Admin-запроса на `beforeunload`, сохраняя живой `AdminSession`
+для следующего запроса после возврата. Изменение отправлено в PR-ветку; CI для
+этого code commit запущен, а статус последнего workflow отслеживается в PR.
+
+Локально `admin_session_transport` прошёл 13/13, пара admin/support transport —
+28/28; root и storage-strict typecheck и `git diff --check` прошли. Lifecycle
+события проверены unit-тестом; реальный BFCache, устройство и staging этим не
+подтверждены. Предыдущий code/test SHA `a739c1e` прошёл точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
+1391 unit, 1058 browser passed / 307 skipped, audit, guards, три typecheck,
+build и rollback/CAS gate на 23 HTTP/D1-запроса.
+
+В плане 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных или
+компонентных разделах. Открыты полная lifecycle-матрица, UI разрешения
+конфликтов, оставшиеся writers/callbacks, отдельные staging/OAuth/D1-проверки,
+релизный rollback и интеграция через защищённую `main`. Branch preview не
+считается staging; прямое слияние в `main` не выполнено.
 
 В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
-request-scoped `AiActionScope`; недельный отчёт сохраняет свою проверенную
-обработку без дублирования listener. `a739c1e` применяет ту же отмену к
-параллельным family callbacks одним listener на активный scope. Полный unit
-1391/1391, root/domain/storage typecheck прошли локально; навигационные Coach и
-family invite E2E — по 1/1 на desktop Chromium. Firefox PWA update test прошёл
-1/1, прежний timeout не воспроизвёлся; причина остаётся неизвестной.
-
-Read-only branch-preview smoke на HEAD `a739c1e` прошёл 7/7 GET-only проверок;
-загруженный `/assets/index-BDc4XSZj.js` содержит полный SHA. Это branch preview,
-не отдельный staging; OAuth, D1 и авторизованные действия им не подтверждены.
-
-В `TASKS.md` 32 незакрытых чекбокса: 18 в разделе P0, 7 в P1 и 7 в
-подготовительных/компонентных разделах перед P0. Ни один P0 не закрыт целиком.
-Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
+request-scoped `AiActionScope`; `a739c1e` применяет её к параллельным family
+callbacks. Эти component-level проверки не закрывают весь P0.9.
 
 Code/test commit `dc38a51` исправляет отмену регистрации AI при
 навигации: `beforeunload` отменяет активный fetch и registration action до

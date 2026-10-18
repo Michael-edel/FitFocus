@@ -1923,6 +1923,12 @@ legacy-ключ не используется для новой очереди �
     unit 1388/1388, три typecheck, production build и diff check прошли в
     локальном commit `dc38a51`; точный CI #1630 на `9825e8d` завершился success.
     Отдельный staging остаётся открытым.
+  - [x] Для Admin transport отменять активное чтение ответа на `beforeunload`
+    и `pagehide`, удалять временные listeners и сохранять сам `AdminSession`
+    пригодным для следующего запроса после возврата. `admin_session_transport`
+    прошёл 13/13; вместе с Support transport — 28/28. Root и storage-strict
+    typecheck и `git diff --check` прошли на `931779e`. События посланы unit-
+    тестом; реальный BFCache и физическое устройство остаются отдельной проверкой.
 - [x] Добавить route-level acceptance `delete → recreate → stale update` для
   `/api/state`: проверяются 200/409, tombstone generation и сохранность новой
   версии после старого PUT. `tests/state_generation_route.test.ts` вызывает
