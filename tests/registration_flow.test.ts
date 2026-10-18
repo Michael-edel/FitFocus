@@ -205,6 +205,20 @@ describe('durable registration', () => {
     expect(d.loginAsUser).not.toHaveBeenCalled();
     expect(await new DurableOutbox().list(account)).toEqual([]);
   });
+  it('does not enter the app when pagehide aborts AI after the base profile is durable', async () => {
+    const target = new EventTarget(); vi.stubGlobal('window', target);
+    const d = deps();
+    d.generatePersonalPlan.mockImplementation(async (_user, session) => new Promise(resolve => {
+      session.controller.signal.addEventListener('abort', () => resolve(undefined), { once: true });
+    }));
+    const flow = runRegistrationFlow(d);
+    await vi.waitFor(() => expect(d.generatePersonalPlan).toHaveBeenCalledOnce());
+    target.dispatchEvent(new Event('pagehide'));
+    await flow;
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(d.setActiveTab).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toMatchObject([{ resource: 'profile', status: 'pending' }]);
+  });
   it.each(['missing', 'wrong'])('does not create a profile from a %s invite acknowledgement scope', async invalid => {
     const d = deps(); d.requireInvite = true; d.inviteCode = 'SYNTHETIC'; const sid = 'a'.repeat(64);
     d.fetchImpl.mockImplementation(async url => url === '/api/me'
