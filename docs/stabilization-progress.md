@@ -6653,4 +6653,20 @@ Branch preview развернул `de56ab3`. Свежие анонимные GET
 
 ## P0.9 — route-level state generation lifecycle, `77d2679`, 18.10.2026
 
-Добавлена регрессия `tests/state_generation_route.test.ts` для `delete → recreate → stale update`. Production `/api/state` handlers проходят создание версии 1, удаление в tombstone версии 2, отказ старого PUT с 409, recreate на версии 3 и отказ исходной stale версии; новая запись остаётся неизменной. SQL production storage выполняется на SQLite-backed D1 adapter. Auth/capability провайдеры изолированы, поэтому эта проверка не заменяет staging или OAuth. Целевой test — 1/1; полный unit suite — 1369/1369, общий/domain/storage typecheck, production build, API invariants и `git diff --check` прошли. Точный CI новой ревизии ожидает push; общий P0.9 и staging остаются открыты.
+Добавлена регрессия `tests/state_generation_route.test.ts` для `delete → recreate → stale update`. Production `/api/state` handlers проходят создание версии 1, удаление в tombstone версии 2, отказ старого PUT с 409, recreate на версии 3 и отказ исходной stale версии; новая запись остаётся неизменной. SQL production storage выполняется на SQLite-backed D1 adapter. Auth/capability провайдеры изолированы, поэтому эта проверка не заменяет staging или OAuth. Целевой test — 1/1; полный unit suite — 1369/1369, общий/domain/storage typecheck, production build, API invariants и `git diff --check` прошли. Точный CI #1616 на `47bb7d9` завершился success; общий P0.9 и staging остаются открыты.
+
+## P0 — отдельная staging smoke suite и точный CI, `66e8c19` / `1271dfe`, 18.10.2026
+
+Опубликованный `66e8c19` разделяет browser mock suite и отдельную read-only
+staging suite. Точный [PR CI #1618](https://github.com/Michael-edel/FitFocus/actions/runs/39126327612)
+завершился success: unit, guards, typechecks, build, browser mock matrix и
+rollback/CAS gate прошли. Staging smoke не запускался, поскольку отдельный
+HTTPS staging origin не настроен.
+
+Локальный follow-up `1271dfe` вынес разбор origin в валидатор и добавил проверки
+для отсутствующего, некорректного и небезопасного адреса, включая production
+hostname с завершающей точкой. Локально полный unit suite прошёл 1382/1382 в
+215 файлах; typecheck, admin guards, API/auth-scope проверки и обнаружение
+browser/staging наборов прошли. Точный CI для `1271dfe` ещё не запускался.
+В плане остаются 32 пункта: 18 P0, 7 P1 и 7 будущих;
+staging acceptance, release и интеграция в `main` открыты.

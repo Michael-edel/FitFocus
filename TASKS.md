@@ -1,31 +1,33 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `cff4b93`.
-Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
-для `cff4b939903c54d266d4f9629b0179598c4ea085` завершился success, включая E2E.
-Коммит исправляет только таймаут E2E восстановления черновика и документацию;
-продуктовый bundle branch preview остаётся проверенным на `e91c134`.
-В `e91c134` UI показывает записи legacy-карантина, даже когда проверенные
-изменения продолжают синхронизироваться. Browser/PWA матрица прошла 7/7 без
-retries, целевые migration unit — 78/78, полный unit suite — 1368/1368.
-Предыдущий [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
-для `05bf14b` завершился success.
-Предыдущий [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
-завершился одним Safari E2E отказом: WebKit сообщил об отменённом `/api/ai` во
-время reload. Trace привязал сообщение к началу навигации; опубликованный
-follow-up закрывает раннюю отмену weekly-AI на `beforeunload` и ограниченно
-учитывает browser warning только внутри reload. Unit прошли 32/32, reload browser
-matrix — 9/9 без retries. Branch preview уже отдаёт bundle `e91c134` и ожидаемые
-анонимные статусы; это не заменяет staging, OAuth или проверку D1.
+Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
+base `fix/state-generations`. Опубликованный HEAD — `66e8c19`; точный PR
+[CI #1618](https://github.com/Michael-edel/FitFocus/actions/runs/39126327612)
+завершился success: audit, guards, unit, три typecheck, production build,
+браузерная mock-матрица и rollback/CAS gate прошли. Push-run #1617 отменён
+concurrency при старте PR-run для того же SHA.
 
-Trace #1607 показал, что после reload `/api/me` занял около 5,5 секунды, а поле
-с весовым черновиком `98.765` появилось после десятисекундного ожидания. Сценарий
-не дошёл до переключения аккаунта. Локальное ожидание восстановления увеличено
-до 30 секунд: повтор прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам без
-retries. Увеличенное ожидание прошло точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075),
-включая E2E.
+Предыдущий [CI #1616](https://github.com/Michael-edel/FitFocus/actions/runs/39123151481)
+для `47bb7d9` завершился success: route-level `/api/state` acceptance, unit,
+guards, typechecks, build, E2E и rollback/CAS gate прошли. Локально проверены
+1369/1369 unit-тестов.
 
-В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не
+`66e8c19` разделяет unit, браузерную матрицу с синтетическим API и read-only
+staging smoke. Локальный список содержит 1337 браузерных сценариев в 24 файлах;
+staging-конфигурация обнаруживает 7 тестов. Команда требует HTTPS origin и
+отклоняет production hostname. Целевой legacy normalizer/migration suite прошёл
+128/128; root typecheck, admin guards, API/auth-scope checks и diff check прошли.
+Полный локальный suite на текущем дереве прошёл 1382/1382 теста в 215 файлах.
+После одного неповторившегося `EBUSY` при чтении временного SSR-кэша полный
+suite прошёл повторно в штатном режиме и с одним worker; три затронутых файла
+отдельно прошли 44/44.
+Локальный follow-up `1271dfe` покрывает проверку staging origin unit-тестами и
+блокирует production hostname с точкой в конце; проверки прошли локально,
+точный CI этого follow-up ещё не запускался. CI #1618 проверял предыдущий
+опубликованный SHA `66e8c19`. Staging origin не настроен, реальный staging smoke
+не выполнялся.
+
+В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -1830,13 +1832,20 @@ legacy-ключ не используется для новой очереди �
   production handlers на SQLite-backed D1 adapter; auth/capability провайдеры
   изолированы, поэтому это не staging/OAuth. Целевой тест — 1/1, полный unit
   suite — 1369/1369, три typecheck, production build, API invariants и
-  `git diff --check` прошли локально; точный CI нового HEAD ожидает push.
+  `git diff --check` прошли локально. CI #1616 на `47bb7d9` завершился success,
+  включая E2E и rollback/CAS gate.
 - [x] Разделить unit, браузерную матрицу с синтетическим API и реальные
   staging-проверки. Unit и mock browser запускаются отдельными командами;
   CI использует только локальную mock-матрицу. `test:e2e:staging` требует
   `FITFOCUS_STAGING_ORIGIN` и ограничен анонимными GET на одном HTTPS origin;
-  запуск на реальном staging и полный release checklist остаются отдельными
-  открытыми gates.
+  `test:e2e:mock -- --list` обнаруживает 1337 сценариев / 24 файла и исключает
+  staging suite; staging config обнаруживает 7 тестов. Отдельный валидатор
+  покрыт unit-тестами на missing/non-HTTPS/credentials/path/query/fragment и
+  production hostname (включая регистр и завершающую точку). Полный локальный
+  unit suite — 1382/1382; typecheck и guards прошли. Follow-up `1271dfe` ожидает
+  точного CI; PR CI #1618 прошёл на предыдущем опубликованном `66e8c19`.
+  Staging origin не задан и реальные staging-запросы не выполнялись; полный
+  release checklist остаётся открытым gate.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 
 Готово, когда доступны результаты по каждому сценарию и нерешённые

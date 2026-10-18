@@ -3,19 +3,29 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке
-`fix/durable-outbox` с base `fix/state-generations`; опубликованный code/test HEAD —
-`cff4b93`. Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
-для SHA `cff4b939903c54d266d4f9629b0179598c4ea085` завершился success, включая E2E.
-Он подтвердил test-only ожидание восстановления черновика после reload; runtime
-bundle не менялся. Предыдущий [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
-для `e91c134` завершился одним отказом Desktop WebKit; локальный повтор сценария
-прошёл 5/5 на WebKit и 3/3 на трёх desktop-браузерах без retries. Предыдущий
-[CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
-для `05bf14b` завершился success. Более ранний [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
-завершился одним Safari E2E отказом на profile-refresh reload: WebKit выдал
-`/api/ai due to access control checks` в начале навигации. Follow-up закрывает
-weekly-AI scope на `beforeunload`; целевые unit прошли 32/32, Safari/WebKit reload
-матрица — 9/9 без retries.
+`fix/durable-outbox` с base `fix/state-generations`; опубликованный HEAD —
+`66e8c19`. Точный [PR CI #1618](https://github.com/Michael-edel/FitFocus/actions/runs/39126327612)
+завершился success: audit, guards, unit, три typecheck, production build,
+браузерная mock-матрица и rollback/CAS gate прошли. Push-run #1617 для того же
+SHA отменён concurrency при старте PR-run.
+
+Точный [CI #1616](https://github.com/Michael-edel/FitFocus/actions/runs/39123151481)
+для родительского SHA `47bb7d9` завершился success, включая E2E, диагностику и
+rollback/CAS gate. Добавленный route-level `/api/state` acceptance прошёл в этом
+run вместе с полным unit suite 1369/1369.
+
+Коммит `66e8c19` разделяет локальные browser/mock и staging проверки. Список
+обычной Playwright suite обнаруживает 1337 сценариев в 24 файлах; отдельная
+staging suite обнаруживает 7 тестов. Локально прошли typecheck, admin guards,
+API invariants, auth-scope, discovery обоих наборов и целевые legacy tests 128/128.
+Config отвергает отсутствующий origin, production hostname и его вариант с
+завершающей точкой. Полный локальный suite прошёл 1382/1382; follow-up
+`1271dfe` добавляет unit-тесты origin validator; локальные проверки прошли,
+точный CI на этом follow-up ещё не запускался. Один
+первый параллельный прогон получил невоспроизводимый `EBUSY` во временном
+Vite SSR-кэше; полный повтор штатным режимом и одним worker прошёл, три
+затронутых файла отдельно прошли 44/44. Staging origin не настроен, реальные
+staging/OAuth/D1-проверки не выполнялись.
 
 Опубликованный P0.8 follow-up показывает записи legacy-карантина отдельно от
 блокировки отправки. Сценарий прошёл 7/7 браузерных/PWA профилей без retries,
@@ -28,11 +38,12 @@ Desktop WebKit не нашёл dashboard weight input за 10 секунд. Trac
 [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
 на новом HEAD `cff4b93` завершился success, включая E2E.
 
-Следующая P0.9-проверка в локальном code/test commit `77d2679` проходит
+P0.9-проверка в code/test commit `77d2679` проходит
 `delete → recreate → stale update` через production `/api/state` handlers и
 SQLite-backed D1 adapter. Целевой тест прошёл 1/1, полный unit suite — 1369/1369;
-общий/domain/storage typecheck, build и API invariants прошли. Точный CI ожидает
-публикации этой ревизии; приёмка staging и полный P0.9 остаются открыты.
+общий/domain/storage typecheck, build и API invariants прошли. Точный CI #1616
+для `47bb7d9`, содержащего этот тест, завершился success; приёмка staging и
+полный P0.9 остаются открыты.
 
 В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
 перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
@@ -48,7 +59,7 @@ Read-only smoke branch preview подтвердил опубликованный
 `/api/push/status` вернули 401 без redirect и `Set-Cookie`. Google Client IDs
 пусты; OAuth, авторизованные действия, D1 и отдельная staging-база не подтверждены.
 
-В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
+В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
 неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
 удаливший отдельный localStorage scaffold outbox без runtime-потребителей.
