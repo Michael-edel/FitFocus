@@ -12,6 +12,8 @@ type PushMockConfig = {
 
 type MockAppOptions = {
   session: MockSessionMode;
+  admin?: boolean;
+  beforeAdminStats?: () => Promise<void>;
   push?: PushMockConfig;
   /** Acknowledge incidental state writes when a test exercises another guarded API. */
   acknowledgeStateWrites?: boolean;
@@ -146,6 +148,11 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
       } : path.startsWith('/api/achievements') ? {
         'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
         'X-FitFocus-State-Account': 'google-e2e-sub', 'X-FitFocus-State-Session': 'a'.repeat(64),
+      } : options.admin && (path.startsWith('/api/admin/') || path === '/api/support/feedback' || path === '/api/logout_all')
+        && request.headers()['x-fitfocus-state-account'] ? {
+        'X-FitFocus-Admin-Protocol': '1', 'X-FitFocus-Admin-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
       } : path === '/api/bootstrap' || path === '/api/state' && method === 'GET' ? {
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Protocol' : 'X-FitFocus-State-Protocol']: path === '/api/bootstrap' ? '1' : '2',
         [path === '/api/bootstrap' ? 'X-FitFocus-Bootstrap-Guard' : 'X-FitFocus-State-Guard']: '1',
@@ -182,7 +189,7 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
           email: 'e2e@example.com',
           name: 'E2E User',
           picture: '',
-          roles: ['user'],
+          roles: options.admin ? ['user', 'admin'] : ['user'],
         },
         hasAccess: true,
         stateSync: { protocol: 2, guard: 1, accountId: 'google-e2e-sub', sessionId: 'a'.repeat(64) },
@@ -205,6 +212,24 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         return;
       }
       await json({ user: { sub: 'google-e2e-sub' }, profile: null, items: [] });
+      return;
+    }
+
+    if (options.admin && path.startsWith('/api/admin/')) {
+      if (path === '/api/admin/stats' && method === 'GET') await options.beforeAdminStats?.();
+      const payload = path === '/api/admin/feature_flags' ? { flags: [] }
+        : path === '/api/admin/admins' ? { admins: [] }
+          : path === '/api/admin/settings' ? { settings: [] }
+            : path === '/api/admin/invites' ? { invites: [] }
+              : path === '/api/admin/users' ? { users: [], total: 0 }
+                : path === '/api/admin/admin_events' ? { events: [] }
+                  : {};
+      await json(payload);
+      return;
+    }
+
+    if (options.admin && path === '/api/support/feedback' && method === 'GET') {
+      await json({ tickets: [] });
       return;
     }
 
