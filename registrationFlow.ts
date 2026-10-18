@@ -10,6 +10,9 @@ import { isRecord } from './safeJson';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { SessionReadError } from './storage/sessionRead';
+import { requestJson } from './storage/sessionTransport';
+
+const REGISTRATION_REQUEST_TIMEOUT_MS = 12_000;
 
 type RegDataLike = {
   name: string;
@@ -152,6 +155,10 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
   } as UserProfile;
 
   newUser = { ...newUser, aiPlan: buildFallbackAiPlan(newUser) };
+  const controller = deps.controller ?? new AbortController();
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  let pageHidden = false;
+  const hide = () => { pageHidden = true; controller.abort(); };
 
   if (deps.requireInvite && deps.googleMe?.sub) {
     const code = String(deps.inviteCode || '').trim();
@@ -159,57 +166,60 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       deps.setPlanError('Требуется код приглашения.');
       return;
     }
+    target?.addEventListener('pagehide', hide, { once: true });
     try {
       const fetchFn = deps.fetchImpl ?? fetch;
-      const meResponse = await fetchFn('/api/me', { credentials: 'include', cache: 'no-store' });
-      const me: unknown = await meResponse.json();
-      if (!isCurrent()) return;
+      const meResult = await requestJson(fetchFn, '/api/me', { method: 'GET' }, controller, REGISTRATION_REQUEST_TIMEOUT_MS);
+      const me = meResult.body;
+      if (!isCurrent() || controller.signal.aborted) return;
       const proof = isRecord(me) ? me.stateSync : null;
       const capability = isRecord(me) ? me.inviteSync : null;
-      if (!meResponse.ok || !isRecord(me) || !isRecord(me.user) || me.user.sub !== newUser.id
+      if (!meResult.response.ok || !isRecord(me) || !isRecord(me.user) || me.user.sub !== newUser.id
         || !isRecord(proof) || proof.accountId !== newUser.id || proof.protocol !== 2 || proof.guard !== 1
         || typeof proof.sessionId !== 'string' || !/^[a-f0-9]{64}$/.test(proof.sessionId)
         || !isRecord(capability) || capability.protocol !== 1 || capability.guard !== 1) {
         deps.setPlanError('Сессия или безопасная активация приглашений недоступна. Повторите вход.');
         return;
       }
-      const rr = await fetchFn('/api/invite/redeem', {
+      const redeem = await requestJson(fetchFn, '/api/invite/redeem', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': newUser.id, 'X-FitFocus-State-Session': proof.sessionId },
         body: JSON.stringify({ code }),
-      });
-      const rawRedeemResponse: unknown = await rr.json().catch(() => null);
-      if (!isCurrent()) return;
-      const redeemResponse = isRecord(rawRedeemResponse) ? rawRedeemResponse : {};
-      if (!rr.ok || redeemResponse.ok !== true || rr.headers.get('X-FitFocus-Invite-Guard') !== '1'
-        || rr.headers.get('X-FitFocus-State-Account') !== newUser.id || rr.headers.get('X-FitFocus-State-Session') !== proof.sessionId) {
+      }, controller, REGISTRATION_REQUEST_TIMEOUT_MS);
+      if (!isCurrent() || controller.signal.aborted) return;
+      const redeemResponse = redeem.body ?? {};
+      if (!redeem.response.ok || redeemResponse.ok !== true || redeem.response.headers.get('X-FitFocus-Invite-Guard') !== '1'
+        || redeem.response.headers.get('X-FitFocus-State-Account') !== newUser.id
+        || redeem.response.headers.get('X-FitFocus-State-Session') !== proof.sessionId) {
         deps.setPlanError(redeemResponse.error === 'INVITE_INVALID' ? 'Код приглашения недействителен или уже использован.' : 'Не удалось активировать приглашение.');
         return;
       }
     } catch {
-      if (isCurrent()) deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
+      if (isCurrent() && !pageHidden) deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
       return;
+    } finally {
+      target?.removeEventListener('pagehide', hide);
     }
   }
 
-  if (!isCurrent()) return;
+  if (!isCurrent() || controller.signal.aborted) return;
+  target?.addEventListener('pagehide', hide, { once: true });
   const repository = new UserStateRepository(newUser.id);
   try {
     await createProfileIntent(newUser, repository);
   } catch (error) {
-    if (isCurrent()) deps.setPlanError(error instanceof Error && error.message.startsWith('PROFILE_')
+    if (isCurrent() && !pageHidden) deps.setPlanError(error instanceof Error && error.message.startsWith('PROFILE_')
       ? 'На устройстве уже есть профиль или конфликт создания. Повторите вход, чтобы восстановить его.'
       : 'Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.');
+    target?.removeEventListener('pagehide', hide);
     return;
   }
-  if (!isCurrent()) return;
+  if (!isCurrent() || controller.signal.aborted) {
+    target?.removeEventListener('pagehide', hide);
+    return;
+  }
   deps.setDevPlanOverride(deps.regData.plan, newUser.id);
-  const controller = deps.controller ?? new AbortController();
   const aiIsCurrent = () => isCurrent() && !controller.signal.aborted;
-  const hide = () => controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', hide, { once: true });
   let aiSession: AiSession | undefined;
   let aiPlan: UserProfile['aiPlan'];
   try {
