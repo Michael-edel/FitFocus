@@ -4,9 +4,13 @@
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке
 `fix/durable-outbox` с base `fix/state-generations`; опубликованный code/test HEAD —
-`e91c134`. В точном [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
-успешно завершились audit, guards, unit, три typecheck и production build; E2E
-завершился одним отказом Desktop WebKit. Предыдущий [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
+`cff4b93`. Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
+для SHA `cff4b939903c54d266d4f9629b0179598c4ea085` завершился success, включая E2E.
+Он подтвердил test-only ожидание восстановления черновика после reload; runtime
+bundle не менялся. Предыдущий [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
+для `e91c134` завершился одним отказом Desktop WebKit; локальный повтор сценария
+прошёл 5/5 на WebKit и 3/3 на трёх desktop-браузерах без retries. Предыдущий
+[CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
 для `05bf14b` завершился success. Более ранний [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
 завершился одним Safari E2E отказом на profile-refresh reload: WebKit выдал
 `/api/ai due to access control checks` в начале навигации. Follow-up закрывает
@@ -20,8 +24,9 @@ production build прошли. CI #1607 завершился одним E2E time
 Desktop WebKit не нашёл dashboard weight input за 10 секунд. Trace показывает,
 что `/api/me` занял около 5,5 секунды и screenshot после ожидания уже содержит
 восстановленное значение. Test-only follow-up увеличил ожидание до 30 секунд;
-сценарий прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам. Новый exact-head
-CI ожидает публикации.
+сценарий прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам. Точный
+[CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
+на новом HEAD `cff4b93` завершился success, включая E2E.
 
 В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
 перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
@@ -31,7 +36,7 @@ CI ожидает публикации.
 включена в этот HEAD и локально прошла 7/7. Целевые unit `legacy_queue` и
 `legacy_migration` прошли 128/128.
 
-Read-only smoke branch preview подтвердил опубликованный bundle SHA `e91c134`:
+Read-only smoke branch preview подтвердил опубликованный runtime bundle SHA `e91c134`:
 `/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`,
 `/api/profile`, `/api/state` и
 `/api/push/status` вернули 401 без redirect и `Set-Cookie`. Google Client IDs

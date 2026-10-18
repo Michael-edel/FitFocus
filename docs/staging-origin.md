@@ -250,3 +250,8 @@ IDs и `requireInvite=false`.
 `/api/env`, `/api/me` — 200; `/api/bootstrap`, `/api/profile`, `/api/state` и
 `/api/push/status` — 401. Это подтверждает bundle и анонимные ответы на выбранные
 маршруты, но не D1, OAuth, авторизованные операции или отдельную staging-базу.
+
+Последующий HEAD `cff4b93` меняет только E2E-ожидание и документацию, поэтому
+runtime bundle preview остаётся `e91c134`. Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
+для `cff4b93` завершился success, включая E2E; это не заменяет staging
+acceptance и проверки OAuth, авторизованных операций или D1.

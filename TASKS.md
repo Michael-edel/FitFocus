@@ -1,9 +1,10 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `e91c134`.
-Точный [CI #1607](https://github.com/Michael-edel/FitFocus/actions/runs/39107245314)
-прошёл audit, guards, unit, три typecheck и production build; E2E завершился
-одним отказом Desktop WebKit.
+Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `cff4b93`.
+Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
+для `cff4b939903c54d266d4f9629b0179598c4ea085` завершился success, включая E2E.
+Коммит исправляет только таймаут E2E восстановления черновика и документацию;
+продуктовый bundle branch preview остаётся проверенным на `e91c134`.
 В `e91c134` UI показывает записи legacy-карантина, даже когда проверенные
 изменения продолжают синхронизироваться. Browser/PWA матрица прошла 7/7 без
 retries, целевые migration unit — 78/78, полный unit suite — 1368/1368.
@@ -21,7 +22,8 @@ Trace #1607 показал, что после reload `/api/me` занял око
 с весовым черновиком `98.765` появилось после десятисекундного ожидания. Сценарий
 не дошёл до переключения аккаунта. Локальное ожидание восстановления увеличено
 до 30 секунд: повтор прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам без
-retries. Новый exact-head CI ожидает публикации.
+retries. Увеличенное ожидание прошло точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075),
+включая E2E.
 
 В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
