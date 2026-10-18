@@ -119,6 +119,65 @@ test('settings edit survives reload in IndexedDB with its outgoing intent', asyn
   expect(errors).toEqual([]);
 });
 
+test('cloud hydration preserves a pending local settings snapshot through reload', async ({ page }) => {
+  test.setTimeout(60_000);
+  const accountId = 'google-e2e-sub';
+  const key = `fitfocus_data_${accountId}_settings`;
+  const server = new Map<string, ServerStateItem>([[key, { version: 7, value: JSON.stringify({ theme: 'dark' }) }]]);
+  const settingsRequests: number[] = [];
+  const settingsPayloads: Array<{ baseVersion: number; value: string }> = [];
+  const errors: string[] = [];
+  const options = {
+    settingsRequests,
+    settingsPayloads,
+    settingsTransientFailure: true,
+    settingsRetryAfter: '60',
+  };
+  page.on('pageerror', error => errors.push(error.message));
+  await mockApp(page, { session: 'app' });
+  await verifiedServer(page, server, options);
+  await openApp(page, '/#settings');
+
+  const dark = page.getByRole('button', { name: /^Тёмная/ });
+  const light = page.getByRole('button', { name: /^Светлая/ });
+  await expect(dark).toHaveClass(/border-indigo-500\/40/);
+  const hydrated = await storedSettings(page);
+  expect(hydrated.value).toContain('"theme":"dark"');
+  expect(hydrated.confirmedVersion).toBe(7);
+  expect(hydrated.operations).toHaveLength(0);
+
+  await page.clock.setFixedTime(await page.evaluate(() => Date.now()));
+  await light.click();
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.status).toBe('pending');
+  await expect.poll(async () => (await storedSettings(page)).operations[0]?.retryCount).toBe(1);
+  const beforeReload = await storedSettings(page);
+  const original = beforeReload.operations[0];
+  expect(beforeReload.value).toContain('"theme":"light"');
+  expect(original).toMatchObject({ type: 'put', status: 'pending', baseVersion: 7, value: beforeReload.value });
+  expect(settingsRequests).toEqual([7]);
+  expect(settingsPayloads).toEqual([{ baseVersion: 7, value: beforeReload.value }]);
+  expect(server.get(key)).toEqual({ version: 7, value: JSON.stringify({ theme: 'dark' }) });
+
+  await page.reload();
+  await expect(light).toHaveClass(/border-indigo-500\/40/);
+  await expect(dark).not.toHaveClass(/border-indigo-500\/40/);
+  const afterReload = await storedSettings(page);
+  expect(afterReload.value).toBe(beforeReload.value);
+  expect(afterReload.confirmedVersion).toBe(7);
+  expect(afterReload.operations).toHaveLength(1);
+  expect(afterReload.operations[0]).toMatchObject({
+    opId: original.opId,
+    value: original.value,
+    baseVersion: 7,
+    retryCount: 1,
+    status: 'pending',
+    nextAttemptAtMs: original.nextAttemptAtMs,
+  });
+  expect(settingsRequests).toEqual([7]);
+  expect(server.get(key)).toEqual({ version: 7, value: JSON.stringify({ theme: 'dark' }) });
+  expect(errors).toEqual([]);
+});
+
 test('401 auth pause keeps a new settings edit and resumes the same operations after verification', async ({ page }) => {
   test.setTimeout(60_000);
   const account = 'google-e2e-sub';
