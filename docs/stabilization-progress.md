@@ -6484,6 +6484,7 @@ reviewer. Полный P0.6/P0.8/P0.9, staging и выпуск остаются 
 Backup regression проверяет сохранение payload через export/import без записи в
 DurableOutbox; `tests/backup.test.ts` — 10/10, полный unit suite — 1364/1364,
 общий/storage-strict typecheck, production build и `git diff --check` прошли.
-Точный CI для локальных commits ожидает push; PR #93 на опубликованном `faa1e71`
-всё ещё выполняет E2E. P0.8 lifecycle, staging и релизные проверки остаются
-открыты.
+Код опубликован в `e5a6154`, тест и документация — в `cf9d20e`. Точный PR CI
+[#1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
+запущен для `cf9d20e`; итог ещё не подтверждён. P0.8 lifecycle, staging и релизные
+проверки остаются открыты.

@@ -2,20 +2,21 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Кодовый follow-up [`49a1ff6`](https://github.com/Michael-edel/FitFocus/commit/49a1ff6)
-уже входит в опубликованный head `faa1e71`; он удалил неиспользуемый перенос
-IDB ключей между account-префиксами. Локальный follow-up `e5a6154` удаляет
-отдельный localStorage scaffold outbox без runtime-потребителей. Его старый key
-payload не очищается: общий backup сохраняет его как opaque data, DurableOutbox
-его не импортирует. Проверки: account isolation 3/3, backup regression 10/10,
-весь unit suite 1364/1364, общий и storage-strict typecheck, production build и
-`git diff --check` прошли; `e5a6154` и связанные документы ожидают push.
+Последний code/test commit — `cf9d20e`; он содержит `49a1ff6`, удаливший
+неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
+удаливший отдельный localStorage scaffold outbox без runtime-потребителей.
+Старый ключ не очищается: общий backup сохраняет payload как opaque data,
+DurableOutbox его не импортирует. Проверки: account isolation 3/3, backup
+regression 10/10, полный unit suite 1364/1364, общий и storage-strict typecheck,
+production build и `git diff --check` прошли. Точный CI #1591 для `cf9d20e`
+запущен; его итог ещё не подтверждён.
 
 Опубликованный [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся
-draft с base `fix/state-generations` и head `faa1e71`. Точный
-[PR CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
-для `faa1e71` находится в процессе; audit, schema/privacy/auth/API, 1363 unit,
-три strict typecheck и build прошли. Непосредственная причина предыдущего
+draft с base `fix/state-generations`. Точный
+[PR CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
+запущен для `cf9d20e`; его итог ещё не подтверждён. Предыдущий
+[CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
+проверял родительский `faa1e71`. Непосредственная причина более раннего
 [CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
 была в weekly-menu test mock без CORS-заголовков; trace подтвердил сохранение
 операции и того же `opId` через reload, а повтор получил 200. Исправление

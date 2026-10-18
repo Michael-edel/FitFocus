@@ -1,16 +1,14 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; опубликованный head — `faa1e71`,
-включающий `49a1ff6`.
-Точный [PR CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
-для этого SHA выполняет E2E после успешных audit, schema/privacy/auth/API,
-1363 unit, трёх typecheck и build. В локальной ветке поверх него создан
-`e5a6154`: удалён
+остаётся draft с base `fix/state-generations`. Последний code/test commit —
+`cf9d20e`.
+Точный [PR CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
+запущен для этого SHA; итог ещё не подтверждён. В опубликованный follow-up
+`e5a6154` удалён
 неиспользуемый scaffold outbox; его localStorage payload сохраняется как opaque
-backup data. Полный unit suite — 1364/1364, backup regression — 10/10, общий и
-storage-strict typecheck, build прошли. Этот follow-up и связанные документы
-ещё не опубликованы, поэтому exact CI для них нет. В плане остаются 33 пункта:
+backup data. Backup regression прошёл 10/10, полный unit suite — 1364/1364,
+общий и storage-strict typecheck, production build прошли. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
 и интеграция в защищённую `main` не подтверждены.
 
@@ -1443,11 +1441,13 @@ all-client Service Worker fence, атомарные migration items и quarantin
 
 - [x] Инвентаризировать отдельную scaffold-очередь `fitfocus_outbox_ops`:
   у `storage/outbox.ts` не было runtime-вызовов, только re-export из
-  `storage/index.ts`; модуль и re-export удалены в `e5a6154`. Сохранённый
+  `storage/index.ts`; модуль и re-export удалены в `e5a6154`, опубликованном
+  вместе с тестом в `cf9d20e`. Сохранённый
   localStorage payload остаётся нетронутым и переносится backup как opaque data;
   автоматического импорта в DurableOutbox нет. Backup regression прошёл 10/10,
   полный unit suite — 1364/1364, общий и storage-strict typecheck, production
-  build и `git diff --check` прошли. Точный CI нового SHA ожидает push.
+  build и `git diff --check` прошли. Точный CI #1591 запущен для этого SHA;
+  его результат ещё не подтверждён.
 - [x] Обновить существующую IDB до v2, сохранив values; создать outbox,
   migration_items, migration_unknown и outbox_meta.
 - [x] Реализовать и проверить транзакционные примитивы записи value/операции,
