@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — публиковать свежий guard повторно проверенной сессии в UI, `7fa3649`, 18.10.2026
+
+После auth-паузы `/me` мог подтвердить ту же серверную сессию и атомарно снять
+паузу, выдав новый локальный `sessionEpoch`/`authFence`, но App сохранял прежний
+`loginReadGuard`; интерфейс оставался fenced. `StateSync` теперь уведомляет
+подписчиков только после принятия проверенного read guard, а App применяет его,
+только если совпадают `accountId` и `serverSessionId`. Добавлены unit и E2E
+регрессии. В PWA update acceptance убрано ложное требование о наличии legacy
+запроса в сценарии, который может не отправить legacy-запись; отдельный
+`legacy-outbox-migration` acceptance по-прежнему проверяет 426 на реальном старом
+writer. Также retry-тест импорта файла теперь ожидает async серверную мутацию,
+а profile recovery сохраняет диагностику неудачного `/api/state` запроса.
+
+CI предыдущего опубликованного HEAD `6ed72cd` —
+[run #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863) —
+завершился 988 browser passed / 299 skipped / 1 failed. Все audit,
+schema/privacy/auth/API, unit, три typecheck и build gates прошли; единственная
+ошибка была в ожидании PWA legacy-отказа. Локально на `7fa3649`: unit 1363/1363,
+root/domain/storage strict typecheck, build и admin guards прошли; новая guard
+регрессия — 7/7 браузерных/PWA проектов, PWA update — 7/7, импортный retry — 5/5.
+Полный `profile-durability.spec.ts` завершился 146/147: один desktop WebKit run
+получил временную CORS/request failure на `/api/state`; тот же recovery-сценарий
+прошёл 5/5 повторов. Это не полный зелёный профильный suite. Новый exact CI для
+`7fa3649` ещё не запущен; staging, выпуск и интеграция в защищённую `main` открыты.
+
 ## P0.8 follow-up — завершать запись недельного AI-отчёта до reload, локальная проверка, 18.10.2026
 
 Точный CI #1579 на `4c03b68` завершился одной ошибкой WebKit E2E после успешных

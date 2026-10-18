@@ -2,16 +2,22 @@
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Последний опубликованный HEAD — `4c03b68`
-(`fix: resolve durable outbox e2e regressions`). Точный
-[PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
-прошёл audit, schema/privacy/auth/API checks, unit, три typecheck и build, но
-завершился одной E2E ошибкой: 988 passed / 299 skipped. Trace указывает, что
-WebKit reload прервал фоновую запись AI-отчёта в `weekly_reports`. Тест теперь
-ждёт подтверждения этого state PUT перед reload; локально сценарий прошёл 7/7
-Playwright-проектов и 10/10 повторов desktop WebKit. Новый exact CI ещё не
-подтверждён. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
-ни один P0 не закрыт целиком.
+защищённую `main` не подтверждены. Текущий кодовый коммит — [`7fa3649`](https://github.com/Michael-edel/FitFocus/commit/7fa3649765c354a6f2d42965843da8bdabaa7758):
+он публикует принятый read guard в UI после повторной проверки той же серверной
+сессии. Предыдущий опубликованный HEAD `6ed72cd` проверен точным
+[PR CI #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863):
+audit, schema/privacy/auth/API, unit, три typecheck и build прошли; E2E завершился
+988 passed / 299 skipped / 1 failed. Ошибка — необоснованное ожидание, что PWA
+update flow обязательно отправит legacy-запись. В отдельном migration acceptance
+реальный legacy writer продолжает проверяться на ответ 426.
+
+На коммите `7fa3649` локально прошли unit 1363/1363, root/domain/storage strict
+typecheck, build и admin guards; новая same-session guard регрессия — 7/7, PWA
+update acceptance — 7/7, retry импорта файла — 5/5. Полный
+`profile-durability.spec.ts` завершился 146/147: один desktop WebKit сценарий
+получил временную CORS/request failure на `/api/state`, после чего этот сценарий
+прошёл 5/5 повторов. Новый exact CI ещё ожидает push. В плане остаются 33 пункта:
+19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),

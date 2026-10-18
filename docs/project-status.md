@@ -5,18 +5,19 @@
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0, в частности P0.8:
 IndexedDB durable outbox подключён, продолжается перенос и lifecycle-приёмка
-пользовательских действий. Последний опубликованный HEAD — `4c03b68`; точный
-[PR CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
-прошёл audit, schema/privacy/auth/API checks, 1362 unit tests, root/domain/storage
-strict typecheck и production build, но завершился одной ошибкой E2E: 988 passed /
-299 skipped. Trace связывает WebKit page error с reload во время отдельной фоновой
-записи AI-отчёта в `weekly_reports`. Тест теперь ожидает подтверждения этого state
-PUT перед reload; локально проблемный сценарий прошёл 7/7 Playwright-проектов и
-10/10 повторов desktop WebKit. Расширенный `profile-durability.spec.ts` завершился
-138/140: два отказа были в других сценариях восстановления профиля (desktop
-WebKit) и повтора импорта файла (iPhone Safari), где экран показал active-session
-fence. Эти проверки требуют отдельной диагностики; полный набор и новый exact CI
-ещё не подтверждены.
+пользовательских действий. Текущий кодовый коммит — [`7fa3649`](https://github.com/Michael-edel/FitFocus/commit/7fa3649765c354a6f2d42965843da8bdabaa7758):
+принятый read guard теперь обновляет UI, если повторная проверка подтвердила ту же
+серверную сессию с новым локальным epoch/fence. Предыдущий опубликованный HEAD
+`6ed72cd` проверен [PR CI #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863):
+audit, schema/privacy/auth/API, 1362 unit tests, root/domain/storage strict
+typecheck и build прошли; E2E завершился 988 passed / 299 skipped / 1 failed.
+Единственная ошибка — тест PWA update требовал legacy-отказ, хотя этот сценарий не
+создаёт legacy-запись; реальный 426 барьер остаётся отдельной migration проверкой.
+Локально на новом коде прошли unit 1363/1363, три typecheck, build и admin guards;
+новая same-session guard регрессия прошла 7/7 проектов, PWA update — 7/7, retry
+импорта файла — 5/5. Полный `profile-durability.spec.ts` прошёл 146/147: один
+desktop WebKit сценарий получил временную CORS/request failure на `/api/state`,
+после чего этот сценарий прошёл 5/5 повторов. Новый exact CI ожидает push.
 В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и
 интеграция в защищённую `main` открыты.
 Branch preview после публикации `4c03b68` отдаёт точный bundle SHA: `/`,

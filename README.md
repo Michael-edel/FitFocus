@@ -73,14 +73,19 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний опубликованный кодовый HEAD — [`4c03b68`](https://github.com/Michael-edel/FitFocus/commit/4c03b68743626744f867db64fd276cdffffa6388),
-отправленный в `fix/durable-outbox`. Точный [CI #1579](https://github.com/Michael-edel/FitFocus/actions/runs/39076716798)
-прошёл audit, schema/privacy/auth/API checks, unit, typecheck и build, но завершился
-одной ошибкой E2E (988 passed / 299 skipped): WebKit начал reload, пока фоновая
-запись AI-отчёта в `weekly_reports` ещё отправлялась. Локальный тест теперь ждёт
-подтверждения этой записи перед reload: сценарий прошёл 7/7 Playwright-проектов и
-10/10 повторов desktop WebKit. Полный профильный набор и новый exact CI ещё не
-подтверждены. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
-staging, выпуск и интеграция PR #93 в защищённую `main` не подтверждены.
+Последний кодовый коммит — [`7fa3649`](https://github.com/Michael-edel/FitFocus/commit/7fa3649765c354a6f2d42965843da8bdabaa7758),
+с исправлением обновления UI после повторной проверки той же серверной сессии.
+Предыдущий опубликованный HEAD [`6ed72cd`](https://github.com/Michael-edel/FitFocus/commit/6ed72cda1091be034a660699d6f4cf22d4745050)
+проверен [CI #1581](https://github.com/Michael-edel/FitFocus/actions/runs/39082070863):
+audit, schema/privacy/auth/API checks, unit, три typecheck и build прошли, но E2E
+упал на требовании, чтобы PWA-сценарий непременно породил legacy-отказ. В этом
+сценарии legacy-записи не было; отдельный migration acceptance проверяет 426 для
+реального legacy writer. Локально unit прошёл 1363/1363, три typecheck и build,
+guard regression — 7/7, PWA update — 7/7, повтор импорта файла — 5/5. Полный
+`profile-durability.spec.ts` прошёл 146/147: один desktop WebKit прогон получил
+временную CORS/request failure на `/api/state`; этот сценарий затем прошёл 5/5
+повторов. Новый exact CI для `7fa3649` ожидает push. В плане остаются 33 пункта:
+19 P0, 7 P1 и 7 следующих задач; staging, выпуск и интеграция PR #93 в защищённую
+`main` не подтверждены.
 Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
 [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).
