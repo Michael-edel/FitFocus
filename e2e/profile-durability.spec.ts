@@ -159,7 +159,18 @@ test('profile edits survive reload and a different bootstrap snapshot during an 
 });
 
 test('same-server re-verification refreshes the UI guard after a temporary pause', async ({ page }) => {
-  const { errors } = await setup(page, 'normal');
+  const { errors, mutations } = await setup(page, 'normal');
+  let holdProof = false;
+  let releaseHeldProof!: () => void;
+  let signalProofStarted!: () => void;
+  const heldProof = new Promise<void>(resolve => { releaseHeldProof = resolve; });
+  const proofStarted = new Promise<void>(resolve => { signalProofStarted = resolve; });
+  await page.route('**/api/me*', async route => {
+    if (!holdProof) return route.fallback();
+    signalProofStarted();
+    await heldProof;
+    return route.fallback();
+  });
   await openApp(page, '/#settings');
   const name = page.getByPlaceholder('Как к вам обращаться');
   await expect(name).toHaveValue(profile.name);
@@ -167,34 +178,47 @@ test('same-server re-verification refreshes the UI guard after a temporary pause
   expect(original.activeSession?.sessionEpoch).toBeTruthy();
 
   const pausedEpoch = 'paused-session-epoch';
-  await page.evaluate(async epoch => {
-    const opening = indexedDB.open('fitfocus-user-state-v1');
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      opening.onsuccess = () => resolve(opening.result);
-      opening.onerror = () => reject(opening.error);
-    });
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('outbox_meta', 'readwrite');
-      const store = tx.objectStore('outbox_meta');
-      const activeRequest = store.get('active-session');
-      activeRequest.onsuccess = () => store.put({ ...activeRequest.result, sessionEpoch: epoch, pause: 'auth' });
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error ?? new Error('Could not pause active session'));
-    });
-    db.close();
-    const channel = new BroadcastChannel('fitfocus-active-session-v1');
-    channel.postMessage({ type: 'active-session-changed' });
-    channel.close();
-  }, pausedEpoch);
+  holdProof = true;
+  try {
+    await page.evaluate(async epoch => {
+      const opening = indexedDB.open('fitfocus-user-state-v1');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        opening.onsuccess = () => resolve(opening.result);
+        opening.onerror = () => reject(opening.error);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('outbox_meta', 'readwrite');
+        const store = tx.objectStore('outbox_meta');
+        const activeRequest = store.get('active-session');
+        activeRequest.onsuccess = () => store.put({ ...activeRequest.result, sessionEpoch: epoch, pause: 'auth' });
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error ?? new Error('Could not pause active session'));
+      });
+      db.close();
+      const channel = new BroadcastChannel('fitfocus-active-session-v1');
+      channel.postMessage({ type: 'active-session-changed' });
+      channel.close();
+    }, pausedEpoch);
 
-  const sessionFence = page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.', { exact: true });
-  await expect(sessionFence).toBeVisible();
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect.poll(async () => (await saved(page)).activeSession?.sessionEpoch).not.toBe(pausedEpoch);
-  await expect(sessionFence).toHaveCount(0);
-  await expect(name).toHaveValue(profile.name);
-  expect((await saved(page)).pause).toBeUndefined();
-  expect(errors).toEqual([]);
+    const sessionFence = page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.', { exact: true });
+    await expect.poll(async () => (await saved(page)).activeSession?.sessionEpoch).toBe(pausedEpoch);
+    await expect(sessionFence).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await proofStarted;
+    await expect(sessionFence).toBeVisible();
+
+    releaseHeldProof();
+    await expect.poll(async () => (await saved(page)).activeSession?.sessionEpoch).not.toBe(pausedEpoch);
+    await expect.poll(async () => (await saved(page)).pause).toBeUndefined();
+    await expect(sessionFence).toHaveCount(0);
+    await name.fill('Профиль после повторной проверки сессии');
+    await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await expect.poll(() => mutations).toEqual(['PUT']);
+    await expect.poll(async () => (await saved(page)).value).toContain('Профиль после повторной проверки сессии');
+    expect(errors).toEqual([]);
+  } finally {
+    releaseHeldProof();
+  }
 });
 
 test('fallback AI plan stays hidden when its durable profile commit fails, then recovers after reload', async ({ page }) => {

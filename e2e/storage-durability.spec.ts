@@ -90,6 +90,8 @@ test('settings edit survives reload in IndexedDB with its outgoing intent', asyn
       'X-FitFocus-State-Guard': '1',
       'X-FitFocus-State-Account': headers['x-fitfocus-state-account'] ?? 'google-e2e-sub',
       'X-FitFocus-State-Session': headers['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+      'Access-Control-Allow-Origin': headers.origin ?? new URL(request.url()).origin,
+      'Vary': 'Origin',
     }, body: JSON.stringify({ error: 'INJECTED_OFFLINE' }) });
   });
   await openApp(page, '/#settings');
