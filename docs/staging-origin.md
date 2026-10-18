@@ -101,6 +101,18 @@ HTTP на localhost; это не проверка SW установленног�
 
 ## Обязательная приёмка целевого окружения
 
+### Read-only branch-preview smoke: `9825e8d`, 18.10.2026
+
+После push PR HEAD `9825e8d9bd3053b6158d06fdd4b04f32324b25d6` проверен на
+`https://fix-durable-outbox.fitfocus.pages.dev/`. `npm run test:e2e:staging`
+прошёл 7/7 GET-only проверок: `/`, `/api/env` и анонимный `/api/me` вернули 200;
+защищённые bootstrap/profile/state/push-status — 401 без redirect и
+`Set-Cookie`. Загруженный JS asset `/assets/index-C_UPaACd.js` содержит полный
+SHA текущего HEAD.
+
+Это branch preview, не отдельное staging-окружение; smoke не подтверждает
+авторизованные действия, OAuth, D1, миграции или release acceptance.
+
 ### Read-only branch-preview smoke: `5d5dca8`, 18.10.2026
 
 Для текущего опубликованного PR HEAD проверен

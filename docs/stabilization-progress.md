@@ -6755,6 +6755,25 @@ registration action на `beforeunload`; `pagehide` остаётся допол�
 215 файлах. Root, domain-strict и storage-strict typecheck, production build и
 `git diff --check` прошли локально. Эти результаты относятся к локальному
 `dc38a51`; точный CI #1628 проверял remote HEAD `5d5dca8` и завершился success,
-но не включает эту правку. Точный CI для `dc38a51` ожидается после push.
+но не включает эту правку. После push fix проверяется точным CI #1630,
+описанным ниже.
 Staging, OAuth, реальный D1, выпуск и интеграция в защищённую `main` остаются
 открыты.
+
+## P0 — exact CI и branch-preview smoke для `9825e8d`, 18.10.2026
+
+После push для точного HEAD `9825e8d9bd3053b6158d06fdd4b04f32324b25d6`
+завершился success в [PR CI #1630](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602):
+1388 unit в 215 файлах, 1041 browser passed / 303 skipped, audit,
+schema/privacy/auth/API guards, три typecheck и production build прошли.
+Rollback/CAS gate выполнил 23 HTTP/D1-запроса.
+
+Artifacts: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602/artifacts/12143743312)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602/artifacts/12143553718)
+сохранены; archive SHA-256 `a07775e6c70dbd1cae80c3f2171b0250fcd67092e3c681ff263e6421fa3f6f37`.
+
+Branch-preview smoke `npm run test:e2e:staging` прошёл 7/7 GET-only проверок.
+Загруженный `/assets/index-C_UPaACd.js` содержит полный текущий SHA. `/`,
+`/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/
+push-status — 401 без redirect и `Set-Cookie`. Это не отдельный staging и не
+подтверждает OAuth, D1, авторизованные действия или выпуск.

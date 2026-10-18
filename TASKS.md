@@ -1,21 +1,25 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Code commit `f4dcce8` с bounded invite lifecycle
-опубликован. Remote PR HEAD `5d5dca8` прошёл точный [CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243):
-audit, guards, unit, три typecheck, build, browser matrix, rollback/CAS check и
-сохранение rollback artifact завершились успешно.
+base `fix/state-generations`. Remote PR HEAD `9825e8d` включает fix отмены
+регистрационного AI при unload (`dc38a51`) и актуальную документацию. Точный
+[CI #1630](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602)
+для `9825e8d` завершился success: 1388 unit в 215 файлах, 1041 browser passed /
+303 skipped, audit, guards, три typecheck и build прошли; rollback/CAS выполнил
+23 HTTP/D1-запроса. Browser diagnostics и rollback artifact сохранены.
 
-Локальный follow-up `dc38a51` закрывает найденную браузерную границу unload:
+Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
 `pagehide` остаётся дополнительной защитой. E2E `registration-durability.spec.ts`
 прошёл 21/21 на семи browser/PWA профилях, targeted unit — 44/44, полный unit —
 1388/1388 в 215 файлах; root/domain/storage typecheck, production build и
-`git diff --check` прошли. Этот commit пока локальный и не входит в CI #1628.
-Локальные follow-ups `32d58d7`, `f4a4140` и `c219f17` также остаются не
-опубликованы. На `f4dcce8` прошли registration unit 16/16, root/storage typecheck,
-auth-scope guard, production build и registration durability E2E 2/2 в desktop
-Chromium. Родительский [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+`git diff --check` прошли; code и test follow-ups опубликованы в PR.
+Предыдущий [CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
+для `5d5dca8` не содержит этот fix. На `9825e8d` он подтверждён точным CI #1630.
+На `f4dcce8` прошли
+registration unit 16/16, root/storage typecheck, auth-scope guard, production
+build и registration durability E2E 2/2 в desktop Chromium. Родительский
+[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
 на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
 Read-only smoke branch preview подтвердил SHA `5d5dca8`: staging smoke прошёл 7/7
@@ -199,6 +203,10 @@ bundle проверена на семи Playwright-проектах и прош�
     bundle `/assets/index-6747H75z.js` содержит полный SHA
     `5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`. Это не отдельный staging и не
     подтверждает OAuth, D1 или авторизованные действия.
+  - [x] Проверить текущий PR HEAD `9825e8d` на branch preview: staging suite
+    прошёл 7/7 GET-only проверок, asset `/assets/index-C_UPaACd.js` содержит
+    полный SHA `9825e8d9bd3053b6158d06fdd4b04f32324b25d6`. Это не отдельный
+    staging и не подтверждает OAuth, D1 или авторизованные действия.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
 Это локальная часть подготовки staging, а не закрытие P0 или выпуск.
@@ -1845,7 +1853,8 @@ legacy-ключ не используется для новой очереди �
     `loginAsUser`/profile PUT не запускаются. `registration-durability.spec.ts`
     прошёл 21/21 на семи browser/PWA профилях без retries; unit 44/44, полный
     unit 1388/1388, три typecheck, production build и diff check прошли в
-    локальном commit `dc38a51`. Точный CI и staging остаются открыты.
+    локальном commit `dc38a51`; точный CI #1630 на `9825e8d` завершился success.
+    Отдельный staging остаётся открытым.
 - [x] Добавить route-level acceptance `delete → recreate → stale update` для
   `/api/state`: проверяются 200/409, tombstone generation и сохранность новой
   версии после старого PUT. `tests/state_generation_route.test.ts` вызывает

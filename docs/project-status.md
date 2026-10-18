@@ -3,31 +3,30 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. Code commit `f4dcce8` с bounded invite lifecycle
-опубликован. Remote PR HEAD `5d5dca8` прошёл точный
-[PR CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243):
-audit, guards, unit, три typecheck, build, browser matrix, rollback/CAS check и
-сохранение rollback artifact завершились успешно.
+`fix/state-generations`. Remote HEAD — `9825e8d`. Точный [CI #1630](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602)
+завершился success: 1388 unit в 215 файлах, 1041 browser passed / 303 skipped,
+audit, guards, три typecheck и build прошли; rollback/CAS gate выполнил 23
+HTTP/D1-запроса, browser diagnostics и rollback artifact сохранены.
 
-Локальный code/test commit `dc38a51` исправляет отмену регистрации AI при
+Code/test commit `dc38a51` исправляет отмену регистрации AI при
 навигации: `beforeunload` отменяет активный fetch и registration action до
 уничтожения страницы, `pagehide` остаётся дополнительной защитой. Полный
 `registration-durability.spec.ts` прошёл 21/21 на семи browser/PWA профилях без
 retries, targeted unit — 44/44, полный unit — 1388/1388 в 215 файлах; root,
 domain-strict и storage-strict typecheck, production build и diff check прошли.
-Коммит пока локальный и не входит в CI #1628. Предыдущие локальные тестовые
-follow-ups `32d58d7`, `f4a4140` и `c219f17` также ещё не опубликованы.
+Новый CI #1630 включает fix; предыдущий CI #1628 на `5d5dca8` его не содержал.
+Test follow-ups `32d58d7`, `f4a4140` и `c219f17` также опубликованы.
 На `f4dcce8` прошли root/storage typecheck, auth-scope guard, production build и
 registration durability E2E 2/2 в desktop Chromium. Предыдущий
 [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
 на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
-Read-only branch-preview smoke на точном remote HEAD `5d5dca8` прошёл 7/7 GET-
-проверок. Bundle `/assets/index-6747H75z.js` содержит полный SHA
-`5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`; `/`, `/api/env` и анонимный `/api/me`
+Read-only branch-preview smoke на точном remote HEAD `9825e8d` прошёл 7/7 GET-
+проверок. Bundle `/assets/index-C_UPaACd.js` содержит полный SHA
+`9825e8d9bd3053b6158d06fdd4b04f32324b25d6`; `/`, `/api/env` и анонимный `/api/me`
 вернули 200, защищённые bootstrap/profile/state/push/status — 401 без redirect и
 `Set-Cookie`. Это preview, не отдельный staging, OAuth, авторизованные изменения
-или D1.
+или D1. Предыдущий smoke для `5d5dca8` записан в контракте staging.
 
 В `b97307a` интерфейс показывает агрегированные причины legacy quarantine для
 текущего подтверждённого аккаунта, скрывая ключи и raw payload. Old/new bundle
