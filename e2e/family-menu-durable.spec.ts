@@ -195,6 +195,72 @@ test('family menu generation hides stale-session rejection instead of showing a 
   expect(errors.filter(error => error === injectedUnauthorized).length).toBeLessThanOrEqual(1);
   await healthy(page, errors.filter(error => error !== injectedUnauthorized));
 });
+
+test('navigation aborts a held family-menu AI generation before pagehide', async ({ page }) => {
+  const marker = '__e2e_family_menu_unload__';
+  await page.addInitScript(markerKey => {
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${markerKey}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const recordLifecycle = (event: string) => {
+      try {
+        const key = `${markerKey}:lifecycle`;
+        const events = JSON.parse(localStorage.getItem(key) ?? '[]') as string[];
+        events.push(event);
+        localStorage.setItem(key, JSON.stringify(events));
+      } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      if (url.pathname === '/api/ai' && init?.signal) {
+        let body: { feature?: unknown } | null = null;
+        try { body = typeof init.body === 'string' ? JSON.parse(init.body) as { feature?: unknown } : null; } catch { /* Ignore other payload formats. */ }
+        if (typeof body?.feature === 'string' && body.feature.startsWith('family_menu')) {
+          mark('request', 'started');
+          init.signal.addEventListener('abort', () => { mark('signal', 'aborted'); recordLifecycle('abort'); }, { once: true });
+        }
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => { mark('beforeunload', 'fired'); recordLifecycle('beforeunload'); });
+    window.addEventListener('pagehide', () => { mark('pagehide', 'fired'); recordLifecycle('pagehide'); });
+  }, marker);
+
+  const { counts, errors, release } = await setup(page, 'held-ai');
+  const appOrigin = await page.evaluate(() => location.origin);
+  const before = await saved(page);
+  try {
+    await navigate(page, 'План');
+    const update = page.getByRole('button', { name: 'Обновить', exact: true });
+    await update.scrollIntoViewIfNeeded();
+    await update.click();
+    await expect.poll(() => counts.ai).toBe(1);
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(`${key}:request`), marker)).toBe('started');
+
+    await page.goto('about:blank');
+    release();
+    await expect.poll(() => counts.fulfilled).toBe(1);
+    await page.goto(appOrigin);
+    await expect(page).toHaveTitle(/FitFocus/);
+
+    expect(await page.evaluate(key => ({
+      request: localStorage.getItem(`${key}:request`),
+      signal: localStorage.getItem(`${key}:signal`),
+      beforeunload: localStorage.getItem(`${key}:beforeunload`),
+      pagehide: localStorage.getItem(`${key}:pagehide`),
+      lifecycle: JSON.parse(localStorage.getItem(`${key}:lifecycle`) ?? '[]'),
+    }), marker)).toEqual({ request: 'started', signal: 'aborted', beforeunload: 'fired', pagehide: 'fired', lifecycle: ['beforeunload', 'abort', 'pagehide'] });
+    expect(counts.ai).toBe(1);
+    expect(counts.put).toBe(0);
+    expect(counts.accepted).toBe(0);
+    expect(counts.oldWriter).toBe(0);
+    expect(counts.achievements).toBe(0);
+    expect(await saved(page)).toEqual(before);
+    await healthy(page, errors);
+  } finally { release(); }
+});
+
 test('AI family response after logout cannot create a menu or achievements', async ({ page }) => {
   const { counts, errors, release } = await setup(page, 'held-ai');
   try {
