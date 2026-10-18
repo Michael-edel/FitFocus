@@ -6573,3 +6573,20 @@ account-switch E2E — 3/3, полный unit suite — 1368/1368 в 213 фай�
 typecheck, production build через Playwright preview и `git diff --check` прошли.
 Сценарий подтверждает один UI cache path; другие callbacks/cache, общий P0.4,
 staging и release acceptance остаются открыты.
+
+## P0.9 — abort legacy migration между импортом и marker, 18.10.2026
+
+Добавлена browser acceptance в `e2e/legacy-outbox-migration.spec.ts` с реальным
+IndexedDB и текущим приложением: тест отменяет транзакцию после постановки
+outbox operation и imported migration item в одной транзакции, до её commit.
+После abort исходная
+legacy-запись и незавершённый snapshot сохраняются, а value, outbox operation,
+ledger/quarantine и processed marker отсутствуют; `sendAllowed` остаётся false.
+Затем повторный запуск успешно импортирует запись как конфликтную с одним opId,
+а последующий reload не создаёт дубль и не отправляет её на сервер.
+
+Сценарий прошёл 7/7 Playwright-проектов (desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA, iPhone Safari/PWA), `workers=1`, `retries=0`; root typecheck и
+`git diff --check` прошли. Это локальная acceptance: опубликованный HEAD
+`4065275` и текущий CI #1599 тест не содержат. Общая P0.9 матрица, staging и
+release acceptance остаются открыты.

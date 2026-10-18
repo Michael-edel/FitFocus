@@ -140,6 +140,15 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Legacy abort проверен отдельной browser acceptance в
+[`legacy-outbox-migration.spec.ts`](../e2e/legacy-outbox-migration.spec.ts): реальная
+IndexedDB транзакция прерывается после записи outbox intent и до фиксации
+migration item/snapshot marker. До повтора нет value, operation, ledger или
+processed marker; после reload та же legacy-запись импортируется одной
+конфликтной operation с тем же opId. Локальная матрица прошла 7/7
+desktop/mobile/PWA проектов без retries. Точный CI нового сценария и staging
+остаются отдельными проверками.
+
 DELETE-ветка строки `409 update/delete → reload` теперь отдельно проверена для
 `council_history`: после scoped 409 IndexedDB сохраняет tombstone, исходный
 `opId`, `serverSnapshot` и состояние `conflicted`; после reload видна команда

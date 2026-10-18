@@ -28,7 +28,7 @@ const taskEntry = `0:${taskText}`;
 
 type LegacyRecord = { type: string; key: string; value?: string; baseVersion?: number; retryCount?: number };
 type OutboxOperation = { opId: string; type: string; key: string; value?: string; accountId: string; writerId: string; baseVersion: number;
-  status: string; reason?: string; nextAttemptAtMs: number; attempt?: { startedAtMs: number } };
+  status: string; reason?: string; nextAttemptAtMs: number; migrationSourceKey?: string; attempt?: { startedAtMs: number } };
 type MigrationItem = { id: string; canonical: string; state: string; reason?: string; accountId?: string; opId?: string;
   acknowledgedVersion?: number; resolution?: { kind: string; serverVersion: number; atMs: number; replacementOpId?: string } };
 type MigrationUnknown = { rawRecord: unknown; reason: string };
@@ -81,6 +81,7 @@ async function migrationState(page: Page, valueKey = targetKey, traceIndexedDb =
       progress: metadata.find((entry) => entry.id === 'legacy-migration:v1') ?? null,
       migrationItems,
       migrationUnknown,
+      snapshots: metadata.filter((entry) => entry.id.startsWith('legacy-snapshot:v1:')),
       nowMs: Date.now(),
     };
   }, { sourceKey: legacySourceKey, valueKey, traceIndexedDb });
@@ -523,6 +524,143 @@ test('preserves legacy intent across a full storage clear without sending an unp
     throw error;
   } finally {
     await Promise.allSettled([oldPage.close(), currentPage.close()]);
+    await server.close();
+  }
+});
+
+test('rolls back legacy import and migration marker together after an IndexedDB abort, then retries idempotently', async ({ context }, info) => {
+  test.setTimeout(120_000);
+  const valueKey = `fitfocus_data_${account}_migration_abort`;
+  const value = JSON.stringify({ source: 'legacy', retained: true });
+  const source = JSON.stringify([{ type: 'put', key: valueKey, value }]);
+  const abortFlag = '__fitfocusE2eAbortLegacyMigration';
+  const abortCountKey = '__fitfocusE2eLegacyMigrationAbortCount';
+  const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'));
+  server.release();
+  const page = await context.newPage();
+  const storageTrace: string[] = [];
+  await captureAppDatabase(page, 'legacy-import-abort', storageTrace);
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true });
+    await page.addInitScript(({ sourceKey, source, abortFlag, abortCountKey }) => {
+      localStorage.setItem(sourceKey, source);
+      const control = window as Window & { __fitfocusMigrationAbortCount?: number };
+      control.__fitfocusMigrationAbortCount = Number(sessionStorage.getItem(abortCountKey) ?? '0');
+      const originalPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+        const request = originalPut.apply(this, args);
+        const record = args[0] as { state?: unknown } | undefined;
+        if (this.name === 'outbox_migration_items' && record?.state === 'imported'
+          && sessionStorage.getItem(abortFlag) !== 'disabled') {
+          const nextCount = Number(sessionStorage.getItem(abortCountKey) ?? '0') + 1;
+          sessionStorage.setItem(abortCountKey, String(nextCount));
+          control.__fitfocusMigrationAbortCount = nextCount;
+          this.transaction.abort();
+        }
+        return request;
+      };
+    }, { sourceKey: legacySourceKey, source, abortFlag, abortCountKey });
+
+    await openApp(page, `${server.origin}/?legacy-import-abort=1#plan`);
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expectCapturedAppDatabase(page);
+    await expect.poll(() => page.evaluate((key) => Number(sessionStorage.getItem(key) ?? '0'), abortCountKey),
+      { timeout: 30_000 }).toBeGreaterThan(0);
+
+    const afterAbort = await migrationState(page, valueKey);
+    const snapshotAfterAbort = afterAbort.snapshots.find((row) => row.sourceKey === legacySourceKey);
+    expect({
+      source: afterAbort.source,
+      value: afterAbort.value,
+      migrationOperations: afterAbort.operations.filter((operation) => operation.key === valueKey
+        && operation.migrationSourceKey === legacySourceKey),
+      ledgerForValue: itemForKey(afterAbort.migrationItems, valueKey),
+      quarantineForValue: afterAbort.migrationUnknown.filter((entry) => JSON.stringify(entry.rawRecord).includes(valueKey)),
+      progress: afterAbort.progress && {
+        status: afterAbort.progress.status,
+        processedRecords: afterAbort.progress.processedRecords,
+        sendAllowed: afterAbort.progress.sendAllowed,
+      },
+      snapshot: snapshotAfterAbort && {
+        rawSource: snapshotAfterAbort.rawSource,
+        processed: snapshotAfterAbort.processed,
+      },
+    }).toEqual({
+      source,
+      value: null,
+      migrationOperations: [],
+      ledgerForValue: undefined,
+      quarantineForValue: [],
+      progress: { status: 'importing', processedRecords: 0, sendAllowed: false },
+      snapshot: { rawSource: source, processed: [] },
+    });
+
+    await page.evaluate((key) => sessionStorage.setItem(key, 'disabled'), abortFlag);
+    await page.reload();
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => {
+      const state = await migrationState(page, valueKey);
+      const item = itemForKey(state.migrationItems, valueKey);
+      const operation = state.operations.find((candidate) => candidate.key === valueKey
+        && candidate.migrationSourceKey === legacySourceKey);
+      return {
+        value: state.value,
+        operationCount: state.operations.filter((candidate) => candidate.key === valueKey
+          && candidate.migrationSourceKey === legacySourceKey).length,
+        operationStatus: operation?.status,
+        operationReason: operation?.reason,
+        itemState: item?.state,
+        itemOpId: item?.opId,
+        operationId: operation?.opId,
+        progress: state.progress && {
+          status: state.progress.status,
+          processedRecords: state.progress.processedRecords,
+          sendAllowed: state.progress.sendAllowed,
+        },
+      };
+    }, { timeout: 30_000 }).toEqual({
+      value,
+      operationCount: 1,
+      operationStatus: 'conflicted',
+      operationReason: 'legacy-server-generation-unproven',
+      itemState: 'imported',
+      itemOpId: expect.any(String),
+      operationId: expect.any(String),
+      progress: expect.objectContaining({ processedRecords: 1 }),
+    });
+
+    const afterRetry = await migrationState(page, valueKey);
+    const firstOperation = afterRetry.operations.find((candidate) => candidate.key === valueKey
+      && candidate.migrationSourceKey === legacySourceKey);
+    const firstItem = itemForKey(afterRetry.migrationItems, valueKey);
+    expect(firstOperation).toBeTruthy();
+    expect(firstItem?.opId).toBe(firstOperation?.opId);
+    const abortCountBeforeSecondLoad = Number(await page.evaluate((key) => sessionStorage.getItem(key), abortCountKey) ?? '0');
+    await page.reload();
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => {
+      const state = await migrationState(page, valueKey);
+      return state.operations.filter((candidate) => candidate.key === valueKey
+        && candidate.migrationSourceKey === legacySourceKey).map((candidate) => candidate.opId);
+    }, { timeout: 30_000 }).toEqual([firstOperation!.opId]);
+    expect(Number(await page.evaluate((key) => sessionStorage.getItem(key), abortCountKey))).toBe(abortCountBeforeSecondLoad);
+    expect(server.stateWriteKeys).not.toContain(valueKey);
+    expect(server.unexpectedApi).toEqual([]);
+    await info.attach('legacy-import-abort', { body: JSON.stringify({
+      source, abortCountBeforeSecondLoad, operation: firstOperation, ledger: firstItem,
+      final: await migrationState(page, valueKey), stateWriteKeys: server.stateWriteKeys,
+      unexpectedApi: server.unexpectedApi, storageTrace: storageTrace.slice(-100),
+    }), contentType: 'application/json' });
+  } catch (error) {
+    await info.attach('legacy-import-abort-failure', { body: JSON.stringify({
+      abortCount: await page.evaluate((key) => sessionStorage.getItem(key), abortCountKey).catch(() => null),
+      body: await page.locator('body').innerText().catch(() => ''),
+      storageTrace: storageTrace.slice(-100), stateWriteKeys: server.stateWriteKeys,
+      unexpectedApi: server.unexpectedApi,
+    }), contentType: 'application/json' });
+    throw error;
+  } finally {
+    await page.close().catch(() => undefined);
     await server.close();
   }
 });

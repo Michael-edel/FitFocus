@@ -1,21 +1,18 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`. Опубликованный HEAD — `2e56910`;
-локальный follow-up `152b7af` закрывает гонку между изменением legacy source и
-записью ключа из старой вкладки. Source event запускает `/api/me` re-verification,
-во время которой текущая in-memory session временно отсутствует; теперь local-only
-запись использует последний принятый guard, а IndexedDB транзакционно проверяет
-account и sessionEpoch. Операция остаётся конфликтной и не отправляется.
-Acceptance для полного `localStorage.clear()` подтверждает сохранность исходного
-source snapshot, quarantine и pending intent в IndexedDB без ложных DELETE и
-сетевых state write. Browser-проверки старой записи/clear и keyed delete прошли
-7/7 каждая; полный unit suite — 1368/1368, root/domain/storage strict typecheck,
-production build и `git diff --check` прошли. Exact [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
-проверяет опубликованный HEAD `2e56910` и пока выполняет E2E; он не содержит
-`152b7af`. Точный CI нового коммита будет после push. В плане остаются 33 пункта:
-19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
-и интеграция в защищённую `main` не подтверждены.
+остаётся draft с base `fix/state-generations`; опубликованный HEAD — `4065275`.
+Локально добавлена browser acceptance миграции legacy outbox при реальном abort
+IndexedDB: value, операция, ledger и processed marker откатываются вместе; после
+повтора сохраняется одна операция с тем же opId. Новый сценарий прошёл 7/7
+desktop/mobile/PWA проектов без retries. Он пока не входит в опубликованный SHA.
+Точный [CI #1599](https://github.com/Michael-edel/FitFocus/actions/runs/39100059502)
+для `4065275` сейчас выполняет E2E; результат ещё не завершён. Основные локальные
+проверки опубликованной реализации: legacy clear/keyed-delete acceptance 7/7,
+account-cache sweep 21/21, progress draft/archive 3/3, unit 1368/1368, три
+typecheck, production build и `git diff --check` прошли. В плане остаются 33
+пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging,
+выпуск и интеграция в защищённую `main` не подтверждены.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -1793,6 +1790,13 @@ legacy-ключ не используется для новой очереди �
     видны ошибка сохранения и предыдущие подтверждённые settings. Сценарий
     прошёл 7/7 Playwright-проектов без retries в коммите
     [`bf6b142`](https://github.com/Michael-edel/FitFocus/commit/bf6b142b47e595dd9ba2947a312d9a03aeaa2a19).
+  - [x] Проверить abort внутри реальной browser IndexedDB транзакции legacy import:
+    после постановки outbox operation и imported migration marker в одной
+    транзакции, но до commit, транзакция принудительно отменяется. Значение,
+    operation, ledger и snapshot processed marker остаются целиком до повтора;
+    повтор создаёт одну операцию и сохраняет тот же opId. Сценарий прошёл 7/7
+    desktop/mobile/PWA проектов, workers=1, retries=0. Это локальная browser
+    acceptance; точный CI и staging ещё открыты.
   - [x] Проверить `401 → новая правка → login`: локальный follow-up
     [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
     сохраняет доступ к локальным настройкам в auth-паузе после обновления

@@ -20,9 +20,12 @@ default-состояние.
 account-cache sweep — 21/21, progress draft — 3/3 и новый progress archive —
 3/3 на desktop Chromium/Firefox/WebKit без retries. Целевые legacy unit 12/12,
 полный unit 1368/1368, root/domain/storage strict typecheck, production build и
-`git diff --check` прошли. [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
-по предыдущему HEAD `2e56910` остаётся в E2E; точный [CI #1599](https://github.com/Michael-edel/FitFocus/actions/runs/39100059502)
-для `4065275` создан и пока pending. Остаются 33 пункта:
+`git diff --check` прошли. Новый local-only browser acceptance тест legacy
+migration abort прошёл 7/7 desktop/mobile/PWA профилей без retries; операция,
+значение и оба migration marker атомарно откатываются, повтор сохраняет один
+opId. Точный [CI #1599](https://github.com/Michael-edel/FitFocus/actions/runs/39100059502)
+для опубликованного `4065275` выполняет E2E и не включает этот local-only тест.
+Остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и защищённая `main` открыты.
 
 Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
