@@ -1,12 +1,17 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Remote PR HEAD `9825e8d` включает fix отмены
-регистрационного AI при unload (`dc38a51`) и актуальную документацию. Точный
-[CI #1630](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602)
-для `9825e8d` завершился success: 1388 unit в 215 файлах, 1041 browser passed /
-303 skipped, audit, guards, три typecheck и build прошли; rollback/CAS выполнил
-23 HTTP/D1-запроса. Browser diagnostics и rollback artifact сохранены.
+base `fix/state-generations`. Remote PR HEAD `151e3c0`; точный
+[CI #1633](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872)
+завершился success: 1388 unit в 215 файлах, 1041 browser passed / 303 skipped,
+audit, guards, три typecheck и build прошли; rollback/CAS выполнил 23 HTTP/D1-
+запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
+Предыдущий кодовый HEAD `9825e8d` также прошёл точный CI #1630. Локальный
+code/test follow-up `b4336d8` покрывает unload Coach retry: targeted E2E 3/3 на
+desktop Chromium/Firefox/WebKit, полный callback spec 48/48 на desktop Chromium
+(`workers=1,retries=0`), AI transport unit 25/25, typecheck и diff check прошли.
+Commit ещё не отправлен в PR.
 
 Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
@@ -1170,6 +1175,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     `AiSession`, а отсутствующий proof отклоняется до сети. Проверены 24 теста
     AI transport, полный unit suite (1188), typecheck, auth-scope и production
     build на follow-up поверх `1b80734`; точный CI этого follow-up ожидает push.
+  - [x] Проверить реальный переход со страницы во время удержанного Coach retry:
+    `beforeunload`/`pagehide` отменяют active `/api/ai` signal, возврат после
+    навигации не меняет профиль, coach value, outbox или achievement effects.
+    Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit без retries; полный
+    callback spec — 48/48 на desktop Chromium (`workers=1,retries=0`), AI transport
+    unit — 25/25, `npm run typecheck` и `git diff --check` прошли в `b4336d8`.
+    Это mock API;
+    отмена работы внешнего AI-провайдера, BFCache и staging этим не проверены.
   Отдельно добавлена account-switch проверка позднего ответа
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует

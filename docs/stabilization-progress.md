@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — реальная навигация во время обычного Coach retry, `b4336d8`, 18.10.2026
+
+Новый сценарий удерживает пользовательский Coach retry на `/api/ai`, выполняет
+реальную навигацию на `about:blank` и возвращается в приложение. Проверяется,
+что активный browser `AbortSignal` отменён на `beforeunload`/`pagehide`, а поздний
+ответ не меняет профиль, coach value, outbox или achievement effects. Он дополняет
+регистрационный unload acceptance, покрывая обычный retry AI-сессии.
+
+Целевой Playwright-сценарий прошёл **3/3** на desktop Chromium, Firefox и WebKit
+без retries; весь callback spec — **48/48** на desktop Chromium
+(`workers=1,retries=0`); AI transport unit — **25/25**, `npm run typecheck` и
+`git diff --check` прошли. Фикстура освобождает задержанный mock response после
+навигации, чтобы проверить поздний результат; отменённый fetch не обновляет
+profile, coach value, outbox или achievement effects. Это не доказывает, что
+внешний сервер прекращает уже начатую AI-работу.
+
+Локальный commit `b4336d8` ожидает push. Точный PR CI #1633 для предыдущего
+remote HEAD `151e3c0` завершился success: 1388 unit, 1041 browser passed / 303
+skipped и 23 HTTP/D1 rollback/CAS-запроса. Его artifacts: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404),
+[rollback](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
+Реальные OAuth, BFCache и staging остаются открытыми.
+
 ## P0.8 follow-up — ограничить invite-запросы регистрации, `f4dcce8`, 18.10.2026
 
 Регистрационные `/api/me` и `/api/invite/redeem` теперь используют общий

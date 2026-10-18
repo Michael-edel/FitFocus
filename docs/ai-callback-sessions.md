@@ -216,6 +216,26 @@ CI-подтверждения. Staging, реальный OAuth/BFCache и вес
 прочие writers и полный lifecycle всё ещё открыты. Результаты и границы:
 [статус проекта](project-status.md) и [журнал](stabilization-progress.md).
 
+## P0.5 follow-up — реальная навигация во время Coach retry, `b4336d8`, 18.10.2026
+
+Browser-тест удерживает обычный Coach retry на `/api/ai`, затем переходит на
+`about:blank` и возвращается в приложение. Инструментация подтверждает запуск
+запроса, срабатывание `beforeunload` и `pagehide` и отмену его `AbortSignal`.
+После возврата профиль, coach value, durable outbox и achievement effects не
+изменились; ошибок страницы и framework overlay нет. Сценарий прошёл **3/3** на
+desktop Chromium, Firefox и WebKit без retries. Полный callback spec прошёл
+**48/48** на desktop Chromium (`workers=1,retries=0`); AI transport unit —
+**25/25**, `npm run typecheck` и `git diff --check` прошли. Browser plugin
+недоступен, поэтому использован настроенный в проекте Playwright с mock API.
+
+Фикстура освобождает задержанный mock response после перехода, чтобы проверить
+поздний результат в уже перезагруженном приложении. Продуктовый fetch signal при
+этом отменён, и ответ не вызывает клиентских success effects. Тест не доказывает,
+что внешний сервер или AI-провайдер прекращает уже начатую работу. Реальные
+OAuth, BFCache и staging остаются за пределами проверки. Commit пока локальный;
+CI #1633 успешно проверил предыдущий remote HEAD `151e3c0`, точный CI для
+`b4336d8` запускается после публикации.
+
 ## Приёмка
 
 - Unit-тесты подтверждают отказ при другом аккаунте, повторном входе,

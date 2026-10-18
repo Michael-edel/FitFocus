@@ -3,10 +3,18 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. Remote HEAD — `9825e8d`. Точный [CI #1630](https://github.com/Michael-edel/FitFocus/actions/runs/39144722602)
+`fix/state-generations`. Remote HEAD — `151e3c0`; точный [CI #1633](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872)
 завершился success: 1388 unit в 215 файлах, 1041 browser passed / 303 skipped,
-audit, guards, три typecheck и build прошли; rollback/CAS gate выполнил 23
-HTTP/D1-запроса, browser diagnostics и rollback artifact сохранены.
+audit, guards, три typecheck и build прошли. Rollback/CAS gate выполнил 23
+HTTP/D1-запроса; сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
+Предыдущий кодовый HEAD `9825e8d` прошёл точный CI #1630.
+
+Локальный code/test follow-up `b4336d8` покрывает настоящий переход со страницы
+при удержанном Coach retry. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit без
+retries, полный callback spec — 48/48 на desktop Chromium (`workers=1,retries=0`),
+AI transport unit — 25/25, `npm run typecheck` и `git diff --check` прошли.
+Commit ещё не отправлен в PR; отдельный staging, OAuth и D1 не проверены.
 
 Code/test commit `dc38a51` исправляет отмену регистрации AI при
 навигации: `beforeunload` отменяет активный fetch и registration action до
