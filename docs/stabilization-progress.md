@@ -1,5 +1,17 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — навигация во время AI-генерации семейного меню, `e22b2bf`, 19.10.2026
+
+Новый E2E удерживает `/api/ai` для family-menu, затем выполняет реальную
+навигацию и освобождает старый ответ. Проверяется порядок
+`beforeunload → abort → pagehide`, отсутствие новой familyMenu operation,
+неизменность сохранённого семейного снимка и отсутствие menu PUT/achievement.
+Сценарий прошёл **7/7** на desktop Chromium/Firefox/WebKit, Android Chrome,
+Android PWA Chrome, iPhone Safari и iPhone PWA (`workers=1,retries=0`).
+`npm run typecheck` и `git diff --check` прошли. Это mock API; отмена работы
+внешнего AI-провайдера, реальный BFCache и staging не подтверждены. Точный CI
+новой ревизии запускается после push.
+
 ## CI unload-исправлений, `a739c1e`, 19.10.2026
 
 Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)

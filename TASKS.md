@@ -13,6 +13,9 @@ gate выполнил 23 HTTP/D1-запроса. Сохранены [browser dia
 за 44,7 минуты без retries; audit, schema/privacy/auth/API guards, три typecheck,
 build и rollback/CAS gate на 23 HTTP/D1-запроса прошли. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
+Локальный code/test follow-up `e22b2bf` добавляет navigation acceptance для
+family-menu AI generation: 7/7 browser/PWA проектов без retries; root typecheck
+и diff check прошли. Новый exact CI запускается при push.
 `589d49e` распространил request-scoped `beforeunload`
 через `AiActionScope` на AI callbacks, сохранив отдельную обработку недельного
 отчёта без дублирующего listener. `a739c1e` добавил один временный listener на
@@ -895,7 +898,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     временный listener на scope; listener снимается после завершения последнего
     действия или при invalidation, а при idle отсутствует. Family unit — 19/19;
     реальный переход во время удержанного invite abort-ит его signal и не
-    публикует устаревший код (desktop Chromium 1/1). P0.5 остаётся открытым.
+    публикует устаревший код (desktop Chromium 1/1). В `e22b2bf` добавлена
+    навигация при удержанной AI-генерации семейного меню: `beforeunload`
+    отменяет signal до `pagehide`, освобождённый поздний ответ не создаёт menu
+    operation, семейный снимок остаётся прежним; 7/7 desktop/mobile/PWA проектов,
+    `workers=1,retries=0`. Root typecheck и diff check прошли. Это mock API и не
+    подтверждает отмену работы внешнего AI-провайдера, BFCache или staging.
+    P0.5 остаётся открытым.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.

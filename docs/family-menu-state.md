@@ -118,6 +118,14 @@ proof и Service Worker fence уже подключены.
 Точный CI этого follow-up ожидает push; остальные writers и общая lifecycle-
 приёмка остаются открытыми.
 
+На `e22b2bf` добавлена проверка реальной навигации во время удержанного
+family-menu AI запроса. `beforeunload` отменяет его signal до `pagehide`; после
+освобождения старого ответа familyMenu operation не создаётся, IndexedDB-снимок
+семьи остаётся прежним, menu PUT и achievement не запускаются. E2E прошёл 7/7
+desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
+Это mock API и не доказывает отмену работы внешнего провайдера, BFCache или
+staging. Точный CI нового SHA ожидает публикации.
+
 Добавлена проверка границы повторного входа того же аккаунта: старый
 `GET /api/family/menu/state` удерживается во время reload, соседняя вкладка
 принимает новую `serverSessionId` и `sessionEpoch`, затем старый ответ

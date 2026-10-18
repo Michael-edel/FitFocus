@@ -3,13 +3,14 @@
 Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`; он зависит от PR #94 и #90. Последний проверенный
-кодовый SHA — `a739c1e`; последующие коммиты содержат только документационные
-follow-up.
-Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
-завершился success: 1391 unit в 215 файлах, 1058 browser passed / 307 skipped
-за 44,7 минуты без retries; audit, schema/privacy/auth/API guards, три typecheck,
-build и rollback/CAS gate на 23 HTTP/D1-запроса прошли. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
+`fix/state-generations`; он зависит от PR #94 и #90. Последний локально
+проверенный code/test SHA — `e22b2bf`; он добавляет навигационную проверку
+семейной AI-генерации. Локальный E2E — 7/7 browser/PWA проектов без retries,
+root typecheck и diff check прошли; точный CI новой ревизии ожидает push.
+Родительский кодовый SHA `a739c1e` подтверждён успешным [точным CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
+1391 unit в 215 файлах, 1058 browser passed / 307 skipped за 44,7 минуты без
+retries, audit, guards, три typecheck, build и rollback/CAS gate на 23 HTTP/D1-
+запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
 
 В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
