@@ -76,6 +76,61 @@ it('retains a value-only write from an open legacy tab as a non-sendable conflic
   expect(await outbox.list('other-account')).toEqual([]);
 });
 
+it('preserves a legacy local write while source-change re-verification is in flight', async () => {
+  const eventTarget = new EventTarget();
+  vi.stubGlobal('window', eventTarget);
+  vi.stubGlobal('navigator', {});
+  let meRequests = 0;
+  let releaseSecondRequest!: () => void;
+  let markSecondRequestStarted!: () => void;
+  const secondRequestGate = new Promise<void>(resolve => { releaseSecondRequest = resolve; });
+  const secondRequestStarted = new Promise<void>(resolve => { markSecondRequestStarted = resolve; });
+  const fetchImpl = vi.fn<typeof fetch>(async input => {
+    if (String(input) === '/api/me') {
+      meRequests += 1;
+      if (meRequests === 2) {
+        markSecondRequestStarted();
+        await secondRequestGate;
+      }
+      return json(proof());
+    }
+    return new Response(JSON.stringify({ error: 'unexpected-request' }), { status: 500 });
+  });
+  sync = new StateSync({ outbox, fetchImpl, legacyRuntime: true, legacySource: source, legacyMigration: migration,
+    verifyLegacyWritersStopped: async () => writerFence() });
+  sync.start(accountId);
+
+  await expect.poll(async () => (await migration.progress())?.sendAllowed).toBe(true);
+  await expect.poll(async () => (await outbox.list(accountId)).some(operation => operation.key === ownKey)).toBe(true);
+
+  // The legacy queue retry event starts /api/me re-verification. Its current
+  // implementation temporarily clears the in-memory session while the request waits.
+  eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+    key: LEGACY_QUEUE_SOURCE_KEY,
+    oldValue: legacySourceValue,
+    newValue: legacySourceValue,
+  }));
+  await secondRequestStarted;
+
+  try {
+    eventTarget.dispatchEvent(Object.assign(new Event('storage'), {
+      key: ownKey,
+      oldValue: '{"theme":"dark"}',
+      newValue: '{"theme":"light"}',
+    }));
+    await expect.poll(async () => (await outbox.list(accountId)).find(operation =>
+      operation.key === ownKey && operation.writerId === 'legacy-local-storage' && operation.type === 'put'))
+      .toMatchObject({ key: ownKey, value: '{"theme":"light"}', status: 'conflicted', reason: 'legacy-writer-local-only' });
+  } finally {
+    releaseSecondRequest();
+  }
+
+  await expect.poll(async () => (await migration.progress())?.sendAllowed).toBe(true);
+  expect((await outbox.snapshot(accountId, ownKey)).value).toBe('{"theme":"dark"}');
+  expect(await outbox.list('other-account')).toEqual([]);
+  expect(fetchImpl.mock.calls.filter(([input]) => String(input) !== '/api/me')).toEqual([]);
+});
+
 it('retains a legacy localStorage removal as a non-sendable delete conflict when the old queue is auth-blocked', async () => {
   const eventTarget = new EventTarget();
   vi.stubGlobal('window', eventTarget);

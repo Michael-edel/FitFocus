@@ -94,6 +94,9 @@ export class StateSync {
   private generation = 0;
   private accountId?: string;
   private session?: ActiveOutboxSession;
+  // Keep the last accepted local-commit fence while /api/me is rechecked.
+  // Storage events may arrive during that request and must not lose user edits.
+  private lastLocalCommitSession?: ActiveOutboxSession;
   private readGuard?: OutboxReadGuard;
   private profileProtocol = false;
   private profileProjectionProtocol = false;
@@ -174,6 +177,7 @@ export class StateSync {
   stop(): void {
     this.generation += 1;
     this.accountId = undefined; this.session = undefined;
+    this.lastLocalCommitSession = undefined;
     this.readGuard = undefined;
     this.legacyFenceReady = false;
     this.legacyFenceRetryAtMs = 0;
@@ -412,7 +416,8 @@ export class StateSync {
   }
 
   private async preserveLegacyLocalIntent(accountId: string, key: string, intent: OutboxIntent): Promise<void> {
-    const session = this.session;
+    const session = this.session?.accountId === accountId ? this.session
+      : this.lastLocalCommitSession?.accountId === accountId ? this.lastLocalCommitSession : undefined;
     const generation = this.generation;
     if (!session || session.accountId !== accountId || !session.serverSessionId) return;
     const readLegacyValue = (): string | null | undefined => {
@@ -425,7 +430,10 @@ export class StateSync {
     try {
       if (intent.type === 'delete' && !deleteStillCurrent()) return;
       const observed = await this.outbox.snapshot(accountId, key);
-      if (generation !== this.generation || accountId !== this.accountId || session.sessionEpoch !== this.session?.sessionEpoch
+      if (generation !== this.generation || accountId !== this.accountId
+        || (this.session !== undefined && session.sessionEpoch !== this.session.sessionEpoch)
+        || this.lastLocalCommitSession?.accountId !== accountId
+        || this.lastLocalCommitSession?.sessionEpoch !== session.sessionEpoch
         || (intent.type === 'put' && observed.value === intent.value)) return;
       const operation = await this.outbox.write({
         accountId,
@@ -436,7 +444,9 @@ export class StateSync {
         conflictReason: 'legacy-writer-local-only',
         localCommitGuard: { accountId, sessionEpoch: session.sessionEpoch, serverSessionId: session.serverSessionId },
         canCommit: () => generation === this.generation && accountId === this.accountId
-          && session.sessionEpoch === this.session?.sessionEpoch
+          && this.lastLocalCommitSession?.accountId === accountId
+          && session.sessionEpoch === this.lastLocalCommitSession.sessionEpoch
+          && (!this.session || session.sessionEpoch === this.session.sessionEpoch)
           && (intent.type !== 'delete' || deleteStillCurrent()),
       });
       if (generation !== this.generation || accountId !== this.accountId) return;
@@ -531,6 +541,7 @@ export class StateSync {
         if (generation !== this.generation || accountId !== this.accountId) return false;
         this.readGuard = accepted;
         this.session = { id: 'active-session', ...accepted };
+        this.lastLocalCommitSession = this.session;
         this.publishReadGuard(accepted);
         this.profileProtocol = isRecord(body.profileSync) && body.profileSync.protocol === 1 && body.profileSync.guard === 1;
         this.profileProjectionProtocol = isRecord(body.profileSync) && body.profileSync.weeklyMenuProjection === 1;

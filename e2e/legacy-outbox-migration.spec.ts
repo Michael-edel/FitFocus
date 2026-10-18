@@ -183,7 +183,7 @@ function malformedQuarantineSummary(records: MigrationUnknown[]) {
   });
 }
 
-test('preserves legacy intent without sending an operation whose server generation is unproven', async ({ context }, info) => {
+test('preserves legacy intent across a full storage clear without sending an unproven operation', async ({ context }, info) => {
   test.setTimeout(120_000);
   const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'), {
     stateUnavailable: true, currentStateUnavailable: true,
@@ -236,6 +236,20 @@ test('preserves legacy intent without sending an operation whose server generati
 
     server.release();
     await mockApp(currentPage, { session: 'app', realServiceWorker: true, nativeApi: true, push: { standalone } });
+    await currentPage.addInitScript(() => {
+      const diagnosticWindow = window as Window & {
+        __fitfocusStorageClearEvents?: number;
+        __fitfocusStorageEvents?: Array<{ key: string | null; oldValue: string | null; newValue: string | null }>;
+      };
+      diagnosticWindow.__fitfocusStorageClearEvents = 0;
+      diagnosticWindow.__fitfocusStorageEvents = [];
+      window.addEventListener('storage', event => {
+        diagnosticWindow.__fitfocusStorageEvents?.push({ key: event.key, oldValue: event.oldValue, newValue: event.newValue });
+        if (event.key === null) {
+          diagnosticWindow.__fitfocusStorageClearEvents = (diagnosticWindow.__fitfocusStorageClearEvents ?? 0) + 1;
+        }
+      });
+    });
     await openApp(currentPage, `${server.origin}/?release=next#plan`);
     await expect(currentPage).toHaveTitle(/FitFocus/);
     await expect.poll(() => currentPage.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state ?? null)).toBe('installed');
@@ -330,6 +344,51 @@ test('preserves legacy intent without sending an operation whose server generati
     expect(server.counts.currentStatePutAttempts).toBe(0);
     expect(server.stateWriteKeys).not.toContain(targetKey);
 
+    // A StorageEvent for localStorage.clear() has key=null. It re-verifies the
+    // source but must not manufacture per-key DELETE operations. The imported
+    // intent, original source snapshot, and quarantine evidence are in IndexedDB.
+    const sourceBeforeClear = await oldPage.evaluate(key => localStorage.getItem(key), legacySourceKey);
+    expect(sourceBeforeClear).toBe(updatedOldSource);
+    const beforeClear = await migrationState(currentPage);
+    const targetOperationsBeforeClear = beforeClear.operations.filter(operation => operation.key === targetKey)
+      .map(({ opId, type, value, status, reason }) => ({ opId, type, value, status, reason }))
+      .sort((left, right) => left.opId.localeCompare(right.opId));
+    const valueBeforeClear = beforeClear.value;
+    await oldPage.evaluate(() => localStorage.clear());
+    await expect.poll(() => currentPage.evaluate(() =>
+      (window as Window & { __fitfocusStorageClearEvents?: number }).__fitfocusStorageClearEvents ?? 0,
+    )).toBeGreaterThan(0);
+    await expect.poll(() => currentPage.evaluate(key => localStorage.getItem(key), legacySourceKey)).toBeNull();
+    await expect.poll(async () => {
+      const state = await migrationState(currentPage);
+      const oldSnapshotRetained = state.metadata.some(entry => entry.rawSource === sourceBeforeClear);
+      const targetOperations = state.operations.filter(operation => operation.key === targetKey)
+        .map(({ opId, type, value, status, reason }) => ({ opId, type, value, status, reason }))
+        .sort((left, right) => left.opId.localeCompare(right.opId));
+      return {
+        source: state.source,
+        oldSnapshotRetained,
+        importedState: itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!)?.state,
+        foreignRawRetained: quarantinedRecordExists(state.migrationUnknown, orphanKey),
+        malformedQuarantine: malformedQuarantineSummary(state.migrationUnknown),
+        targetOperations,
+        localDeleteCount: state.operations.filter(operation => operation.writerId === 'legacy-local-storage'
+          && operation.type === 'delete').length,
+        value: state.value,
+      };
+    }, { timeout: 20_000 }).toEqual({
+      source: null,
+      oldSnapshotRetained: true,
+      importedState: 'imported',
+      foreignRawRetained: true,
+      malformedQuarantine: malformedLegacyCases,
+      targetOperations: targetOperationsBeforeClear,
+      localDeleteCount: 0,
+      value: valueBeforeClear,
+    });
+    expect(server.counts.currentStatePutAttempts).toBe(0);
+    expect(server.stateWriteKeys).not.toContain(targetKey);
+
     // Keep current writes unavailable while both documents navigate. The first
     // new-build request must not be accepted just before that page is unloaded:
     // the server could commit it while navigation drops the acknowledgement.
@@ -365,7 +424,8 @@ test('preserves legacy intent without sending an operation whose server generati
       const preserved = state.operations.find((entry) => entry.reason === 'legacy-writer-local-only');
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
       return {
-        sourceFingerprintFields: legacySourceFingerprintFields(state.source),
+        source: state.source,
+        oldSnapshotRetained: state.metadata.some(entry => entry.rawSource === sourceBeforeClear),
         targetState: imported?.state,
         targetOwner: imported?.accountId,
         acknowledgedVersion: imported?.acknowledgedVersion,
@@ -385,7 +445,8 @@ test('preserves legacy intent without sending an operation whose server generati
         writersStopped: state.progress?.writersStopped,
       };
     }).toEqual({
-      sourceFingerprintFields: legacySourceFingerprintFields(oldSource),
+      source: null,
+      oldSnapshotRetained: true,
       targetState: 'imported',
       targetOwner: account,
       acknowledgedVersion: undefined,
@@ -453,6 +514,9 @@ test('preserves legacy intent without sending an operation whose server generati
       source: await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey).catch(() => null),
       storageTrace: storageTrace.slice(-100),
       currentBody: await currentPage.locator('body').innerText().catch(() => ''),
+      storageEvents: await currentPage.evaluate(() =>
+        (window as Window & { __fitfocusStorageEvents?: unknown[] }).__fitfocusStorageEvents ?? [],
+      ).catch(() => []),
     };
     await info.attach('legacy-outbox-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
     console.error('LEGACY_OUTBOX_FAILURE', JSON.stringify(diagnostic));
