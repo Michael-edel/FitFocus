@@ -1989,6 +1989,60 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await switched.page.screenshot({ path: info.outputPath('progress-draft-cleared-on-account-switch.png') });
 });
 
+test('progress archive expansion cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab progress archive account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, '/#progress');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), weeklyReportsKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Архив', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Визуальная история тела', exact: true })).toBeVisible();
+  const archiveKeyA = `fitfocus.progress-archive.sections.v1:${accountA.id}`;
+  const galleryToggleA = page.getByRole('button', { name: 'Показать', exact: true }).first();
+  await expect(galleryToggleA).toBeVisible();
+  await galleryToggleA.click();
+  await expect(page.getByRole('button', { name: 'Скрыть', exact: true }).first()).toBeVisible();
+  const archiveStateA = { gallery: true, compare: false, trend: false, timeline: false };
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), archiveKeyA))
+    .toBe(JSON.stringify(archiveStateA));
+  const beforeSwitch = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const operationsBefore = operationsFor(beforeSwitch, accountA);
+
+  const switched = await openAccountB(context, state);
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByRole('heading', { name: 'Визуальная история тела', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), archiveKeyA)).toBe(JSON.stringify(archiveStateA));
+  const afterSwitch = await readDurableSnapshot(page);
+  expect(rawValue(afterSwitch, profileKey(accountA.id))).toBe(profileBefore);
+  expect(operationsFor(afterSwitch, accountA)).toEqual(operationsBefore);
+
+  await switched.page.setViewportSize({ width: 390, height: 844 });
+  await openApp(switched.page, '/#progress');
+  await expect.poll(async () => (await readDurableSnapshot(switched.page)).activeSession?.accountId).toBe(accountB.id);
+  await expect.poll(() => switched.fixture.counts.completedAiFeatures).toContain('wis_text');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(switched.page), weeklyReportsKey(accountB.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(switched.page, accountB);
+  await switched.page.getByRole('button', { name: 'Архив', exact: true }).click();
+  await expect(switched.page.getByRole('heading', { name: 'Визуальная история тела', exact: true })).toBeVisible();
+  await expect(switched.page.getByRole('button', { name: 'Показать', exact: true }).first()).toBeVisible();
+  await expect(switched.page.getByRole('button', { name: 'Скрыть', exact: true })).toHaveCount(0);
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), archiveKeyA)).toBe(JSON.stringify(archiveStateA));
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), `fitfocus.progress-archive.sections.v1:${accountB.id}`))
+    .toBe(JSON.stringify({ gallery: false, compare: false, trend: false, timeline: false }));
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('progress-archive-account-b-default-state.png') });
+});
+
 test('a profile draft cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };

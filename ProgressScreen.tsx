@@ -25,6 +25,7 @@ import {
   YAxis,
 } from 'recharts';
 import { WeightTrendChart } from './charts';
+import { initialChartDimension } from './chartDimensions';
 import { toLocalDayKey } from './dateUtils';
 import { normalizeWearableSyncSnapshot } from './wearableSync';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from './profileMath';
@@ -75,12 +76,6 @@ type ProgressUiState = {
 type ProgressProfileScope = { accountId: string; generation: number };
 
 const PROGRESS_UI_STORAGE_KEY = 'fitfocus.progress.ui.v1';
-
-const initialProgressChartDimension = (height: number) => {
-  const viewportWidth = typeof window === 'undefined' ? 1 : window.innerWidth;
-  const horizontalChrome = viewportWidth >= 768 ? 400 : 72;
-  return { width: Math.max(1, viewportWidth - horizontalChrome), height };
-};
 
 const metricMeta: Record<MetricKey, { label: string; unit: string; color: string }> = {
   weight: { label: 'Вес', unit: 'кг', color: '#818CF8' },
@@ -1648,7 +1643,7 @@ export default function ProgressScreen({
           {(isDesktopViewport || mobileDetailsOpen) && (
           <div className="mt-5 h-[300px]">
             {progressDynamicsSeries.length ? (
-              <ResponsiveContainer width="100%" height="100%" initialDimension={initialProgressChartDimension(300)}>
+              <ResponsiveContainer width="100%" height="100%" initialDimension={initialChartDimension(300)}>
                 <LineChart data={progressDynamicsSeries}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fontWeight: 800, fill: '#475569' }} />
@@ -1775,7 +1770,7 @@ export default function ProgressScreen({
           {(isDesktopViewport || mobileDetailsOpen) && (
           <div className="mt-5 h-[280px]">
             {chartData.length ? (
-              <ResponsiveContainer width="100%" height="100%" initialDimension={initialProgressChartDimension(280)}>
+              <ResponsiveContainer width="100%" height="100%" initialDimension={initialChartDimension(280)}>
                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id={`progress-${selectedMetric}`} x1="0" y1="0" x2="0" y2="1">

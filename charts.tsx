@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { calculateStreak, getTodayKey } from './habits';
 import { toLocalDayKey } from './dateUtils';
+import { initialChartDimension } from './chartDimensions';
 
 function addLocalDays(date: Date, deltaDays: number): Date {
   const next = new Date(date);
@@ -34,12 +35,6 @@ type DailyStats = {
 };
 
 type Targets = DailyStats;
-
-function initialChartDimension(height: number) {
-  const viewportWidth = typeof window === 'undefined' ? 320 : window.innerWidth;
-  const horizontalChrome = viewportWidth >= 768 ? 400 : 72;
-  return { width: Math.max(1, viewportWidth - horizontalChrome), height };
-}
 
 type DashboardChartsPanelProps = {
   dailyStats: DailyStats;
