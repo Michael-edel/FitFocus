@@ -562,7 +562,34 @@ test('preserves legacy intent across a full storage clear without sending an unp
       acceptedStateKeys: server.stateWriteKeys, counts: server.counts, storageTrace: storageTrace.slice(-100),
     }), contentType: 'application/json' });
   } catch (error) {
+    const workerPages = await Promise.all([
+      { label: 'old', page: oldPage }, { label: 'current', page: currentPage },
+    ].map(async ({ label, page }) => ({
+      label,
+      snapshot: await page.evaluate(async () => {
+        const worker = (value: ServiceWorker | null) => value
+          ? { scriptURL: value.scriptURL, state: value.state } : null;
+        return {
+          atMs: Date.now(), url: location.href, visibility: document.visibilityState,
+          focused: document.hasFocus(), buildId: localStorage.getItem('fitfocus.build.id'),
+          moduleScripts: [...document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')].map(script => script.src),
+          serviceWorkerSupported: 'serviceWorker' in navigator,
+          controller: 'serviceWorker' in navigator ? worker(navigator.serviceWorker.controller) : null,
+          registrations: 'serviceWorker' in navigator
+            ? (await navigator.serviceWorker.getRegistrations()).map(registration => ({
+              scope: registration.scope, active: worker(registration.active),
+              waiting: worker(registration.waiting), installing: worker(registration.installing),
+            })) : [],
+          // Window cannot inspect ServiceWorkerGlobalScope.clients or a prior challenge reply.
+          writerFenceClientInventory: 'not exposed by the page API; no diagnostic challenge sent',
+        };
+      }).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) })),
+    })));
+    const migrationProgress = await migrationState(currentPage)
+      .then(state => state.progress)
+      .catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
     const diagnostic = {
+      workerPages, migrationProgress,
       counts: server.counts, stateWriteKeys: server.stateWriteKeys, unexpectedApi: server.unexpectedApi,
       source: await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey).catch(() => null),
       storageTrace: storageTrace.slice(-100),

@@ -8,6 +8,7 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
 export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+  achievementCheckGate?: { started: (scope: { method: string | undefined; account: string | undefined; session: string | undefined }) => void; wait: Promise<void> };
   profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let directory = resolve(previous);
   const api = createPwaApiFixture(options);

@@ -79,6 +79,37 @@ it.each(['beforeunload', 'pagehide'] as const)('cancels a held body on %s even i
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2)); target.dispatchEvent(new Event(eventName)); await result;
   expect(session.controller.signal.aborted).toBe(true);
 });
+it.each([undefined, { source: 'app_open' }])('aborts an active achievement request before unload and cleans up its listeners: %j', async context => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const removeListener = vi.spyOn(target, 'removeEventListener');
+  let requestSignal: AbortSignal | undefined;
+  const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+    if (String(url).startsWith('/api/me')) return json(me());
+    requestSignal = init?.signal ?? undefined;
+    return new Promise<Response>(() => {});
+  });
+  const session = await prepare(fetchImpl); session.timeoutMs = 2_000;
+  const abortSession = session.controller.abort.bind(session.controller);
+  let requestAbortedBeforeSessionAbort = false;
+  vi.spyOn(session.controller, 'abort').mockImplementation(() => {
+    requestAbortedBeforeSessionAbort = requestSignal?.aborted === true;
+    abortSession();
+  });
+  const result = expect(requestAchievementJson(session, context)).rejects.toThrow('STATE_REQUEST_ABORTED');
+  try {
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    target.dispatchEvent(new Event('beforeunload'));
+    expect(requestSignal?.aborted).toBe(true);
+    expect(session.controller.signal.aborted).toBe(true);
+    expect(requestAbortedBeforeSessionAbort).toBe(true);
+  } finally {
+    session.controller.abort();
+    await result;
+  }
+  expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+});
 it('times out a held body without retrying the mutation or cancelling the page lifetime', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));
   const session = await prepare(fetchImpl); session.timeoutMs = 25;
