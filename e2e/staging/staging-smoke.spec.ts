@@ -1,10 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { parseStagingOrigin } from './stagingOrigin';
 
-const configuredOrigin = process.env.FITFOCUS_STAGING_ORIGIN;
-if (!configuredOrigin) {
-  throw new Error('FITFOCUS_STAGING_ORIGIN is required by the staging smoke suite.');
-}
-const stagingOrigin = new URL(configuredOrigin).origin;
+const stagingOrigin = parseStagingOrigin(process.env.FITFOCUS_STAGING_ORIGIN);
 
 const protectedReadRoutes = [
   '/api/bootstrap',
@@ -44,6 +41,10 @@ test('staging serves FitFocus on the configured origin using GET requests only',
   await Promise.all([envResponse, meResponse]);
 
   expect(documentResponse?.status()).toBe(200);
+  expect(page.url()).toBe(`${stagingOrigin}/`);
+  const documentHeaders = documentResponse?.headers() ?? {};
+  expect(documentHeaders).not.toHaveProperty('location');
+  expect(documentHeaders).not.toHaveProperty('set-cookie');
   await expect(page).toHaveTitle(/FitFocus/i);
   expect(violations).toEqual([]);
   expect(pageErrors).toEqual([]);
