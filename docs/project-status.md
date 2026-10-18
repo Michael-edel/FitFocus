@@ -4,16 +4,22 @@
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
 `fix/state-generations`. Code commit `f4dcce8` с bounded invite lifecycle
-опубликован. Remote PR HEAD — `5d5dca8`; его точный
-[PR CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
-прошёл audit, guards, unit, typechecks и production build; browser matrix ещё
-выполняется. Локальные test follow-ups `32d58d7`, `f4a4140` и `c219f17` проверяют
-timeout/pagehide initial `/api/me` и invite redeem, отсутствие auto-retry POST и
-прерывание AI после durable commit; registration spec прошёл 19/19, полный unit
-suite — 1387/1387 в 215 файлах, root typecheck прошёл. Эти три коммита ещё не
-опубликованы и не входят в CI. На `f4dcce8` прошли root/storage
-typecheck, auth-scope guard, production build и registration durability E2E 2/2 в
-desktop Chromium. Предыдущий [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
+опубликован. Remote PR HEAD `5d5dca8` прошёл точный
+[PR CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243):
+audit, guards, unit, три typecheck, build, browser matrix, rollback/CAS check и
+сохранение rollback artifact завершились успешно.
+
+Локальный code/test commit `dc38a51` исправляет отмену регистрации AI при
+навигации: `beforeunload` отменяет активный fetch и registration action до
+уничтожения страницы, `pagehide` остаётся дополнительной защитой. Полный
+`registration-durability.spec.ts` прошёл 21/21 на семи browser/PWA профилях без
+retries, targeted unit — 44/44, полный unit — 1388/1388 в 215 файлах; root,
+domain-strict и storage-strict typecheck, production build и diff check прошли.
+Коммит пока локальный и не входит в CI #1628. Предыдущие локальные тестовые
+follow-ups `32d58d7`, `f4a4140` и `c219f17` также ещё не опубликованы.
+На `f4dcce8` прошли root/storage typecheck, auth-scope guard, production build и
+registration durability E2E 2/2 в desktop Chromium. Предыдущий
+[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
 на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
 
 Read-only branch-preview smoke на точном remote HEAD `5d5dca8` прошёл 7/7 GET-

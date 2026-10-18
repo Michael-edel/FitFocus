@@ -6740,3 +6740,21 @@ projects. В `pwa-rollback.spec.ts` тест ожидает начальное �
 и ещё не опубликованы. Следующий шаг — push, затем точный CI для нового SHA;
 пока он не завершится успешно, E2E follow-up и PR #93 не считаются принятыми.
 Staging, полный P0.8 lifecycle и интеграция в защищённую `main` остаются открыты.
+
+## P0.9 — реальный unload во время регистрационного AI, `dc38a51`, 18.10.2026
+
+Реальная браузерная навигация во время удержанного `/api/ai` показала, что
+синтетическая отправка `pagehide` не доказывает отмену сигнала fetch до teardown.
+Регистрационный AI transport теперь отменяет request-specific controller и
+registration action на `beforeunload`; `pagehide` остаётся дополнительной
+защитой. Базовый профиль уже durable, остаётся одна pending operation, а login
+и profile PUT после прерывания не запускаются.
+
+Полный `registration-durability.spec.ts` прошёл 21/21 на семи browser/PWA
+профилях без retries; targeted unit — 44/44, полный unit suite — 1388/1388 в
+215 файлах. Root, domain-strict и storage-strict typecheck, production build и
+`git diff --check` прошли локально. Эти результаты относятся к локальному
+`dc38a51`; точный CI #1628 проверял remote HEAD `5d5dca8` и завершился success,
+но не включает эту правку. Точный CI для `dc38a51` ожидается после push.
+Staging, OAuth, реальный D1, выпуск и интеграция в защищённую `main` остаются
+открыты.

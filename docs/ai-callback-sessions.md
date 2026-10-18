@@ -42,8 +42,8 @@ capabilities — в [контракте AI API](ai-session-guard.md). Семей
    read guard прежде чем считать ответ допустимым. Наличие cookie, capability
    или HTTP-ответа само по себе не разрешает применить результат.
 4. Каждая попытка принадлежит собственному lifecycle. Logout, смена аккаунта,
-   новый запуск действия, pagehide и unmount инвалидируют её и отменяют её
-   transport. Возврат из BFCache начинает новую попытку и заново получает proof;
+   новый запуск действия, beforeunload, pagehide и unmount инвалидируют её и
+   отменяют её transport. Возврат из BFCache начинает новую попытку и заново получает proof;
    старый controller не оживает.
 5. После каждого ожидания и непосредственно перед побочным эффектом проверять,
    что всё ещё текущими являются login guard, attempt и исходное действие.
@@ -80,6 +80,14 @@ React недостаточно.
 продуктом локальный fallback, только если попытка и сессия всё ещё текущие.
 
 ## Текущее состояние реализации
+
+Для регистрационного `/api/ai` реальный переход страницы проверяется отдельно
+в [контракте сохранения регистрации](registration-persistence.md): `beforeunload`
+заранее отменяет request-specific controller и registration action, а `pagehide`
+остаётся дополнительной защитой. Это сохраняет уже записанный базовый профиль
+для восстановления и не запускает вход или profile PUT после прерывания AI.
+Локальная матрица этого follow-up прошла 21/21 в семи browser/PWA профилях;
+точный CI нового SHA ожидает публикации.
 
 В коммите `75e4d35` клиентские пути coach, личного плана и плато переведены на
 свежий `AiSession` и lifecycle scope. `getCoachAdvice`, `generatePersonalPlan`,
@@ -219,7 +227,8 @@ CI-подтверждения. Staging, реальный OAuth/BFCache и вес
   проверен в Chromium, late response после входа B — в desktop Chromium,
   Firefox и WebKit; полный локальный callback spec — 44 passed / 4 skipped,
   без retries. Точный CI ещё требуется.
-- Задержанный ответ coach/plan/weekly-menu/plateau после logout, account switch, pagehide
+- Задержанный ответ coach/plan/weekly-menu/plateau после logout, account switch,
+  beforeunload, pagehide
   или unmount не меняет UI, profile, outbox, usage или achievements.
 - Новая попытка после возврата страницы может завершиться; завершение старой
   попытки не сбрасывает её loading и не очищает её маркеры.

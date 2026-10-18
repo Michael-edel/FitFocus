@@ -32,9 +32,11 @@ AI/invite/login callbacks. Уже закоммиченная собственн�
 Первичная регистрация может принять начальную сессию только при отсутствии
 активной IDB-сессии; fence проверяется до HTTP proof и повторно атомарно при
 принятии. Каждая AI-модель использует тот же scope. После сетевой ошибки исходная
-сессия проверяется ещё раз; stale proof, auth/protocol отказ и pagehide не
-превращаются в успешный план. Generated plan пишется в профиль с `readGuard` и
-`canCommit`. Проверки текущего рабочего дерева перечислены в
+сессия проверяется ещё раз; stale proof, auth/protocol отказ и unload не
+превращаются в успешный план. `beforeunload` заранее отменяет active AI fetch;
+`pagehide` остаётся дополнительной защитой для закрытия и BFCache. Generated
+plan пишется в профиль с `readGuard` и `canCommit`. Проверки текущего рабочего
+дерева перечислены в
 [контракте AI callbacks](ai-callback-sessions.md); CI этого дерева ещё не
 подтверждён.
 
@@ -72,24 +74,34 @@ body и расходования приглашения. Старые сборк
 
 Follow-up `f4dcce8` ограничивает оба регистрационных invite-запроса общим
 транспортом `requestJson` с таймаутом 12 секунд. Ожидающий invite-запрос
-отменяется при `pagehide`; тогда redeem/profile/AI шаги не запускаются. Таймаут
-показывает повторяемую ошибку, но POST не повторяется автоматически. Если ответ
+отменяется при `beforeunload` или `pagehide`; тогда redeem/profile/AI шаги не
+запускаются. Таймаут показывает повторяемую ошибку, но POST не повторяется автоматически. Если ответ
 на расходование кода потерялся, пользователь может повторить действие:
-`consumeInviteCode` идемпотентен для того же кода и аккаунта. Если `pagehide`
-прерывает AI уже после durable commit базового профиля, этот профиль остаётся
+`consumeInviteCode` идемпотентен для того же кода и аккаунта. Если unload
+прерывает AI уже после durable commit базового профиля, профиль остаётся
 восстанавливаемым, но вход в приложение не выполняется.
 
 Локально на `f4dcce8` прошли registration unit 16/16, полный unit suite
 1384/1384 в 215 файлах, root/storage typecheck, auth-scope guard, production build
-и registration durability E2E 2/2 в desktop Chromium. Test follow-ups `32d58d7`,
-`f4a4140` и `c219f17` покрывают отмену `/api/me`/redeem, запрет auto-retry POST и
-abort AI после durable commit; registration spec прошёл 19/19, полный unit suite
-1387/1387, root typecheck. Эти тестовые коммиты пока локальные. Code commit
-`f4dcce8` опубликован в PR;
-текущий точный
+и registration durability E2E 2/2 в desktop Chromium. Follow-ups `32d58d7`,
+`f4a4140` и `c219f17` добавили timeout/pagehide initial `/api/me` и invite redeem,
+запрет auto-retry POST и abort AI после durable commit; registration spec прошёл
+19/19 и полный unit — 1387/1387.
+
+В локальном `dc38a51` устранено расхождение между unit-событием `pagehide` и
+реальным браузерным unload: до teardown `beforeunload` отменяет request-specific
+AI controller и registration action; `pagehide` сохраняется. Настоящий переход
+во время удержанного `/api/ai` проверяет signal, durable базовый профиль,
+единственную pending operation и отсутствие profile PUT/login. Полная
+registration спека прошла 21/21 на семи browser/PWA профилях без retries;
+transport/registration unit — 44/44, полный unit — 1388/1388, все три typecheck,
+build и diff check прошли.
+Эти follow-ups ещё локальные.
+
+Code commit `f4dcce8` опубликован в PR. Точный
 [CI #1628](https://github.com/Michael-edel/FitFocus/actions/runs/39139902243)
-проверяет remote HEAD `5d5dca8` и ещё выполняет browser matrix, поэтому новый
-тест пока не вошёл в CI. Родитель `702b4d1` прошёл
+для remote HEAD `5d5dca8` завершился success, но не содержит локальный unload fix.
+Точный CI для `dc38a51` ожидает push. Родитель `702b4d1` прошёл
 [CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427),
 включая browser matrix и rollback compatibility.
 
