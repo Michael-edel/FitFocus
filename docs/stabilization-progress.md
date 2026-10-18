@@ -6942,3 +6942,22 @@ typecheck и `git diff --check` прошли. Unit дополнительно п
 `pagehide` и отправку следующего запроса той же сессией. Реальная навигация не
 проверяет BFCache, физическое устройство или staging; точный CI новой ревизии
 отслеживается после push в PR #93.
+
+## P0.5 — единый ранний abort session-bound запросов, `7777636`, 19.10.2026
+
+До follow-up несколько transports прерывали активную работу только на
+`pagehide`, хотя `beforeunload` приходит раньше. Общий `listenForPageExit` теперь
+вызывает guard на первом из этих сигналов и удаляет оба временных listener.
+Использование приведено к одному helper для `/api/me`, bootstrap/state reads,
+StateSync lifecycle, Admin, Support, AI, family, achievements, billing, Huawei,
+push и mobile-token. `stateSyncLifecycle` заново устанавливает listener после
+подтверждённого BFCache возврата.
+
+Целевые transport/lifecycle тесты прошли 140/140; полный unit suite — 1415/1415
+в 216 файлах. Root, domain-strict и storage-strict typecheck, auth/API guards,
+production build и `git diff --check` прошли. Admin-переход на другую страницу
+проверен реальной browser navigation: 7/7 desktop/mobile/PWA проектов,
+workers=1/retries=0. Проверка покрывает `beforeunload` и отмену fetch; реальный
+BFCache, устройство и выделенный staging остаются отдельными gate. Staging
+origin в окружении не настроен. Точный CI follow-up запускается после push
+в PR #93.

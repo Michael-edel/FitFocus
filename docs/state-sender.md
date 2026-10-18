@@ -25,12 +25,20 @@ IDB-транзакцией, а profile refresh передаёт этот fence �
 Код последующего исправления:
 [`b723b7d`](https://github.com/Michael-edel/FitFocus/commit/b723b7d1c9112df1f854bac7bdce18b3ff39aa1a).
 [stateSyncLifecycle](../features/auth/stateSyncLifecycle.ts)
-останавливает sender на `pagehide`: таймеры отменяются, активные запросы
+останавливает sender на первом из `beforeunload` и `pagehide`: таймеры отменяются, активные запросы
 прерываются, поздний ответ старого поколения не принимается. При возврате
 из BFCache (`pageshow.persisted`) sender запускается для исходного accountId
 и заново проверяет сессию. Обычный `pageshow` не создаёт второй запуск;
 cleanup эффекта удаляет обработчики прежнего аккаунта. Локальные операции
 при закрытии страницы сохраняются. Это не замена logout/auth-fence.
+
+Follow-up [`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751)
+использует общий [page-exit transport](../storage/sessionTransport.ts) для sender,
+`/me`, bootstrap/state и session-bound Admin, Support, AI, family, achievements,
+billing, Huawei, push и mobile-token запросов. Срабатывает первый сигнал, после
+чего оба временных listener снимаются; BFCache restore заново активирует sender
+и проверяет исходную сессию. Unit и browser результаты записаны в
+[журнале стабилизации](stabilization-progress.md).
 
 Исправление продолжает [регистрацию](registration-persistence.md) и редактор
 профиля. [Тесты lifecycle](../tests/state_sync_lifecycle.test.ts) проверяют

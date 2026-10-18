@@ -7,20 +7,16 @@
 
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
-[`8f75731`](https://github.com/Michael-edel/FitFocus/commit/8f75731a5f590e77036290a06490dc9fe29a4b9e)
-добавляет browser acceptance настоящей навигации с удержанным Admin-запросом;
-предыдущий code fix отменяет request-specific controller на `beforeunload` и
-сохраняет живой `AdminSession` для следующего запроса. Сценарий прошёл в семи
-desktop/mobile/PWA профилях без retries; точный CI обновлённого PR head запускается
-после push.
-
-Локально `admin_session_transport` прошёл 13/13, пара admin/support transport —
-28/28; root и storage-strict typecheck и `git diff --check` прошли. Реальная
-navigation проверена в Playwright; BFCache, устройство и staging этим не
-подтверждены. Предыдущий code/test SHA `a739c1e` прошёл точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399):
-1391 unit, 1058 browser passed / 307 skipped, audit, guards, три typecheck,
-build и rollback/CAS gate на 23 HTTP/D1-запроса.
+открыт против `fix/state-generations` и зависит от PR #94 и #90. В коммите
+[`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751)
+единый page-exit guard останавливает session-bound запросы на первом из
+`beforeunload` и `pagehide`, затем снимает оба listener. Он используется для
+`/me`, bootstrap/state reads, Admin, Support, AI, family, achievements, billing,
+Huawei, push, mobile-token и StateSync lifecycle. Transport tests прошли 140/140;
+полный unit suite — 1415/1415 в 216 файлах; root/domain/storage typecheck, guards
+и production build прошли. Реальная Admin navigation прошла 7/7 browser/PWA
+проектов без retries. Точный CI этой ревизии запускается после push; BFCache,
+устройства и staging ещё не подтверждены.
 
 В плане 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных или
 компонентных разделах. Открыты полная lifecycle-матрица, UI разрешения

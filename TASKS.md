@@ -915,6 +915,15 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     [`d9317f7`](https://github.com/Michael-edel/FitFocus/commit/d9317f7) в PR
     [#93](https://github.com/Michael-edel/FitFocus/pull/93); точный CI и staging
     остаются открытыми.
+  - [x] Распространить ранний page-exit guard на все session-bound transports и
+    StateSync lifecycle: общий `listenForPageExit` срабатывает на первом из
+    `beforeunload`/`pagehide` и снимает оба listener. Обновлены `/me`, bootstrap/
+    state reads, Admin, Support, AI, family, achievements, billing, Huawei, push,
+    mobile-token и sender lifecycle. Транспортные регрессии прошли 140/140;
+    полный unit suite — 1415/1415 в 216 файлах; root/domain/storage typecheck,
+    guards и production build прошли. Реальная Admin navigation прошла 7/7
+    desktop/mobile/PWA проектов без retries. Код — [`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751);
+    точный CI запускается после push; реальный BFCache и staging остаются открыты.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.
