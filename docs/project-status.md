@@ -7,37 +7,26 @@
 
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
-[`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751)
-распространил общий page-exit guard на session-bound transports и StateSync.
-Коммит [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30)
-закрыл публичные auth callbacks `/api/env` и invite-check; `fetchWithResilience`
-соблюдает `AbortSignal`, отделяет отмену от timeout и не повторяет отменённый
-запрос. Реальная навигация с удержанным `/api/env` прошла 7/7 desktop/mobile/PWA
-профилей без retries. Локальные коммиты [`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041)
-и [`185661e`](https://github.com/Michael-edel/FitFocus/commit/185661e) добавили
-повтор `/api/env` и сброс invite-check при `pageshow.persisted`; синтетический
-lifecycle E2E прошёл 14/14 на семи профилях. Отдельная чистая Chrome-сессия на
-локальной сборке с runtime SHA `856e3f5` подтвердила настоящий restore:
-`pagehide.persisted=true`, `pageshow.persisted=true`, запрос `/api/env` — через
-27 мс после `pageshow`. Это подтверждает один публичный callback на desktop
-Chrome; остальные авторизованные callbacks, устройство, OAuth и staging этим
-не закрыты. Playwright CI по-прежнему сообщает
+открыт против `fix/state-generations` и зависит от PR #94 и #90. Ветка PR
+`fix/durable-outbox` содержит P0.8 исправления и тесты; последний runtime-код —
+`856e3f5`, после него опубликованы тестовая и документирующие ревизии. Полный
+unit suite локально прошёл **1422/1422**, root/domain/storage-strict typecheck,
+guards и production build прошли. Ручная чистая Chrome-сессия на локальной
+сборке подтвердила реальный BFCache restore для публичного `/api/env`:
+`pagehide.persisted=true`, `pageshow.persisted=true`, запрос повторён через 27 мс.
+Это подтверждает один desktop Chrome сценарий; остальные callbacks, устройства,
+OAuth и staging этим не закрыты. Playwright CI по-прежнему сообщает
 `BackForwardCacheDisabledForDelegate`.
 
-Удалённый HEAD ветки PR — `856e3f5`; [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
-завершился одним сбоем на Android Chrome при разрешении legacy-конфликта профиля.
-В трассе обнаружена гонка с параллельным reverify сессии: временно очищенный
-in-memory `readGuard` приводил к ложному отказу после успешного scoped profile
-GET. Исправление повторно проверяет сохранённый guard атомарно в outbox-транзакции.
-Unit-регрессия прошла red→green; полная legacy-migration E2E прошла **49/49**
-на семи browser/PWA профилях, точный Android Chrome сценарий — **10/10**.
-Полный unit прошёл **1421/1421** на опубликованном коммите
-[`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5);
-root/domain/storage-strict typecheck, API/auth/schema/privacy guards и production
-build прошли. Дополнительный negative unit о фактической смене server session
-прошёл локально; с ним текущий локальный suite — **1422/1422**. [Точный CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
-для удалённого `856e3f5` выполняется и не включает этот дополнительный тест.
+Предыдущий [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+завершился **1092 passed / 307 skipped / 1 failed**: desktop WebKit ожидал, что
+счётчик achievement-check не изменится после повторного открытия приложения.
+Проверка стояла после запуска новой страницы, где штатная инициализация может
+отправить такой запрос. Её перенесли на момент после освобождения позднего AI
+ответа, пока приложение ещё закрыто; так проверяется именно эффект отменённого
+ответа. Исправленный сценарий прошёл **3/3** локально на desktop WebKit. На
+момент проверки CI #1667 для `0faaddc` дошёл до браузерной матрицы, но не включает
+это уточнение; точный CI новой ревизии запускается после публикации.
 
 У плана остаются 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных
 или компонентных разделах. Открыты полная lifecycle-матрица, остальные writers

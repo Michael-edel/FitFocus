@@ -466,6 +466,7 @@ test('navigation aborts a held Coach retry without durable success effects', asy
   await page.goto('about:blank');
   fixture.release();
   await expect.poll(() => fixture.counts.releasedResponses).toBe(1);
+  expect(fixture.counts.achievementChecks).toBe(achievementChecksBefore);
   await page.goto(appOrigin);
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
@@ -478,7 +479,6 @@ test('navigation aborts a held Coach retry without durable success effects', asy
   expect(operationsFor(after, accountA)).toEqual(operationsBefore);
   expect(fixture.counts.profileWrites).toEqual(profileWritesBefore);
   expect(fixture.counts.stateWrites.filter(key => key === coachKey(accountA.id))).toEqual(coachStateWritesBefore);
-  expect(fixture.counts.achievementChecks).toBe(achievementChecksBefore);
   expect(fixture.counts.aiRequests.filter(request => request.feature === 'coach_advice')).toEqual([{
     feature: 'coach_advice', account: accountA.id, session: accountA.sid,
   }]);
