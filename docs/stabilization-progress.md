@@ -1,5 +1,47 @@
 # Стабилизация: проверяемые изменения
 
+## 18.10.2026 — corrective guard boundary поверх `9a23a32`
+
+Опубликованный `9a23a3221817a301445ea61522975c954f1158a3` проверен
+[CI39146322907](https://github.com/Michael-edel/FitFocus/actions/runs/39146322907),
+terminal failure:1370unitpassed,1043browserpassed/307skipped/1failed.
+HTML report подтверждает native abort7/7, legacy full-clear7/7, rollback14/14,
+normal/delayed dashboard5passed/8existing skips/1failed. Canonical HTTP/CAS
+rollback stage пропущен после E2E отказа; его нельзя считать пройденным.
+
+Единственный отказ — desktop WebKit delayed dashboard, строгий errorsA поймал
+GET achievements и POST check. Reload начат666871.809; pageError666899.664 и
+666899.750 (+27.855/+27.941мс). AccountB goto679188.917 — позже примерно12.3с.
+В записанном network есть только успешные B achievements запросы; beforeunload
+и fetch invocation не записаны. Точная внутренняя browser последовательность
+не объявляется доказанной. Browser artifact12143544243,79150686bytes,
+SHA256495ea30b48d7fd89fad8e5de9473c01fcfa5ba9699c1034cc88aee520acfaa39
+проверен; ZIP, report и распакованный failed trace вне repo:
+`../dashboard-ci39146322907`, `../dashboard-ci39146322907-delayed-trace`.
+
+Controlled GET/POST unit удерживает начальный isReadSessionCurrent, посылает
+beforeunload и освобождает IDB. На9a23a32 оба fetch начинаются после unload с
+signal.aborted=false:17passed/2failed. Минимальная правка переносит начальный
+await в существующий try после listeners, оставляя обязательный guard перед
+fetch. Теперь19/19passed; проверяются ноль fetch, отменённая сессия и отказ.
+Общие guards, timeout, retries, hook/client lifetime и errorsA не менялись.
+Более ранние prepare/queue пути этим тестом не объявляются проверенными.
+
+Окончательное рабочее дерево поверх9a23a32: полный unit1372/1372 (213files),
+общий/domain-strict/storage-strict TypeScript, admin guard и production build
+прошли. Build identity обновлена перед итоговым browser run. Узкий Playwright
+на Windows,1worker,retries0, Chromium/Firefox/WebKit: native HTTP abort и обе
+версии dashboard —9/9passed за1.9мин,0skips. Команда использует внешний
+`../dashboard-corrective.config.mjs`; JSON/артефакты —
+`../dashboard-corrective.json`, `../dashboard-corrective-results`.
+Независимый review кода/теста не нашёл блокеров. Legacy/PWA успешные результаты
+CI выше принадлежат9a23a32, не переносятся на новое дерево заранее.
+
+Следующий gate: отдельный corrective commit, обычный push той же ветки и
+terminal CI точного нового SHA. Физическая приёмка, BFCache, staging, merge,
+PR, deploy, persistent access и реальные аккаунты не затрагивались.
+
+
 ## 18.10.2026 — независимый dashboard follow-up
 
 Ветка `fix/dashboard-readiness-20261018`; проверено рабочее дерево поверх

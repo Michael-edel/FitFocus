@@ -1,5 +1,31 @@
 # Сессия и очередь достижений
 
+## Уточнение после CI `9a23a32` — 18.10.2026
+
+[CI39146322907](https://github.com/Michael-edel/FitFocus/actions/runs/39146322907)
+проверил точный `9a23a3221817a301445ea61522975c954f1158a3`: 1370 unit,
+1043 browser passed / 307 skipped / 1 failed. Native abort прошёл7/7,
+но delayed dashboard desktop WebKit сохранил строгий отказ `errorsA=[]`:
+GET `/api/achievements` и POST `/api/achievements/check`.
+
+Trace привязал ошибки к reload A: +27,855/+27,941 мс; переход B начался
+примерно12,3с позже. Ошибочные A-fetch не записаны в network entries; точных
+времён beforeunload/fetch invocation trace не содержит. Поэтому это не
+доказательство account-switch ошибки или установленной CORS-конфигурации.
+
+Controlled unit отдельно выявил непокрытую границу: beforeunload во время
+начального IDB guard проходит до регистрации listeners; после освобождения
+проверки начинается GET/POST с signal.aborted=false. RED17passed/2failed;
+после переноса начального await внутрь существующего try, после регистрации
+listeners и всё ещё перед HTTP, GREEN19/19. Guard и response validation
+сохранены; finally теперь очищает listeners и при отказе начального guard.
+
+Более ранние prepare/queue окна и точная внутренняя последовательность
+исторической browser ошибки этой проверкой не устанавливаются. Общий
+sessionRead и hook/client lifetime не меняются; фильтров ошибок и увеличения
+timeout нет. Новый exact-head CI проверяется после corrective push.
+
+
 ## Независимый follow-up навигации — 18.10.2026
 
 Ветка `fix/dashboard-readiness-20261018`, рабочее дерево поверх `a84214f`.

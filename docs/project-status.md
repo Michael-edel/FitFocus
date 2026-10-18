@@ -1,5 +1,19 @@
 # Текущее состояние FitFocus
 
+## Corrective проверка dashboard — 18.10.2026
+
+Опубликованный `9a23a32` в [CI39146322907](https://github.com/Michael-edel/FitFocus/actions/runs/39146322907)
+получил1370unitpassed,1043browserpassed/307skipped/1failed. Legacy full-clear7/7,
+rollback14/14 и native achievement abort7/7 прошли; единственный отказ —
+строгий errorsA delayed dashboard desktop WebKit при reload, до accountB.
+
+В рабочем дереве поверх9a23a32 закрывается отдельно доказанное unit-тестами
+окно начального IDB guard: lifecycle listeners ставятся до await, обязательный
+guard остаётся перед fetch. Unit RED17/2→GREEN19/19. Общие guards, native
+error assertions, writer proof и чужая ветка не меняются. Результат предыдущего
+CI не называется зелёным; следующий exact-head CI относится только к новому SHA.
+
+
 ## Отдельная dashboard-ветка — 18.10.2026
 
 `fix/dashboard-readiness-20261018` остаётся независимой от основного checkout;
