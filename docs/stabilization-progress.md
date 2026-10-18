@@ -1,5 +1,37 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — не терять edit при source re-verification и полном storage clear, `152b7af`, 18.10.2026
+
+Desktop WebKit воспроизвёл гонку старой вкладки: её неудачная попытка отправки
+обновляла legacy source и запускала `/api/me` re-verification в новой вкладке.
+Пока запрос был открыт, новый runtime получал keyed `StorageEvent` от последующей
+пользовательской правки, но игнорировал её, потому что re-verification временно
+очищает текущую in-memory session. Событие приходило корректно, однако durable
+`legacy-writer-local-only` operation не создавалась.
+
+`StateSync` теперь сохраняет последнюю принятую local-commit session отдельно от
+временной proof для отправки. Перехваченный edit записывается как `conflicted`;
+`DurableOutbox` в IndexedDB проверяет владельца, server session и sessionEpoch
+внутри транзакции. Новая или чужая эпоха не принимается, операция не становится
+sendable. Это сохраняет локальную правку во время повторной проверки, не открывая
+сетевую отправку по устаревшему proof.
+
+Отдельный реальный old/new browser acceptance вызывает `localStorage.clear()` в
+старой вкладке. Новый клиент получает единый `StorageEvent` с `key=null`, повторно
+проверяет source и сохраняет исходный migration snapshot, quarantine и операции
+в IndexedDB. Очистка не интерпретируется как серия per-key DELETE. Browser clear
+и сценарий старой записи прошли 7/7 Playwright-проектов без retries; old-bundle
+`council_history` keyed DELETE — 7/7. Добавленная unit-регрессия сначала упала
+при удержанном `/api/me`, затем прошла в составе 12/12. Полный unit suite —
+1368/1368 тестов / 213 файлов; root, domain-strict, storage-strict typecheck,
+production build и `git diff --check` прошли.
+
+Опубликованный parent `2e56910` проверяется точным [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128): audit,
+schema/privacy/auth/API guards, unit, три typecheck и build прошли; E2E ещё
+выполняется. Этот run не содержит `152b7af`; точный CI нового SHA ожидает push.
+Остальные P0.8 callbacks, общий lifecycle P0.8/P0.9, staging, выпуск и защищённая
+`main` остаются открытыми.
+
 ## P0.8 — сохранять keyed DELETE из старой вкладки, локальная проверка `bf29ec8`, 18.10.2026
 
 Настоящий old/new bundle smoke воспроизвёл незакрытый delete lifecycle. Старый UI
@@ -24,11 +56,10 @@ event также отбрасывается, если ключ уже восст
 domain-strict, storage-strict typecheck, production build и `git diff --check`
 прошли локально.
 
-Опубликованный parent HEAD `8b7983c` проверяет точный [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856):
-audit, schema/privacy/auth/API guards, unit, три typecheck и build прошли; E2E
-ещё выполнялся при этой записи. Этот run не включает `bf29ec8`; CI изменённого
-SHA ожидает push. Открыты profile callbacks, account deletion и полный lifecycle
-P0.8/P0.9, staging, выпуск и интеграция в защищённую `main`.
+Опубликованный parent HEAD `8b7983c` проверял точный [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856),
+который завершился успешно; этот run не включает `bf29ec8`. Открыты profile
+callbacks, полный lifecycle P0.8/P0.9, staging, выпуск и интеграция в защищённую
+`main`.
 
 ## P0.8 follow-up — CORS в weekly-menu recovery mock, `b69935b`, 18.10.2026
 

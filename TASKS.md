@@ -1,17 +1,19 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`. После опубликованного HEAD `8b7983c`
-локальный code/test follow-up `bf29ec8` исправляет потерю DELETE из старой
-вкладки: если auth-paused legacy sender не успел обновить очередь, новый клиент
-сохраняет keyed `localStorage` removal как `conflicted` intent и не отправляет
-его автоматически. Уже записанный валидный legacy DELETE импортируется штатно
-без дубликата; устаревший source DELETE не перекрывает более позднюю правку.
-Настоящий old/new bundle с кнопкой «Очистить» прошёл 7/7 проектов; целевые unit
-— 11/11, полный unit suite — 1367/1367, root/domain/storage strict typecheck,
-production build и `git diff --check` прошли. Exact [CI #1595](https://github.com/Michael-edel/FitFocus/actions/runs/39095376856)
-проверяет опубликованный родитель `8b7983c` и пока выполняет E2E; он не содержит
-`bf29ec8`. Публикация follow-up будет после завершения этого запуска. В плане остаются 33 пункта:
+остаётся draft с base `fix/state-generations`. Опубликованный HEAD — `2e56910`;
+локальный follow-up `152b7af` закрывает гонку между изменением legacy source и
+записью ключа из старой вкладки. Source event запускает `/api/me` re-verification,
+во время которой текущая in-memory session временно отсутствует; теперь local-only
+запись использует последний принятый guard, а IndexedDB транзакционно проверяет
+account и sessionEpoch. Операция остаётся конфликтной и не отправляется.
+Acceptance для полного `localStorage.clear()` подтверждает сохранность исходного
+source snapshot, quarantine и pending intent в IndexedDB без ложных DELETE и
+сетевых state write. Browser-проверки старой записи/clear и keyed delete прошли
+7/7 каждая; полный unit suite — 1368/1368, root/domain/storage strict typecheck,
+production build и `git diff --check` прошли. Exact [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
+проверяет опубликованный HEAD `2e56910` и пока выполняет E2E; он не содержит
+`152b7af`. Точный CI нового коммита будет после push. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
 и интеграция в защищённую `main` не подтверждены.
 
@@ -1544,8 +1546,18 @@ all-client Service Worker fence, атомарные migration items и quarantin
     Durable value не удаляется и сетевой state write не выполняется. Нормальный
     legacy DELETE не дублируется; более старый DELETE не перекрывает последующую
     правку. Локально: `bf29ec8`, browser 7/7 проектов, unit 11/11; полный P0.8,
-    profile callbacks, account deletion, `localStorage.clear()` и staging остаются
+    profile callbacks, account deletion и staging остаются
     открытыми. Точный CI нового SHA ожидает публикации.
+  - [x] Проверить гонку: изменение legacy source запускает re-verification,
+    а следующая запись из старой вкладки приходит до ответа `/api/me`. Последний
+    принятый local-commit guard позволяет сохранить её как `legacy-writer-local-only`;
+    IDB повторно проверяет account/sessionEpoch, поэтому смена владельца или эпохи
+    блокирует запись. Реальный `localStorage.clear()` создаёт один `key=null` event:
+    исходный snapshot и quarantine остаются в IDB, per-key DELETE и state write
+    не создаются. Unit 12/12, real old/new clear 7/7 и keyed-delete 7/7; полный unit
+    1368/1368, три typecheck и production build прошли. Код `152b7af`; точный CI
+    follow-up ожидает публикации. Остальные callbacks, P0.8/P0.9 lifecycle,
+    staging и выпуск остаются открытыми.
   - [x] Сделать избранные рецепты durable: не показывать успех до outbox commit,
     выполнять edit одной транзакцией вместо remove+add, оставлять draft/editor
     открытыми при отказе и проверять account/session guard до и после записи.

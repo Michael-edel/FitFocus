@@ -1,6 +1,6 @@
 # Компонент импорта старой очереди
 
-Обновлено: 15.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
+Обновлено: 18.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
 `storage/stateSync.ts`, проверки: `tests/legacy_migration.test.ts` и
 `tests/state_sync_legacy_migration.test.ts`, ветка
 [PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
@@ -58,9 +58,9 @@ IndexedDB как операцию `conflicted` с причиной
 прошли unit-тесты migration/sync (69/69), `storage-strict` typecheck и E2E
 `legacy-outbox-migration.spec.ts` в desktop Chromium (1/1, без retries). Полная
 браузерная матрица прошла 7/7 проектов без retries; точный CI SHA и staging ещё
-не проверены. Этот обработчик
-покрывал строковые записи для известных user-state ключей; profile callbacks,
-`localStorage.clear()` и удаление аккаунта требуют отдельной lifecycle-приёмки.
+не проверены. На тот момент обработчик покрывал строковые записи для известных
+user-state ключей; profile callbacks, `localStorage.clear()` и удаление аккаунта
+требовали отдельной lifecycle-приёмки. Результат clear-приёмки описан ниже.
 
 ### Keyed delete из старой вкладки — `bf29ec8`
 
@@ -83,11 +83,42 @@ source проверяется последняя операция ключа: б
 исходный durable payload и отсутствие state write. Browser acceptance прошёл
 7/7 проектов без retries; целевой unit-файл — 11/11, полный unit suite —
 1367/1367, root/domain/storage strict typecheck, production build и
-`git diff --check` прошли локально. Результаты относятся к локальному commit
-`bf29ec8`; CI #1595 проверяет его родителя `8b7983c` и пока выполняет E2E.
+`git diff --check` прошли локально. Результаты относятся к code commit `bf29ec8`;
+CI #1595 на родителе `8b7983c` завершился успешно, но не содержит этот commit.
 
-Это не закрывает profile callbacks, `localStorage.clear()`, account deletion,
-полный lifecycle P0.8/P0.9, staging или выпуск.
+На момент `bf29ec8` оставались profile callbacks, полный clear lifecycle,
+account deletion, P0.8/P0.9, staging и выпуск; последующая clear-приёмка описана
+ниже.
+
+### Source re-verification race и полный storage clear — `152b7af`
+
+При auth-paused старом writer обновление legacy queue может дать новую
+`StorageEvent` и запустить `/api/me` re-verification в текущей вкладке. Во время
+этого запроса `StateSync` временно очищает активную proof из send path. Ранее
+следующий keyed event старого UI видел пустое `this.session` и терял локальную
+правку, несмотря на корректный browser event.
+
+Runtime теперь сохраняет последнюю принятую local-commit session отдельно от
+временной proof. Она используется только для атомарной локальной записи
+`legacy-writer-local-only`; transaction guard DurableOutbox повторно проверяет
+account, server session и sessionEpoch. При смене владельца или эпохи сохранение
+не проходит. Операция остаётся конфликтной и не отправляется автоматически.
+Unit-регрессия удерживает второй `/api/me` ответ и успевает отправить keyed event
+между ними; целевой набор прошёл 12/12.
+
+Полный `localStorage.clear()` проверен в настоящей паре старого и нового bundle на
+одном origin. Clear даёт единый `key=null` event и запускает повторную проверку;
+runtime не угадывает, что каждый managed key был удалён намеренно. Уже сохранённые
+source snapshot, quarantine, durable value и операции остаются в IndexedDB; новые
+per-key DELETE и state write не появляются. Acceptance clear и old-tab write
+прошёл 7/7 desktop/mobile/PWA проектов, keyed `council_history` DELETE — 7/7.
+Полный unit suite — 1368/1368 тестов / 213 файлов; root/domain/storage strict
+typecheck, production build и `git diff --check` прошли локально.
+
+Точный [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
+проверяет опубликованный parent `2e56910`, не содержащий `152b7af`; все gates до
+E2E прошли, E2E ещё выполняется. Staging, остальные callbacks и полный lifecycle
+P0.8/P0.9 остаются открытыми.
 
 ## IDB-транзакции импорта — 37dc4b0
 
