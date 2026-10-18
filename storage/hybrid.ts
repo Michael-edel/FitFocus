@@ -77,7 +77,7 @@ function isLocalUserKey(key: string, userId: string): boolean {
   if (key === `ff_dev_plan_override_scope_${userId}`) return true;
   if (USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`)) return true;
   try {
-    return key === `fitfocus_usage_counters_v1:${encodeURIComponent(userId)}`;
+    return key === `${STORAGE_KEYS.recipeUsagePrefix}${encodeURIComponent(userId)}`;
   } catch {
     return false;
   }

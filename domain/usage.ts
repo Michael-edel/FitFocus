@@ -1,7 +1,8 @@
 import type { UsageCounters } from './types';
 import { isRecord, parseJson } from '../safeJson';
+import { STORAGE_KEYS } from '../storage/keys';
 
-const KEY_PREFIX = 'fitfocus_usage_counters_v1:';
+const KEY_PREFIX = STORAGE_KEYS.recipeUsagePrefix;
 
 function storageKey(accountId: string): string {
   return `${KEY_PREFIX}${encodeURIComponent(accountId)}`;
