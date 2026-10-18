@@ -1,14 +1,14 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`. Последний code/test commit —
-`cf9d20e`.
-Точный [PR CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
-запущен для этого SHA; итог ещё не подтверждён. В опубликованный follow-up
-`e5a6154` удалён
-неиспользуемый scaffold outbox; его localStorage payload сохраняется как opaque
-backup data. Backup regression прошёл 10/10, полный unit suite — 1364/1364,
-общий и storage-strict typecheck, production build прошли. В плане остаются 33 пункта:
+остаётся draft с base `fix/state-generations`. В опубликованном follow-up
+`e5a6154` удалён неиспользуемый scaffold outbox; его localStorage payload
+сохраняется как opaque backup data. Backup regression прошёл 10/10, полный unit
+suite — 1364/1364, общий и storage-strict typecheck, production build прошли.
+CI #1591 для `cf9d20e` отменён после продвижения ветки; запуск #1593 создан для
+документационного commit `125ae97` и не включает новый E2E ниже. Browser
+acceptance старого ключа прошёл 7/7 профилей; вся `durable-backup-restore.spec.ts`
+— 21/21. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск
 и интеграция в защищённую `main` не подтверждены.
 
@@ -1446,8 +1446,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
   localStorage payload остаётся нетронутым и переносится backup как opaque data;
   автоматического импорта в DurableOutbox нет. Backup regression прошёл 10/10,
   полный unit suite — 1364/1364, общий и storage-strict typecheck, production
-  build и `git diff --check` прошли. Точный CI #1591 запущен для этого SHA;
-  его результат ещё не подтверждён.
+  build и `git diff --check` прошли. Browser startup acceptance подтвердила
+  сохранение ключа, отсутствие DurableOutbox operation и сетевой отправки его
+  данных: targeted 7/7, полная backup/restore спека 21/21. Точный CI новой
+  ревизии должен проверить этот сценарий.
 - [x] Обновить существующую IDB до v2, сохранив values; создать outbox,
   migration_items, migration_unknown и outbox_meta.
 - [x] Реализовать и проверить транзакционные примитивы записи value/операции,

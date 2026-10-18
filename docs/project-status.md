@@ -2,21 +2,24 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Последний code/test commit — `cf9d20e`; он содержит `49a1ff6`, удаливший
+Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
 неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
 удаливший отдельный localStorage scaffold outbox без runtime-потребителей.
 Старый ключ не очищается: общий backup сохраняет payload как opaque data,
 DurableOutbox его не импортирует. Проверки: account isolation 3/3, backup
 regression 10/10, полный unit suite 1364/1364, общий и storage-strict typecheck,
-production build и `git diff --check` прошли. Точный CI #1591 для `cf9d20e`
-запущен; его итог ещё не подтверждён.
+production build и `git diff --check` прошли. CI #1591 для `cf9d20e` отменён
+при продвижении ветки; CI #1593 для документационного commit `125ae97` не
+содержит новый startup E2E. Регрессия проверяет, что старый
+ключ остаётся неизменным и не импортируется/не отправляется при запуске:
+targeted 7/7, вся `durable-backup-restore.spec.ts` — 21/21. Exact CI должен
+подтвердить этот acceptance на SHA, содержащем новую регрессию.
 
 Опубликованный [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся
-draft с base `fix/state-generations`. Точный
-[PR CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
-запущен для `cf9d20e`; его итог ещё не подтверждён. Предыдущий
-[CI #1589](https://github.com/Michael-edel/FitFocus/actions/runs/39093683645)
-проверял родительский `faa1e71`. Непосредственная причина более раннего
+draft с base `fix/state-generations`. [CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
+для `cf9d20e` отменён; запуск [CI #1593](https://github.com/Michael-edel/FitFocus/actions/runs/39094911718)
+создан для документационного commit `125ae97` и не включает новый startup E2E.
+Непосредственная причина более раннего
 [CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
 была в weekly-menu test mock без CORS-заголовков; trace подтвердил сохранение
 операции и того же `opId` через reload, а повтор получил 200. Исправление

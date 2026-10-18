@@ -6486,5 +6486,12 @@ DurableOutbox; `tests/backup.test.ts` — 10/10, полный unit suite — 136
 общий/storage-strict typecheck, production build и `git diff --check` прошли.
 Код опубликован в `e5a6154`, тест и документация — в `cf9d20e`. Точный PR CI
 [#1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
-запущен для `cf9d20e`; итог ещё не подтверждён. P0.8 lifecycle, staging и релизные
-проверки остаются открыты.
+для `cf9d20e` отменён после продвижения ветки; [CI #1593](https://github.com/Michael-edel/FitFocus/actions/runs/39094911718)
+создан для документационного commit `125ae97` и не содержит нижеследующий новый E2E.
+
+Startup acceptance дополнительно запускает приложение со старым ключом
+`fitfocus_outbox_ops`: исходный payload остаётся нетронутым, записи в
+DurableOutbox и matching state PUT/DELETE отсутствуют. Точечная матрица прошла
+7/7 профилей, полная `durable-backup-restore.spec.ts` — 21/21 без retries.
+Точный CI этой регрессии следует проверить на опубликованном SHA. P0.8 lifecycle, staging и
+релизные проверки остаются открыты.

@@ -89,6 +89,40 @@ test('restores a multi-row v3 backup through Settings and persists every durable
   expect(restored.meta).toContainEqual(expect.objectContaining({ key: `fitfocus_data_${accountId}_restore_operation`, accountId }));
 });
 
+test('leaves the retired scaffold outbox opaque and never imports it at startup', async ({ page }) => {
+  const sourceKey = 'fitfocus_outbox_ops';
+  const scaffoldTarget = `fitfocus_data_${accountId}_plan_task_done`;
+  const sentinel = 'retired-scaffold-sentinel';
+  const payload = JSON.stringify([{
+    opId: 'retired-scaffold-op', deviceId: 'old-device', userUid: accountId,
+    tenantId: 'old-tenant', entityType: 'settings', entityId: scaffoldTarget,
+    patch: { value: sentinel }, updatedAt: 1,
+  }]);
+  const stateWrites: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === '/api/state' && ['PUT', 'DELETE'].includes(request.method())) {
+      stateWrites.push(`${request.method()} ${request.postData() ?? ''}`);
+    }
+  });
+  await page.addInitScript(({ key, value }) => localStorage.setItem(key, value), { key: sourceKey, value: payload });
+  await mockApp(page, { session: 'app' });
+  const stateHydration = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === '/api/state' && request.method() === 'GET';
+  });
+  await openApp(page, '/#settings');
+  await stateHydration;
+  await expect(page.getByRole('button', { name: 'Экспорт JSON' })).toBeVisible();
+
+  expect(await page.evaluate((key) => localStorage.getItem(key), sourceKey)).toBe(payload);
+  const durableRows = await readRestoredRows(page);
+  expect(durableRows.outbox).not.toContainEqual(expect.objectContaining({ key: scaffoldTarget }));
+  expect(durableRows.outbox).not.toContainEqual(expect.objectContaining({ opId: 'retired-scaffold-op' }));
+  expect(stateWrites.join('\n')).not.toContain(scaffoldTarget);
+  expect(stateWrites.join('\n')).not.toContain(sentinel);
+});
+
 test('a durable conflict leaves all stores and localStorage unchanged through the import UI', async ({ page }) => {
   await mockApp(page, { session: 'app' });
   await openApp(page, '/#settings');
