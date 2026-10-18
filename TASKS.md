@@ -911,7 +911,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     callback активным на более раннем событии. Проверено снятие временных
     listeners после успешного запроса. Transport-тесты прошли 15/15,
     support-attachment E2E — 7/7 browser/PWA проектов; root и
-    storage-strict typecheck, `git diff --check` прошли. Точный CI и staging
+    storage-strict typecheck, `git diff --check` прошли. Код и тесты — коммит
+    [`d9317f7`](https://github.com/Michael-edel/FitFocus/commit/d9317f7) в PR
+    [#93](https://github.com/Michael-edel/FitFocus/pull/93); точный CI и staging
     остаются открытыми.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
