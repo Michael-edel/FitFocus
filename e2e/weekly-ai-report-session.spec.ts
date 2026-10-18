@@ -61,9 +61,9 @@ async function readSavedReport(page: Page) {
   }, reportKey);
 }
 
-async function setup(page: Page, holdAI: boolean) {
+async function setup(page: Page, holdAI: boolean, expectAbortOnUnload = false) {
   const errors: string[] = [];
-  const counts = { reportRequests: 0, reportResponses: 0, reportWrites: 0, released: 0 };
+  const counts = { reportRequests: 0, reportResponses: 0, reportWrites: 0, released: 0, abortedRequests: 0 };
   const held = gate();
   let active = true;
   let profile = buildMockProfile();
@@ -110,6 +110,10 @@ async function setup(page: Page, holdAI: boolean) {
       if (holdAI) {
         await held.wait;
         counts.released += 1;
+        if (expectAbortOnUnload && request.failure()) {
+          counts.abortedRequests += 1;
+          return;
+        }
       }
       await json({ text: 'Отчёт недели сохранён после проверки сессии.' });
       counts.reportResponses += 1;
@@ -160,6 +164,28 @@ test('weekly report ignores a held AI response after logout', async ({ page }) =
     expect(counts.reportWrites).toBe(0);
     expect(errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    release();
+  }
+});
+
+test('weekly report aborts a held AI request before navigation unload', async ({ page }) => {
+  const { counts, release, errors } = await setup(page, true, true);
+  try {
+    await expect.poll(() => counts.reportRequests).toBe(1);
+    expect((await readSavedReport(page)).report).toBeNull();
+
+    await page.goto('/api/env');
+    await expect(page).toHaveURL('http://127.0.0.1:4173/api/env');
+    release();
+    await expect.poll(() => counts.abortedRequests).toBe(1);
+
+    expect(counts.reportResponses).toBe(0);
+    expect(counts.reportWrites).toBe(0);
+    const saved = await readSavedReport(page);
+    expect(saved.report).toBeNull();
+    expect(saved.operations).toEqual([]);
+    expect(errors).toEqual([]);
   } finally {
     release();
   }

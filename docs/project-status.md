@@ -3,18 +3,19 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. Remote HEAD — `151e3c0`; точный [CI #1633](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872)
-завершился success: 1388 unit в 215 файлах, 1041 browser passed / 303 skipped,
-audit, guards, три typecheck и build прошли. Rollback/CAS gate выполнил 23
-HTTP/D1-запроса; сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
-Предыдущий кодовый HEAD `9825e8d` прошёл точный CI #1630.
+`fix/state-generations`. До этого follow-up опубликованный HEAD был `961c895`;
+точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
+завершился success: 1388 unit в 215 файлах, 1044 browser passed / 307 skipped,
+audit, schema/privacy/auth/API guards, три typecheck и build прошли; rollback/CAS
+gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
 
-Локальный code/test follow-up `b4336d8` покрывает настоящий переход со страницы
-при удержанном Coach retry. E2E прошёл 3/3 на desktop Chromium/Firefox/WebKit без
-retries, полный callback spec — 48/48 на desktop Chromium (`workers=1,retries=0`),
-AI transport unit — 25/25, `npm run typecheck` и `git diff --check` прошли.
-Commit ещё не отправлен в PR; отдельный staging, OAuth и D1 не проверены.
+Текущий follow-up делает `beforeunload`-отмену недельного AI-отчёта только пока
+идёт запрос и снимает listener по завершении. Unit — 9/9; весь
+`weekly-ai-report-session.spec.ts` — 6/6 на desktop Chromium и WebKit без retries;
+typecheck и diff check прошли. Точный CI этой ревизии запускается после push.
+План содержит 32 открытых пункта (18 P0, 7 P1, 7 следующих задач); ни один P0
+не закрыт целиком. Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
 
 Code/test commit `dc38a51` исправляет отмену регистрации AI при
 навигации: `beforeunload` отменяет активный fetch и registration action до

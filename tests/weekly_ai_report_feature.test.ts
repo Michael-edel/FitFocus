@@ -127,6 +127,38 @@ describe('weekly AI report feature', () => {
     expect(input.weeklyReportGenerationRef.current).toBeNull();
   });
 
+  it('aborts only an active report before unload and releases the listener afterwards', async () => {
+    const target = new EventTarget();
+    const addListener = vi.spyOn(target, 'addEventListener');
+    const removeListener = vi.spyOn(target, 'removeEventListener');
+    vi.stubGlobal('window', target);
+    try {
+      const input = params({
+        requestInterpretation: vi.fn((_request, session) => new Promise<string>((_resolve, reject) => {
+          session.controller.signal.addEventListener('abort', () => reject(new Error('STATE_REQUEST_ABORTED')), { once: true });
+        })),
+        ensureWeeklyReport: async (_userId, _weekly, generateAI) => {
+          await generateAI();
+          return { report: { weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }, isNew: true };
+        },
+      });
+
+      const pending = refreshWeeklyAiReport(input);
+      await vi.waitFor(() => expect(input.requestInterpretation).toHaveBeenCalledOnce());
+      expect(addListener).toHaveBeenCalledWith('beforeunload', expect.any(Function), { once: true });
+      target.dispatchEvent(new Event('beforeunload'));
+      await pending;
+
+      expect(input.controller.signal.aborted).toBe(true);
+      expect(input.weeklyReportGenerationRef.current).toBeNull();
+      expect(input.loadReports).not.toHaveBeenCalled();
+      expect(input.setWeeklyReports).not.toHaveBeenCalled();
+      expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('does not publish a report list after another attempt takes ownership during loading', async () => {
     const reports = [{ weekKey: '2026-41', createdAt: '2026-10-07T00:00:00.000Z', data: weekly }];
     let resolveReports!: (value: typeof reports) => void;

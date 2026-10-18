@@ -1,5 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5/P0.9 — unload недельного AI-отчёта, 18.10.2026
+
+`useWeeklyAiReport` больше не держит постоянный `beforeunload` listener в
+неактивной странице. На время генерации отчёта listener отменяет transport и
+инвалидирует именно эту попытку; `finally` снимает listener. При обычном переходе
+активный отчёт не может записаться в durable outbox после ухода со страницы.
+
+Проверки: weekly-report unit — **9/9**; `weekly-ai-report-session.spec.ts` —
+**6/6** в desktop Chromium и WebKit (`workers=1,retries=0`), включая реальную
+навигацию с удержанным `/api/ai`; root typecheck и `git diff --check` прошли.
+На момент проверки эти изменения ещё не входили в опубликованный HEAD. Точный
+CI предшествующего `961c895` — [#1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224) —
+завершился success: 1388 unit / 215 файлов, 1044 browser passed / 307 skipped,
+audit, guards, три typecheck, build и 23 HTTP/D1 rollback/CAS-запроса.
+[Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323)
+сохранены. Точный CI follow-up запускается после push.
+
+Реальный BFCache этим E2E не подтверждается. Попытка проверить
+`pageshow.persisted` через Playwright показала, что браузерный delegate отключает
+BFCache; экспериментальный падающий тест убран. Документация Playwright прямо
+говорит, что BFCache по умолчанию отключён и восстановление через `page.goBack()`
+не поддерживается их навигационной моделью: [Playwright — BFCache](https://github.com/microsoft/playwright/blob/main/docs/src/navigations.md#backforward-cache).
+Проверка BFCache на реальном браузере/устройстве и staging остаётся открытой.
+
 ## P0.5 — реальная навигация во время обычного Coach retry, `b4336d8`, 18.10.2026
 
 Новый сценарий удерживает пользовательский Coach retry на `/api/ai`, выполняет
@@ -16,10 +41,10 @@
 profile, coach value, outbox или achievement effects. Это не доказывает, что
 внешний сервер прекращает уже начатую AI-работу.
 
-Локальный commit `b4336d8` ожидает push. Точный PR CI #1633 для предыдущего
-remote HEAD `151e3c0` завершился success: 1388 unit, 1041 browser passed / 303
-skipped и 23 HTTP/D1 rollback/CAS-запроса. Его artifacts: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404),
-[rollback](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
+`b4336d8` опубликован последующим документирующим commit `961c895`. Точный PR CI
+для `961c895` — [#1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224) —
+завершился success: 1388 unit / 215 файлов, 1044 browser passed / 307 skipped,
+audit, guards, три typecheck, build и 23 HTTP/D1 rollback/CAS-запроса.
 Реальные OAuth, BFCache и staging остаются открытыми.
 
 ## P0.8 follow-up — ограничить invite-запросы регистрации, `f4dcce8`, 18.10.2026

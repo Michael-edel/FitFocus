@@ -61,6 +61,14 @@ export async function refreshWeeklyAiReport({
   const marker: WeeklyReportGenerationMarker = { generationKey, signal: controller.signal };
   weeklyReportGenerationRef.current = marker;
   const ownsAttempt = () => isCurrent() && weeklyReportGenerationRef.current === marker;
+  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  const onBeforeUnload = () => {
+    if (weeklyReportGenerationRef.current !== marker) return;
+    weeklyReportGenerationRef.current = null;
+    controller.abort();
+  };
+  // Keep the page BFCache-eligible while idle; WebKit needs the early abort only for live work.
+  target?.addEventListener('beforeunload', onBeforeUnload, { once: true });
 
   try {
     const session = await prepareSession(currentUser.id, controller, ownsAttempt, { previous: loginGuard });
@@ -87,6 +95,8 @@ export async function refreshWeeklyAiReport({
     const currentAttempt = ownsAttempt();
     if (weeklyReportGenerationRef.current === marker) weeklyReportGenerationRef.current = null;
     if (currentAttempt && !isSoftError(error)) logError(error);
+  } finally {
+    target?.removeEventListener('beforeunload', onBeforeUnload);
   }
 }
 
@@ -120,13 +130,10 @@ export function useWeeklyAiReport({
       weeklyReportGenerationRef.current = null;
       setResumeEpoch((value) => value + 1);
     };
-    // WebKit can reject an in-flight fetch while navigation is starting, before pagehide.
-    window.addEventListener('beforeunload', hide);
     window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', show);
     return () => {
       scope.invalidate();
-      window.removeEventListener('beforeunload', hide);
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
     };

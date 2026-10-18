@@ -232,9 +232,10 @@ desktop Chromium, Firefox и WebKit без retries. Полный callback spec �
 поздний результат в уже перезагруженном приложении. Продуктовый fetch signal при
 этом отменён, и ответ не вызывает клиентских success effects. Тест не доказывает,
 что внешний сервер или AI-провайдер прекращает уже начатую работу. Реальные
-OAuth, BFCache и staging остаются за пределами проверки. Commit пока локальный;
-CI #1633 успешно проверил предыдущий remote HEAD `151e3c0`, точный CI для
-`b4336d8` запускается после публикации.
+OAuth, BFCache и staging остаются за пределами проверки. `b4336d8` опубликован
+последующим документирующим commit `961c895`. Точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
+для `961c895` завершился success: 1388 unit / 215 файлов, 1044 browser passed /
+307 skipped, guards, три typecheck, build и 23 HTTP/D1 rollback/CAS-запроса.
 
 ## Приёмка
 

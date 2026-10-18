@@ -1,17 +1,19 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Remote PR HEAD `151e3c0`; точный
-[CI #1633](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872)
-завершился success: 1388 unit в 215 файлах, 1041 browser passed / 303 skipped,
-audit, guards, три typecheck и build прошли; rollback/CAS выполнил 23 HTTP/D1-
-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145171404)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39147344872/artifacts/12145336019).
-Предыдущий кодовый HEAD `9825e8d` также прошёл точный CI #1630. Локальный
-code/test follow-up `b4336d8` покрывает unload Coach retry: targeted E2E 3/3 на
-desktop Chromium/Firefox/WebKit, полный callback spec 48/48 на desktop Chromium
-(`workers=1,retries=0`), AI transport unit 25/25, typecheck и diff check прошли.
-Commit ещё не отправлен в PR.
+base `fix/state-generations`. Перед текущим follow-up опубликованный HEAD был
+`961c895`; его точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
+завершился success: 1388 unit в 215 файлах, 1044 browser passed / 307 skipped,
+audit, schema/privacy/auth/API guards, три typecheck и build прошли; rollback/CAS
+gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
+
+Текущий follow-up ограничивает `beforeunload` только активным запросом недельного
+AI-отчёта. Unit — 9/9; `weekly-ai-report-session.spec.ts` — 6/6 на desktop
+Chromium и WebKit без retries; `npm run typecheck` и `git diff --check` прошли.
+Точный CI этой ревизии запускается после push и ещё требует итоговой проверки.
+План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
+OAuth, release и интеграция в защищённую `main` не подтверждены.
 
 Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
