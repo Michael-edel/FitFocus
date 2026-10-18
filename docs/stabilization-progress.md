@@ -6451,3 +6451,21 @@ E2E ещё выполняется. Полный P0.8/P0.9, staging, выпуск
 и `/api/push/status` вернули 401 без redirect и `Set-Cookie`. Это проверка
 неавторизованного preview origin, а не D1/OAuth, авторизованных действий или
 staging acceptance.
+
+## P0.6 — убрать неиспользуемое переименование account-префиксов, 18.10.2026
+
+Из `storage/hybrid.ts` и `storage/indexedUserState.ts` удалены неиспользуемые
+`renameLocalStoragePrefix` и `renameIndexedUserStatePrefix` вместе с cursor-
+миграцией, которая переписывала ключи IndexedDB из одного account-префикса в
+другой. Поиск runtime call sites подтвердил, что приложение этот путь уже не
+вызывало; прежний unit test, однако, закреплял перенос как допустимую операцию.
+Тест заменён на проверку изоляции точного account-префикса; импорт из `App.tsx`
+удалён. Это не затрагивает scoped чтение и очистку данных, но предотвращает
+возврат к переносу владельца по одному лишь преобразованию ключа.
+
+Локальная проверка: `tests/indexed_user_state.test.ts` — 3/3, весь unit suite —
+1363/1363, общий typecheck, `typecheck:storage-strict`, production build и
+`git diff --check` прошли. Коммит `49a1ff6` создан локально; точный CI этого SHA
+ещё не запускался. PR #90 с проверенным CI #971
+пока не влит, потому что защищённая `main` требует approving review от write-
+доступного reviewer. Полный P0.6/P0.8/P0.9, staging и выпуск остаются открыты.

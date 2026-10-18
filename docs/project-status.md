@@ -2,29 +2,37 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
-PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
-`fix/state-generations`. Текущий этап — стабилизация P0, в частности P0.8:
-IndexedDB durable outbox подключён, продолжается перенос и lifecycle-приёмка
-пользовательских действий. Последний кодовый коммит — [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f).
-Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
-на опубликованном родителе `e6612bc` прошёл audit, schema/privacy/auth/API,
-1363 unit, три strict typecheck и production build, но E2E завершился
-995 passed / 299 skipped / 1 failed. Единственный отказ — iPhone PWA
-weekly-menu recovery: тестовый `/api/profile` 503 не имел CORS-заголовков, и
-WebKit отклонил его до штатной обработки. Trace подтвердил сохранение операции
-и `opId` через reload, а последующий повтор получил 200. В `b69935b` mock
-возвращает CORS-заголовки только для совпадающего same-origin запроса.
-После фикса сценарий прошёл 5/5 на iPhone PWA; весь `weekly-menu-durability`
-прошёл 56/56 на семи Playwright-проектах без retries; typecheck и diff check
-прошли. Новый exact CI ещё не запущен.
-В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и
-интеграция в защищённую `main` открыты.
-Последний read-only smoke опубликованного branch preview подтвердил bundle SHA
-`e6612bc`: `/`, `/api/env` и анонимный `/api/me` вернули 200;
+Локальный кодовый follow-up [`49a1ff6`](https://github.com/Michael-edel/FitFocus/commit/49a1ff6)
+ещё не опубликован. В P0.6 удалён неиспользуемый путь переименования account-
+префиксов в localStorage и IndexedDB; точный IDB ключ больше нельзя переносить
+между владельцами этим legacy helper. Целевой тест прошёл 3/3, весь unit suite
+1363/1363, общий и storage-strict typecheck, production build и `git diff --check`
+прошли; точный CI этого SHA ожидает push.
+
+Опубликованный [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся
+draft с base `fix/state-generations` и head `5fe169d`. Точный
+[PR CI #1587](https://github.com/Michael-edel/FitFocus/actions/runs/39092410007)
+для `5fe169d` пока выполняет E2E; audit, schema/privacy/auth/API, 1363 unit,
+три strict typecheck и build прошли. Непосредственная причина предыдущего
+[CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
+была в weekly-menu test mock без CORS-заголовков; trace подтвердил сохранение
+операции и того же `opId` через reload, а повтор получил 200. Исправление
+`b69935b` прошло локально 5/5 на iPhone PWA, вся спека — 56/56 на семи
+Playwright-проектах без retries.
+
+PR [#90](https://github.com/Michael-edel/FitFocus/pull/90) прошёл точный CI #971
+(audit, guards, unit, три typecheck, build и E2E), но ещё не влит: правило
+защищённой `main` требует одно одобрение reviewer с write-доступом. PR
+[#92](https://github.com/Michael-edel/FitFocus/pull/92) также прошёл точный CI;
+сам PR открыт. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
+staging, выпуск и интеграция feature-цепочки в защищённую `main` открыты.
+
+Последний read-only smoke branch preview подтвердил bundle SHA `5fe169d`:
+`/`, `/api/env` и анонимный `/api/me` вернули 200;
 `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
 redirect и `Set-Cookie`. Google Client IDs не настроены, поэтому авторизованные
 сценарии/OAuth не запускались; D1, edge-конфигурация и staging этим smoke не
-подтверждены. Это проверка опубликованного родителя до `b69935b`.
+подтверждены. Это read-only preview smoke, не staging-приёмка.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые

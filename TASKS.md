@@ -1300,6 +1300,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.
+  - [x] Удалить неиспользуемые `renameLocalStoragePrefix` и
+    `renameIndexedUserStatePrefix`, которые могли переносить локальные записи
+    между account-префиксами. Runtime-вызовов не было; тест теперь подтверждает
+    изоляцию точного префикса. `indexed_user_state.test.ts` — 3/3, весь unit suite
+    — 1363/1363, общий и storage-strict typecheck, production build и
+    `git diff --check` прошли. Коммит `49a1ff6`; точный CI для этого коммита
+    ожидает push.
 - [ ] Завершить lifecycle-гарантии для profile и остальных API callbacks;
   `3abb374` закрыл unscoped серверный доступ к state/profile, но нужны проверки
   client lifecycle, старых writers и staging. Runtime legacy уже использует
