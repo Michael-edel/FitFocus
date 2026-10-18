@@ -1,25 +1,24 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 19.10.2026. Рабочая ветка `fix/durable-outbox`, Draft PR
-[`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base
-`fix/state-generations`. Последний опубликованный HEAD —
-[`7acfc86`](https://github.com/Michael-edel/FitFocus/commit/7acfc86553e50696768b66fe000336389e1858cb);
-точный CI #1663 пока выполняет browser tests. Последний опубликованный
-code/test commit —
-[`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30). Он
-добавляет раннюю отмену публичных auth callbacks `/api/env` и
-`POST /api/invite/validate`; `fetchWithResilience` соблюдает переданный
-`AbortSignal` и прекращает retry после отмены. Локально прошли 1420 unit-тестов
-в 216 файлах, root/domain/storage typecheck, API/auth/schema/privacy guards,
-production build и навигационный E2E 7/7 на desktop/mobile/PWA профилях.
-Локальный code/test commit [`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041)
-повторно запускает `/api/env` при `pageshow.persisted` и
-сбрасывает застрявший индикатор проверки приглашения. Его lifecycle E2E прошёл
-14/14 в семи desktop/mobile/PWA профилях; unit — 1420/1420, три typecheck и
-production build прошли. Коммит пока локальный и не входит в CI #1663.
-Эксперимент с реальным browser back не смог получить BFCache в Playwright:
-Chromium сообщает `BackForwardCacheDisabledForDelegate`; реальный BFCache остаётся
-открытым gate. Новый SHA будет отправлен после завершения текущего CI.
+Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
+[`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
+`fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
+HEAD — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5),
+точный CI [#1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+ещё выполняет browser tests. Он проверяет исправление гонки legacy profile
+recovery с параллельным session reverify; полный migration E2E прошёл 49/49 на
+семи browser/PWA профилях, Android Chrome сценарий — 10/10, опубликованный unit
+suite — 1421/1421. Локальный commit `3894ada`
+добавляет negative unit на реальную смену `serverSessionId`; с ним unit suite
+прошёл 1422/1422. Этот commit ещё не опубликован и ждёт завершения CI #1665.
+
+Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
+чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
+зафиксировал `pagehide.persisted=true` и `pageshow.persisted=true`; локальный
+сервер записал повторный `/api/env` через 27 мс после восстановленного
+`pageshow`. Это подтверждает публичный конфигурационный callback на desktop
+Chrome. Playwright в CI по-прежнему отключает BFCache (`BackForwardCacheDisabledForDelegate`);
+проверка не закрывает остальные callbacks, устройства, OAuth или staging.
 
 В плане 32 незакрытых чекбокса: 18 в P0, 7 в P1, ещё 7 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
@@ -423,7 +422,9 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   [семейный контракт](docs/family-menu-state.md).
 - [ ] Проверить эти пути на staging и завершить реальные BFCache/OAuth-сценарии;
   остальные AI/report/retry/family writers и их общий lifecycle остаются открыты.
-  Unit-проверка двух IDB connections не заменяет old/new bundles.
+  Реальный Chrome BFCache подтвердил повтор `/api/env` после restore; OAuth,
+  другие callbacks, устройство и staging остаются открыты. Unit-проверка двух IDB
+  connections не заменяет old/new bundles.
 
 Ни весь P0.5, ни выпуск этим компонентом не закрыты.
 
@@ -1433,6 +1434,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   sessionEpoch относится к попытке, а не навсегда запрещает такую операцию.
 - [x] Останавливать sender на pagehide; BFCache-возврат запускает новую
   проверку сессии, cleanup удаляет обработчики прежнего аккаунта.
+- [x] В desktop Chrome на сборке с runtime SHA `856e3f5` получить настоящий
+  BFCache restore: `pagehide.persisted=true`, `pageshow.persisted=true`, затем
+  запрос `/api/env` через 27 мс после restore. Проверка подтверждает только
+  публичный конфигурационный callback на локальном mock origin; OAuth,
+  авторизованные callbacks, устройства и staging остаются открытыми.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.

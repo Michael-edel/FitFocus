@@ -67,19 +67,25 @@ npm run test:e2e
 
 ## Текущий этап
 
-Основная рабочая ветка — `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
+Рабочий локальный checkout — `durable-outbox`; удалённая ветка PR —
+`fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
 P0.8 включает общую IndexedDB outbox, миграцию legacy-очереди, атомарное
 сохранение пользовательских данных, профиль, регистрацию, личное и семейное
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний кодовый коммит — [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30):
-публичная конфигурация и проверка приглашения отменяют активные запросы при
-уходе со страницы; `fetchWithResilience` соблюдает `AbortSignal` и прекращает
-retry после отмены. Локально прошли 1420 unit-тестов, три typecheck-профиля,
-API/auth/schema/privacy guards, production build и реальная навигационная
-проверка 7/7 desktop/mobile/PWA профилей. Точный CI этой ревизии проверяется
-после push. Открыты 32 пункта: 18 P0, 7 P1 и 7 подготовительных или компонентных;
-staging, выпуск и интеграция PR #93 в защищённую `main` не подтверждены.
+Последний опубликованный HEAD — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5);
+его [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+пока выполняет browser tests. Он включает исправление гонки profile recovery;
+локальный commit `3894ada`
+добавляет negative unit для смены server session, доводя локальный suite до
+1422/1422, и ожидает окончания текущего CI перед push.
+
+Реальный desktop Chrome BFCache smoke на сборке `856e3f5` подтвердил
+`pageshow.persisted=true` и повтор `/api/env` после восстановления. Это один
+публичный callback на локальном mock origin; прочие lifecycle callbacks,
+staging/OAuth, выпуск и интеграция PR #93 в защищённую `main` остаются открыты.
+В плане 32 пункта: 18 P0, 7 P1 и 7 подготовительных или компонентных; ни один
+P0 не закрыт целиком.
 Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
 [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

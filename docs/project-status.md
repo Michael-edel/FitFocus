@@ -17,8 +17,13 @@
 профилей без retries. Локальные коммиты [`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041)
 и [`185661e`](https://github.com/Michael-edel/FitFocus/commit/185661e) добавили
 повтор `/api/env` и сброс invite-check при `pageshow.persisted`; синтетический
-lifecycle E2E прошёл 14/14 на семи профилях. Попытка проверить настоящий
-BFCache остаётся ограниченной Playwright `BackForwardCacheDisabledForDelegate`.
+lifecycle E2E прошёл 14/14 на семи профилях. Отдельная чистая Chrome-сессия на
+локальной сборке с runtime SHA `856e3f5` подтвердила настоящий restore:
+`pagehide.persisted=true`, `pageshow.persisted=true`, запрос `/api/env` — через
+27 мс после `pageshow`. Это подтверждает один публичный callback на desktop
+Chrome; остальные авторизованные callbacks, устройство, OAuth и staging этим
+не закрыты. Playwright CI по-прежнему сообщает
+`BackForwardCacheDisabledForDelegate`.
 
 Удалённый HEAD ветки PR — `856e3f5`; [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
 завершился одним сбоем на Android Chrome при разрешении legacy-конфликта профиля.
