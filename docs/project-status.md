@@ -3,17 +3,19 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`. До этого follow-up опубликованный HEAD был `961c895`;
-точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
-завершился success: 1388 unit в 215 файлах, 1044 browser passed / 307 skipped,
-audit, schema/privacy/auth/API guards, три typecheck и build прошли; rollback/CAS
-gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
+`fix/state-generations`; он зависит от PR #94 и #90. Опубликованный HEAD —
+`a739c1e`. Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+прошёл audit, schema/privacy/auth/API guards, 1391 unit, три typecheck и build;
+browser matrix выполняется.
 
-Текущий follow-up делает `beforeunload`-отмену недельного AI-отчёта только пока
-идёт запрос и снимает listener по завершении. Unit — 9/9; весь
-`weekly-ai-report-session.spec.ts` — 6/6 на desktop Chromium и WebKit без retries;
-typecheck и diff check прошли. Точный CI этой ревизии запускается после push.
+В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
+request-scoped `AiActionScope`; недельный отчёт сохраняет свою проверенную
+обработку без дублирования listener. `a739c1e` применяет ту же отмену к
+параллельным family callbacks одним listener на активный scope. Полный unit
+1391/1391, root/domain/storage typecheck прошли локально; навигационные Coach и
+family invite E2E — по 1/1 на desktop Chromium. Firefox PWA update test прошёл
+1/1, прежний timeout не воспроизвёлся; причина остаётся неизвестной.
+
 План содержит 32 открытых пункта (18 P0, 7 P1, 7 следующих задач); ни один P0
 не закрыт целиком. Отдельный HTTPS staging origin, OAuth, D1 и выпуск не подтверждены.
 

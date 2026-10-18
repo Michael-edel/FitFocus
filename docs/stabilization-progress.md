@@ -6824,3 +6824,23 @@ Branch-preview smoke `npm run test:e2e:staging` прошёл 7/7 GET-only про
 `/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/
 push-status — 401 без redirect и `Set-Cookie`. Это не отдельный staging и не
 подтверждает OAuth, D1, авторизованные действия или выпуск.
+
+## P0.5/P0.9 — request-scoped navigation abort для AI и family callbacks, 18.10.2026
+
+В `589d49e` `AiActionScope` ставит временный `beforeunload` listener только во
+время активного запроса; завершение, замена attempt и invalidation его снимают.
+Недельный отчёт продолжает собственную проверенную обработку события, не
+добавляя второго listener. Unit suite — 1390/1390, root/domain/storage typecheck
+прошли; реальная навигация при удержанном Coach retry прошла 1/1 desktop Chromium.
+
+В `a739c1e` семейные action scopes получили один listener на все параллельные
+запросы scope. Он удаляется после завершения последнего действия, а событие
+abort-ит все оставшиеся controllers до `pagehide`. Family unit — 19/19, полный
+unit — 1391/1391, три typecheck-профиля и `git diff --check` прошли локально.
+Навигация при удержанном family invite прошла 1/1 desktop Chromium, сигнал
+отменён, поздний код не показан. Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+прошёл audit, guards, unit, typechecks и build; browser job ещё выполняется.
+
+Повтор `pwa-update.spec.ts` в desktop Firefox прошёл 1/1 без retries; известный
+исторический timeout не воспроизвёлся, и причина остаётся не доказанной. P0.5,
+P0.8/P0.9, staging и protected-main integration остаются открытыми.

@@ -8,15 +8,15 @@ audit, schema/privacy/auth/API guards, три typecheck и build прошли; r
 gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
 
-Текущий опубликованный HEAD `589d49e`; точный [CI #1640](https://github.com/Michael-edel/FitFocus/actions/runs/39155138367)
-прошёл audit, guards, 1390 unit, три typecheck и production build; browser job
-ещё выполняется. Коммит расширяет request-scoped `beforeunload` через
-`AiActionScope` на AI callbacks, сохраняя отдельную обработку недельного отчёта
-без дублирующего listener. Локальный follow-up добавляет такой же ранний abort
-семейным сетевым действиям: полный unit — 1391/1391, root/domain/storage typecheck,
-family unit — 19/19; реальные навигационные сценарии Coach и family invite прошли
-по 1/1 на desktop Chromium. Новые изменения пока локальные; точный CI для них
-начнётся после push.
+Текущий опубликованный HEAD `a739c1e`; точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+прошёл audit, guards, 1391 unit, три typecheck и production build; сейчас
+выполняется browser job. `589d49e` распространил request-scoped `beforeunload`
+через `AiActionScope` на AI callbacks, сохранив отдельную обработку недельного
+отчёта без дублирующего listener. `a739c1e` добавил один временный listener на
+группу активных family actions. Локально полный unit — 1391/1391, root/domain/
+storage typecheck; Coach и family invite navigation E2E прошли 1/1 каждый на
+desktop Chromium. Дополнительно Firefox `pwa-update.spec.ts` прошёл 1/1 без retries;
+исторический timeout не воспроизвёлся и его причина остаётся неизвестной.
 План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
 OAuth, release и интеграция в защищённую `main` не подтверждены.
 
@@ -586,7 +586,8 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
 кода `405238b` и PWA `8d32f12` прошёл.
 Локальный real-SW smoke добавлен; до закрытия нужны PWA на
 устройствах/staging и совместимый откат. Явная семейная цель invite/member
-и остальные callbacks также остаются открытыми.
+реализована в `2bbec11` и подтверждена точным CI `38459458051`; staging и
+проверка старых/новых bundles для неё остаются открытыми вместе с остальными callbacks.
 
 Это не закрывает P0.4–P0.6 целиком. Прежние unscoped clients остаются совместимыми
 и не защищены opt-in guard; отмена fetch не устанавливает порядок SQL-записей.

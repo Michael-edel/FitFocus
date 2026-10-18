@@ -270,8 +270,10 @@ Production-код не менялся, runtime-дефект не найден; �
   shopping сценариями он прошёл 12/12 на desktop engines. Полный CI для новых
   тестов ещё не подтверждён.
   Покрытие остальных callbacks всё ещё неполное.
-- Проверить invite/member family target `2bbec11` в точном CI и затем staging;
-  локальные проверки не подтверждают deployment или реальные bundle.
+- [x] Подтвердить invite/member family target `2bbec11` в точном CI
+  [`9bdeb47` / run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051).
+  Точный `familyId`, capability gate, membership/owner checks и account-switch
+  acceptance покрыты. Staging и старые/новые bundles для этого пути остаются открыты.
 - Проверить настоящие old/new bundles с Service Worker, повреждённые legacy-строки,
   staging и совместимый rollback; локальный smoke с отключённым worker этого
   не подтверждает.
