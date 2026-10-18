@@ -6961,3 +6961,30 @@ workers=1/retries=0. Проверка покрывает `beforeunload` и от�
 BFCache, устройство и выделенный staging остаются отдельными gate. Staging
 origin в окружении не настроен. Точный CI follow-up запускается после push
 в PR #93.
+
+## P0.5 — отмена публичных auth callbacks при навигации, `050eb30`, 19.10.2026
+
+`fetchWithResilience` раньше заменял переданный вызывающим кодом `AbortSignal`
+внутренним controller. Теперь он передаёт отмену активному `fetch`, возвращает
+отдельный тип ошибки `aborted` и не запускает следующую безопасную попытку,
+если сигнал отменён во время запроса или retry delay. Timeout по-прежнему
+отличается от page-exit/caller abort.
+
+`/api/env` теперь имеет временный page-exit guard и после ответа не меняет
+React state при уходе со страницы или размонтировании. Проверка приглашения
+держит тот же guard до чтения JSON: при `beforeunload`/`pagehide` POST
+отменяется, поздний ответ не выставляет устаревшую ошибку, а нормальный
+результат продолжает обычный путь регистрации.
+
+Проверки на локальном SHA `050eb30`: полный unit suite — **1420/1420** в 216
+файлах; root/domain-strict/storage-strict typecheck, API invariants, auth scope,
+schema parity (23 migrations / 32 tables), privacy coverage (29 user tables),
+admin guards, production build и `git diff --check` прошли. Новая реальная
+навигация с удержанным `/api/env` прошла **7/7** desktop/mobile/PWA профилей
+(`workers=1,retries=0`). Unit покрывает отмену проверки приглашения на обоих
+сигналах и прекращение retry при отменённом caller signal.
+
+Это mock API и проверка browser fetch; OAuth, выделенный staging, физические
+устройства и реальный BFCache остаются отдельными gates. Точный CI текущего
+опубликованного SHA проверяется через PR #93 после push. Общий P0.5/P0.9 не
+закрыт.

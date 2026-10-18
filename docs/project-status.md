@@ -7,16 +7,18 @@
 
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-открыт против `fix/state-generations` и зависит от PR #94 и #90. В коммите
+открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
 [`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751)
-единый page-exit guard останавливает session-bound запросы на первом из
-`beforeunload` и `pagehide`, затем снимает оба listener. Он используется для
-`/me`, bootstrap/state reads, Admin, Support, AI, family, achievements, billing,
-Huawei, push, mobile-token и StateSync lifecycle. Transport tests прошли 140/140;
-полный unit suite — 1415/1415 в 216 файлах; root/domain/storage typecheck, guards
-и production build прошли. Реальная Admin navigation прошла 7/7 browser/PWA
-проектов без retries. Точный CI этой ревизии запускается после push; BFCache,
-устройства и staging ещё не подтверждены.
+распространил общий page-exit guard на session-bound transports и StateSync.
+Следующий коммит [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30)
+закрыл два оставшихся публичных auth callback: `/api/env` и проверку приглашения.
+`fetchWithResilience` теперь соблюдает переданный `AbortSignal`, распознаёт
+отмену отдельно от timeout и не повторяет отменённый запрос; поздний ответ не
+меняет UI. Полный unit suite прошёл 1420/1420 в 216 файлах; root/domain/storage
+typecheck, API/auth/schema/privacy guards, production build и diff check прошли.
+Реальная навигация с удержанным `/api/env` прошла 7/7 desktop/mobile/PWA
+профилей без retries. Точный CI нового SHA проверяется после push; реальный
+BFCache, устройства, OAuth и staging ещё не подтверждены.
 
 В плане 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных или
 компонентных разделах. Открыты полная lifecycle-матрица, UI разрешения

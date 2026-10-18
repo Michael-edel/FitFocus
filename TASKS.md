@@ -1,34 +1,22 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 19.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Перед текущим follow-up опубликованный HEAD был
-`961c895`; его точный [CI #1636](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224)
-завершился success: 1388 unit в 215 файлах, 1044 browser passed / 307 skipped,
-audit, schema/privacy/auth/API guards, три typecheck и build прошли; rollback/CAS
-gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
+Обновлено: 19.10.2026. Рабочая ветка `fix/durable-outbox`, Draft PR
+[`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base
+`fix/state-generations`. Последний локально проверенный code/test commit —
+[`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30). Он
+добавляет раннюю отмену публичных auth callbacks `/api/env` и
+`POST /api/invite/validate`; `fetchWithResilience` соблюдает переданный
+`AbortSignal` и прекращает retry после отмены. Локально прошли 1420 unit-тестов
+в 216 файлах, root/domain/storage typecheck, API/auth/schema/privacy guards,
+production build и навигационный E2E 7/7 на desktop/mobile/PWA профилях.
+Точный CI нового SHA проверяется после push; прежний CI #1659 относится к
+родительскому `bb7e238` и не подтверждает этот follow-up.
 
-Проверенный кодовый HEAD `a739c1e`; точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
-завершился success: 1391 unit в 215 файлах, 1058 browser passed / 307 skipped
-за 44,7 минуты без retries; audit, schema/privacy/auth/API guards, три typecheck,
-build и rollback/CAS gate на 23 HTTP/D1-запроса прошли. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
-Локальный code/test follow-up `e22b2bf` добавляет navigation acceptance для
-family-menu AI generation: 7/7 browser/PWA проектов без retries; root typecheck
-и diff check прошли. Новый exact CI запускается при push.
-`589d49e` распространил request-scoped `beforeunload`
-через `AiActionScope` на AI callbacks, сохранив отдельную обработку недельного
-отчёта без дублирующего listener. `a739c1e` добавил один временный listener на
-группу активных family actions. Локально полный unit — 1391/1391, root/domain/
-storage typecheck; Coach и family invite navigation E2E прошли 1/1 каждый на
-desktop Chromium. Дополнительно Firefox `pwa-update.spec.ts` прошёл 1/1 без retries;
-исторический timeout не воспроизвёлся и его причина остаётся неизвестной.
-Read-only branch-preview smoke для `a739c1e` прошёл 7/7 GET-only проверок;
-`/assets/index-BDc4XSZj.js` содержит полный SHA. Это preview, не отдельный staging.
-В `TASKS.md` 32 незакрытых чекбокса: 18 находятся в разделе P0, 7 — в P1,
-ещё 7 — в подготовительных и компонентных разделах перед P0. Ни один P0 не
-закрыт целиком. Staging, OAuth, release и интеграция в защищённую `main` не
-подтверждены.
+В плане 32 незакрытых чекбокса: 18 в P0, 7 в P1, ещё 7 в подготовительных и
+компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
+lifecycle callbacks, полная матрица, UI разрешения конфликтов, staging/OAuth/D1,
+release rollback и интеграция в защищённую `main`. Branch preview не равен
+staging; выпуск и merge в `main` не подтверждены.
 
 Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
@@ -924,6 +912,17 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     guards и production build прошли. Реальная Admin navigation прошла 7/7
     desktop/mobile/PWA проектов без retries. Код — [`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751);
     точный CI запускается после push; реальный BFCache и staging остаются открыты.
+  - [x] Подключить оставшиеся публичные auth callbacks к page-exit abort:
+    `/api/env` и `POST /api/invite/validate` передают свой `AbortSignal`,
+    прекращают работу на первом `beforeunload`/`pagehide` и не применяют поздний
+    результат. `fetchWithResilience` теперь уважает сигнал вызывающего кода,
+    различает отмену и timeout и не начинает retry после отмены. Полный unit
+    suite — 1420/1420 в 216 файлах; root/domain/storage typecheck, API/auth/
+    schema/privacy guards, production build и diff check прошли. Реальная
+    навигация с удержанным `/api/env` прошла 7/7 browser/PWA профилей без
+    retries. Изменение — [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30);
+    точный CI этой ревизии проверяется после push. Остальные writers, полный
+    lifecycle и staging остаются открыты.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.
