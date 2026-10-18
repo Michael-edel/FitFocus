@@ -3,20 +3,27 @@
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
 здесь, результаты проверок — в [журнале](stabilization-progress.md).
 Опубликованный draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-по-прежнему основан на `fix/state-generations`; опубликованный HEAD — `2e56910`.
-Локальный code/test commit `152b7af` устраняет потерю старой вкладочной правки,
+по-прежнему основан на `fix/state-generations`; опубликованный HEAD — `4065275`.
+`152b7af` устраняет потерю старой вкладочной правки,
 если изменение legacy source запускает повторную проверку сессии и следующий
 StorageEvent приходит до ответа `/api/me`. Последний принятый local-commit guard
 сохраняет edit как конфликт; IndexedDB транзакционно отклоняет запись при смене
 account/sessionEpoch. Полная `localStorage.clear()` перепроверена как единый
 `key=null` event: существующие migration snapshot, quarantine и intent сохраняются
 в IndexedDB, ложные DELETE и сетевые state write не создаются.
-Real old/new clear и keyed-delete browser acceptance прошли 7/7 каждая; unit
-12/12, полный набор 1368/1368, root/domain/storage strict typecheck, production
-build и `git diff --check` прошли локально. Точный [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
-проверяет опубликованный `2e56910`, всё до E2E прошло, E2E ещё выполняется;
-`152b7af` в запуск не входит. Остаются 33 пункта: 19 P0, 7 P1 и 7 следующих
-задач; staging, выпуск и защищённая `main` открыты.
+В `fd026b5` добавлена account-switch приёмка отдельного UI-кэша архива прогресса
+и устранено монтирование свернутого mobile-графика с нулевым размером. Старый
+аккаунт сохраняет свою открытую галерею, аккаунт B получает собственное
+default-состояние.
+
+Локальная проверка: legacy clear и keyed-delete acceptance прошли 7/7 каждая;
+account-cache sweep — 21/21, progress draft — 3/3 и новый progress archive —
+3/3 на desktop Chromium/Firefox/WebKit без retries. Целевые legacy unit 12/12,
+полный unit 1368/1368, root/domain/storage strict typecheck, production build и
+`git diff --check` прошли. [CI #1597](https://github.com/Michael-edel/FitFocus/actions/runs/39097545128)
+по предыдущему HEAD `2e56910` остаётся в E2E; точный [CI #1599](https://github.com/Michael-edel/FitFocus/actions/runs/39100059502)
+для `4065275` создан и пока pending. Остаются 33 пункта:
+19 P0, 7 P1 и 7 следующих задач; staging, выпуск и защищённая `main` открыты.
 
 Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
 неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
