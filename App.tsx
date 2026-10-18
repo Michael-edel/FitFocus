@@ -71,7 +71,6 @@ import {
   clearLocalUserData,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
-  renameLocalStoragePrefix,
 } from './storage/hybrid';
 import {
   bootstrapAuthSession,

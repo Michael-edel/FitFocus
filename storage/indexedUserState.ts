@@ -149,26 +149,6 @@ export async function listIndexedUserStateRaw(): Promise<Record<string, string>>
   }
 }
 
-async function updateKeys(prefix: string, update: (store: IDBObjectStore, entry: IndexedValue) => void) {
-  const database = await openDatabase();
-  if (!database) return false;
-  try {
-    const transaction = database.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const cursorRequest = store.openCursor();
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result;
-      if (!cursor) return;
-      const entry = cursor.value as IndexedValue;
-      if (entry.key.startsWith(prefix)) update(store, entry);
-      cursor.continue();
-    };
-    return await transactionDone(transaction);
-  } catch {
-    return false;
-  }
-}
-
 function rawRecordsMayBelongToAccount(records: unknown, prefix: string): boolean {
   if (!Array.isArray(records)) return true;
   return records.some((record) => {
@@ -345,13 +325,4 @@ export async function clearIndexedUserStateForUser(
   } catch {
     return { cleared: false, legacyEvidenceRetained: true };
   }
-}
-
-/** Keeps IndexedDB records aligned when an anonymous local account receives its server identity. */
-export function renameIndexedUserStatePrefix(oldPrefix: string, newPrefix: string): Promise<boolean> {
-  if (!oldPrefix || !newPrefix || oldPrefix === newPrefix) return Promise.resolve(true);
-  return updateKeys(oldPrefix, (store, entry) => {
-    store.put({ ...entry, key: newPrefix + entry.key.slice(oldPrefix.length), updatedAt: Date.now() });
-    store.delete(entry.key);
-  });
 }
