@@ -6670,3 +6670,39 @@ hostname с завершающей точкой. Локально полный u
 browser/staging наборов прошли. Точный CI для `1271dfe` ещё не запускался.
 В плане остаются 32 пункта: 18 P0, 7 P1 и 7 будущих;
 staging acceptance, release и интеграция в `main` открыты.
+
+## P0.8 — причины legacy quarantine в UI, `b97307a`, 18.10.2026
+
+StateSync передаёт в статус миграции причины неразрешённых quarantine rows;
+интерфейс показывает сводку по числу и причине только для подтверждённого
+аккаунта. Ключи и raw payload не отображаются, а quarantine-записи не получают
+владельца и не отправляются автоматически. Словарь причин исчерпывающий для
+текущего типа миграции, с безопасной общей подписью для неизвестного значения.
+
+Целевые migration unit-тесты прошли 78/78. Весь
+[`legacy-outbox-migration.spec.ts`](../e2e/legacy-outbox-migration.spec.ts)
+прошёл 7/7 в desktop Chromium; acceptance проверяет `unknown-owner`, причины
+повреждённых legacy-записей и отсутствие чужого ключа/значения в сводке. Root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Изменение опубликовано в [`b97307a`](https://github.com/Michael-edel/FitFocus/commit/b97307a1d011d5fb639c3dd9f074895ad59e1134).
+Точный [PR CI #1622](https://github.com/Michael-edel/FitFocus/actions/runs/39131570644)
+для `b97307a` завершился с 1026 прошедшими, 303 пропущенными и 8 упавшими
+браузерными тестами: семь из-за строгого locator, который стал неоднозначным
+после появления второго summary, и один из-за гонки при заполнении поля имени
+в iPhone PWA rollback. Последний code/test HEAD и точный CI follow-up описаны
+ниже. PR #93 остаётся draft; staging, полный lifecycle P0.8 и интеграция в
+защищённую `main` открыты.
+
+## CI follow-up — conflict recovery и PWA rollback, `7f76a8e`, 18.10.2026
+
+В `owned-state.spec.ts` locator теперь выбирает именно блок действий
+«Разрешить конфликт или повторить отправку», устраняя неоднозначность второго
+summary с причинами quarantine. Conflict recovery прошёл 7/7 затронутых browser
+projects. В `pwa-rollback.spec.ts` тест ожидает начальное имя профиля `E2E User`,
+затем меняет его и подтверждает значение до сохранения; iPhone PWA сценарий
+прошёл 3/3 повтора. Root typecheck и `git diff --check` прошли локально.
+
+Исправления зафиксированы локальным коммитом [`7f76a8e`](https://github.com/Michael-edel/FitFocus/commit/7f76a8e)
+и ещё не опубликованы. Следующий шаг — push, затем точный CI для нового SHA;
+пока он не завершится успешно, E2E follow-up и PR #93 не считаются принятыми.
+Staging, полный P0.8 lifecycle и интеграция в защищённую `main` остаются открыты.

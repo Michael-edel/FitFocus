@@ -1,31 +1,22 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93),
-base `fix/state-generations`. Опубликованный HEAD — `66e8c19`; точный PR
-[CI #1618](https://github.com/Michael-edel/FitFocus/actions/runs/39126327612)
-завершился success: audit, guards, unit, три typecheck, production build,
-браузерная mock-матрица и rollback/CAS gate прошли. Push-run #1617 отменён
-concurrency при старте PR-run для того же SHA.
+base `fix/state-generations`. Последний локальный code/test HEAD — `7f76a8e`
+(стабилизация conflict recovery и PWA rollback E2E). Предыдущий опубликованный
+HEAD `b97307a` проверен точным [PR CI #1622](https://github.com/Michael-edel/FitFocus/actions/runs/39131570644):
+1026 тестов прошли, 303 пропущены, 8 упали. Семь падений вызваны неоднозначным
+селектором summary после изменения UI; восьмое — гонкой заполнения имени профиля
+в iPhone PWA rollback. Исправления в `7f76a8e` прошли локально: затронутые
+conflict-сценарии 7/7 browser projects, iPhone PWA rollback 3/3 повтора,
+typecheck и `git diff --check`. Следующий gate — точный CI для `7f76a8e` после
+публикации.
 
-Предыдущий [CI #1616](https://github.com/Michael-edel/FitFocus/actions/runs/39123151481)
-для `47bb7d9` завершился success: route-level `/api/state` acceptance, unit,
-guards, typechecks, build, E2E и rollback/CAS gate прошли. Локально проверены
-1369/1369 unit-тестов.
-
-`66e8c19` разделяет unit, браузерную матрицу с синтетическим API и read-only
-staging smoke. Локальный список содержит 1337 браузерных сценариев в 24 файлах;
-staging-конфигурация обнаруживает 7 тестов. Команда требует HTTPS origin и
-отклоняет production hostname. Целевой legacy normalizer/migration suite прошёл
-128/128; root typecheck, admin guards, API/auth-scope checks и diff check прошли.
-Полный локальный suite на текущем дереве прошёл 1382/1382 теста в 215 файлах.
-После одного неповторившегося `EBUSY` при чтении временного SSR-кэша полный
-suite прошёл повторно в штатном режиме и с одним worker; три затронутых файла
-отдельно прошли 44/44.
-Локальный follow-up `1271dfe` покрывает проверку staging origin unit-тестами и
-блокирует production hostname с точкой в конце; проверки прошли локально,
-точный CI этого follow-up ещё не запускался. CI #1618 проверял предыдущий
-опубликованный SHA `66e8c19`. Staging origin не настроен, реальный staging smoke
-не выполнялся.
+В `b97307a` добавлена безопасная сводка причин legacy quarantine: интерфейс
+показывает их только для подтверждённого аккаунта и скрывает ключи/raw payload.
+Old/new bundle acceptance прошёл 7/7 в desktop Chromium; migration unit — 78/78;
+root, domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Точный CI #1622 для `b97307a` завершился с E2E-сбоями; причины
+и тестовый follow-up `7f76a8e` описаны ниже.
 
 В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.

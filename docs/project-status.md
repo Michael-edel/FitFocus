@@ -2,30 +2,25 @@
 
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
-Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке
-`fix/durable-outbox` с base `fix/state-generations`; опубликованный HEAD —
-`66e8c19`. Точный [PR CI #1618](https://github.com/Michael-edel/FitFocus/actions/runs/39126327612)
-завершился success: audit, guards, unit, три typecheck, production build,
-браузерная mock-матрица и rollback/CAS gate прошли. Push-run #1617 для того же
-SHA отменён concurrency при старте PR-run.
+Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт; локальная
+ветка `durable-outbox` содержит follow-up `7f76a8e`, основанный на опубликованном
+`b97307a`. Точный [PR CI #1622](https://github.com/Michael-edel/FitFocus/actions/runs/39131570644)
+для `b97307a` завершился с 1026 прошедшими, 303 пропущенными и 8 упавшими
+браузерными тестами. Семь тестов использовали неоднозначный summary selector;
+ещё один столкнулся с гонкой заполнения имени в iPhone PWA rollback. Локальный
+follow-up исправил оба источника: затронутые conflict-сценарии прошли 7/7 browser
+projects, iPhone PWA rollback — 3/3 повтора, typecheck и `git diff --check`
+успешны. Следующий gate — точный CI для follow-up `7f76a8e` после публикации.
 
-Точный [CI #1616](https://github.com/Michael-edel/FitFocus/actions/runs/39123151481)
-для родительского SHA `47bb7d9` завершился success, включая E2E, диагностику и
-rollback/CAS gate. Добавленный route-level `/api/state` acceptance прошёл в этом
-run вместе с полным unit suite 1369/1369.
+В `b97307a` интерфейс показывает агрегированные причины legacy quarantine для
+текущего подтверждённого аккаунта, скрывая ключи и raw payload. Old/new bundle
+acceptance прошёл 7/7 в desktop Chromium; migration unit — 78/78; root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Полный CI для новой ревизии ещё не завершён.
 
-Коммит `66e8c19` разделяет локальные browser/mock и staging проверки. Список
-обычной Playwright suite обнаруживает 1337 сценариев в 24 файлах; отдельная
-staging suite обнаруживает 7 тестов. Локально прошли typecheck, admin guards,
-API invariants, auth-scope, discovery обоих наборов и целевые legacy tests 128/128.
-Config отвергает отсутствующий origin, production hostname и его вариант с
-завершающей точкой. Полный локальный suite прошёл 1382/1382; follow-up
-`1271dfe` добавляет unit-тесты origin validator; локальные проверки прошли,
-точный CI на этом follow-up ещё не запускался. Один
-первый параллельный прогон получил невоспроизводимый `EBUSY` во временном
-Vite SSR-кэше; полный повтор штатным режимом и одним worker прошёл, три
-затронутых файла отдельно прошли 44/44. Staging origin не настроен, реальные
-staging/OAuth/D1-проверки не выполнялись.
+В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
+закрыт целиком. Отдельный HTTPS staging origin не настроен: staging/OAuth/D1,
+выпуск и интеграция в защищённую `main` не подтверждены.
 
 Опубликованный P0.8 follow-up показывает записи legacy-карантина отдельно от
 блокировки отправки. Сценарий прошёл 7/7 браузерных/PWA профилей без retries,
