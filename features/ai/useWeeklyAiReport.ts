@@ -141,7 +141,8 @@ export function useWeeklyAiReport({
 
   useEffect(() => {
     if (!currentUser || !weekly || !loginGuard) return;
-    const attempt = scope.begin();
+    // refreshWeeklyAiReport owns this request's beforeunload listener.
+    const attempt = scope.begin({ abortOnBeforeUnload: false });
     if (!attempt) return;
     void refreshWeeklyAiReport({
       currentUser,

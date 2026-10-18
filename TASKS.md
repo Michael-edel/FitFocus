@@ -8,10 +8,13 @@ audit, schema/privacy/auth/API guards, три typecheck и build прошли; r
 gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
 
-Текущий follow-up ограничивает `beforeunload` только активным запросом недельного
-AI-отчёта. Unit — 9/9; `weekly-ai-report-session.spec.ts` — 6/6 на desktop
-Chromium и WebKit без retries; `npm run typecheck` и `git diff --check` прошли.
-Точный CI этой ревизии запускается после push и ещё требует итоговой проверки.
+Текущий опубликованный HEAD `99b6e53`; точный [CI #1638](https://github.com/Michael-edel/FitFocus/actions/runs/39154511524)
+прошёл audit, guards, 1388 unit, три typecheck и production build; сейчас
+выполняется browser job, затем rollback/CAS gate. Локальный follow-up расширяет
+request-scoped `beforeunload` через `AiActionScope` на AI callbacks, сохраняя
+отдельную обработку недельного отчёта без дублирующего listener. Полный unit —
+1390/1390, root/domain/storage typecheck прошли; Coach navigation E2E — 1/1 на
+desktop Chromium. Изменения пока локальные; точный CI для них начнётся после push.
 План содержит 32 открытых пункта: 18 P0, 7 P1 и 7 следующих задач. Staging,
 OAuth, release и интеграция в защищённую `main` не подтверждены.
 
@@ -872,6 +875,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` вводит обязательный серверный proof для всех `/api/state` и
   `/api/profile` handlers; `4edeb0a` закрыл такой же legacy-путь в
   `GET /api/export`, а `a396a30` добавил proof для чтения вложений поддержки.
+  - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
+    устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
+    idle-страница не удерживает listener. Недельный отчёт оставляет уже
+    протестированную request-specific обработку. Unit scope/report — 13/13,
+    полный unit — 1390/1390, root/domain/storage typecheck прошли; удержанный
+    Coach retry отменён при реальной навигации в Chromium (1/1). P0.5 в целом открыт.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.
