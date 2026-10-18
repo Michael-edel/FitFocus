@@ -5,24 +5,26 @@
 PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) остаётся draft с base
 `fix/state-generations`. Текущий этап — стабилизация P0, в частности P0.8:
 IndexedDB durable outbox подключён, продолжается перенос и lifecycle-приёмка
-пользовательских действий. Текущий кодовый коммит — [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00).
-Exact [PR CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
-на родительском `22b010d` прошёл audit, schema/privacy/auth/API, 1363 unit,
-root/domain/storage strict typecheck и production build, но E2E завершился
-994 passed / 299 skipped / 2 failed. iPhone PWA повторная проверка успевала
-снять паузу до ожидания промежуточного UI fence; iPhone Safari возвращал
-access-control console error на намеренно офлайнный 503 mock без CORS-заголовков.
-В `5003a28` proof теперь удерживается в auth-регрессии до явной проверки fence,
-а офлайн mock возвращает ACAO/Vary. Guard прошёл 7/7 проектов и 5/5 iPhone PWA
-повторов; settings — 7/7 проектов и 10/10 повторов iPhone Safari/PWA, без retries.
-Новый exact CI ожидает push.
+пользовательских действий. Последний кодовый коммит — [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f).
+Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
+на опубликованном родителе `e6612bc` прошёл audit, schema/privacy/auth/API,
+1363 unit, три strict typecheck и production build, но E2E завершился
+995 passed / 299 skipped / 1 failed. Единственный отказ — iPhone PWA
+weekly-menu recovery: тестовый `/api/profile` 503 не имел CORS-заголовков, и
+WebKit отклонил его до штатной обработки. Trace подтвердил сохранение операции
+и `opId` через reload, а последующий повтор получил 200. В `b69935b` mock
+возвращает CORS-заголовки только для совпадающего same-origin запроса.
+После фикса сценарий прошёл 5/5 на iPhone PWA; весь `weekly-menu-durability`
+прошёл 56/56 на семи Playwright-проектах без retries; typecheck и diff check
+прошли. Новый exact CI ещё не запущен.
 В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и
 интеграция в защищённую `main` открыты.
-Branch preview после публикации `4c03b68` отдаёт точный bundle SHA: `/`,
-`/api/env` и анонимный `/api/me` вернули 200; `/api/bootstrap`, `/api/profile`,
-`/api/state` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`.
-Проверялись только GET; авторизованные действия, D1, OAuth, edge-конфигурация и
-staging этим smoke не подтверждены.
+Последний read-only smoke опубликованного branch preview подтвердил bundle SHA
+`e6612bc`: `/`, `/api/env` и анонимный `/api/me` вернули 200;
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
+redirect и `Set-Cookie`. Google Client IDs не настроены, поэтому авторизованные
+сценарии/OAuth не запускались; D1, edge-конфигурация и staging этим smoke не
+подтверждены. Это проверка опубликованного родителя до `b69935b`.
 commit `a0721b0` переводит профильные callbacks Settings на durable commit до
 подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
 guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые

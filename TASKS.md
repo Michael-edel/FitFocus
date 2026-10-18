@@ -2,19 +2,16 @@
 
 Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
 остаётся draft с base `fix/state-generations`; staging, выпуск и интеграция в
-защищённую `main` не подтверждены. Текущий кодовый коммит — [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00).
-Exact [PR CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
-на родительском `22b010d` прошёл audit, schema/privacy/auth/API, 1363 unit, три
-typecheck и build, но завершился 994 browser passed / 299 skipped / 2 failed.
-В iPhone PWA тест ожидал промежуточный fence после BroadcastChannel, но быстрая
-повторная проверка уже успевала снять паузу; в iPhone Safari офлайнный 503 mock
-порождал access-control console error из-за отсутствующих CORS-заголовков.
-
-В коммите `5003a28` первый сценарий теперь удерживает read proof до проверки
-fence, затем подтверждает восстановление UI фактическим profile save; mock 503
-возвращает соответствующий `Access-Control-Allow-Origin`. Локально guard прошёл
-7/7 проектов и 5/5 повторов iPhone PWA; settings — 7/7 и 10/10 повторов на iPhone
-Safari/PWA, без retries. Новый exact CI ожидает push. В плане остаются 33 пункта:
+защищённую `main` не подтверждены. Текущий кодовый коммит — [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f).
+Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
+на опубликованном родителе `e6612bc` прошёл audit, schema/privacy/auth/API, 1363
+unit, три typecheck и build, но завершился 995 browser passed / 299 skipped /
+1 failed. В iPhone PWA weekly-menu test mock отдавал ожидаемый 503 без
+CORS-заголовков; trace показал, что операция пережила reload с тем же `opId`,
+а повтор получил 200. Коммит `b69935b` добавляет CORS-заголовки только для
+совпадающего same-origin запроса. Локально этот сценарий прошёл 5/5 на iPhone
+PWA, весь weekly-menu spec — 56/56 на семи проектах без retries; typecheck и
+diff check прошли. Новый exact CI для `b69935b` ещё не запущен. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком.
 
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)

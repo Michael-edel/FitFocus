@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 follow-up — CORS в weekly-menu recovery mock, `b69935b`, 18.10.2026
+
+Exact [PR CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
+на опубликованном родителе `e6612bc822729c56d44d435a099508af4a903fea` прошёл
+dependency audit, schema/privacy/auth/API checks, 1363 unit, root/domain/storage
+strict typecheck и production build. E2E завершился **995 passed / 299 skipped /
+1 failed**: iPhone PWA weekly-menu recovery попал в access-control error для
+`/api/profile` после reload. Trace установил, что test-specific HTTP mock
+возвращал намеренный 503 без CORS-заголовков: первый PUT получил 503, durable
+операция и исходный `opId` сохранились, повторный PUT после reload получил 200;
+отдельного `/api/weekly_menu/items` запроса не было.
+
+Коммит [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f)
+добавляет `Access-Control-Allow-Origin`, credentials и `Vary: Origin` только
+если заголовок Origin совпадает с origin запроса. Это меняет только E2E mock.
+После исправления сценарий прошёл **5/5** повторов на iPhone PWA без retries;
+полный `weekly-menu-durability.spec.ts` прошёл **56/56** на семи проектах,
+workers=1/retries=0. Root typecheck и `git diff --check` прошли. Exact CI
+нового SHA ожидается после push. Последний read-only preview smoke до фикса
+обслуживал опубликованный `e6612bc`; он не подтверждает staging, OAuth или D1.
+P0.8/P0.9, staging, выпуск и интеграция в защищённую `main` остаются открыты.
+
 ## P0.8 follow-up — точный CI #1583 выявил два iPhone E2E отказа, `5003a28`, 18.10.2026
 
 Exact [CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)

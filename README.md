@@ -73,16 +73,16 @@ P0.8 включает общую IndexedDB outbox, миграцию legacy-оч�
 меню, а также UI восстановления failed/conflicted операций. Приёмка всего
 lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
 в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний кодовый коммит — [`5003a28`](https://github.com/Michael-edel/FitFocus/commit/5003a281ab1984b7ced98ef6e0fe68b2d151ff00):
-он делает auth re-verification E2E детерминированным и исправляет CORS-заголовки
-на намеренно офлайнном `/api/state` mock-ответе. Exact [CI #1583](https://github.com/Michael-edel/FitFocus/actions/runs/39085373286)
-на родительском `22b010d` прошёл audit, schema/privacy/auth/API, 1363 unit,
-typecheck и build, но E2E завершился 994 passed / 299 skipped / 2 failed.
-Падения были в iPhone PWA-профиле, где auth proof успел завершиться до проверки
-промежуточного fence, и iPhone Safari, где 503 mock не включал CORS-заголовок.
-Локально обе регрессии прошли по 7/7 Playwright-проектам; повтор settings на
-iPhone Safari/PWA прошёл 10/10, guard в iPhone PWA — 5/5. Новый exact CI для
-`5003a28` запускается после push. В плане остаются 33 пункта:
+Последний кодовый коммит — [`b69935b`](https://github.com/Michael-edel/FitFocus/commit/b69935b1b1163d52ee21967454c9986474d0409f):
+тестовый mock недельного меню возвращает корректные same-origin CORS-заголовки
+при 503 после reload. Exact [CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
+на опубликованном родителе `e6612bc` прошёл audit, schema/privacy/auth/API,
+1363 unit, три typecheck и build, но E2E завершился 995 passed / 299 skipped /
+1 failed. Trace показал, что mock возвращал 503 без CORS-заголовков; durable
+операция и тот же `opId` сохранились, повтор получил 200. Локально после фикса
+сценарий прошёл 5/5 на iPhone PWA, весь `weekly-menu-durability` — 56/56 на
+семи проектах без retries; typecheck и diff check прошли. Новый exact CI для
+`b69935b` ещё не запущен. В плане остаются 33 пункта:
 19 P0, 7 P1 и 7 следующих задач; staging, выпуск и интеграция PR #93 в защищённую
 `main` не подтверждены.
 Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
