@@ -135,6 +135,48 @@ async function expectCapturedAppDatabase(page: Page) {
   ))).toBe(true);
 }
 
+test('shows a partial migration notice when all legacy records are quarantined', async ({ page }) => {
+  test.setTimeout(90_000);
+  const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'));
+  const storageTrace: string[] = [];
+  await captureAppDatabase(page, 'quarantine-only', storageTrace);
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true });
+    await page.addInitScript(({ sourceKey, record }) => localStorage.setItem(sourceKey, JSON.stringify([record])), {
+      sourceKey: legacySourceKey,
+      record: { type: 'put', key: '', value: 'must-remain-quarantined' },
+    });
+    await openApp(page, `${server.origin}/#settings`);
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expectCapturedAppDatabase(page);
+
+    await expect.poll(async () => {
+      const state = await migrationState(page);
+      const active = state.metadata.find(entry => entry.id === 'active-session');
+      return {
+        status: state.progress?.status,
+        sendAllowed: state.progress?.sendAllowed,
+        unknown: state.migrationUnknown.map(({ reason, rawRecord }) => ({ reason, rawRecord })),
+        operations: state.operations,
+        pause: active?.pause,
+      };
+    }).toEqual({
+      status: 'partial',
+      sendAllowed: true,
+      unknown: [{ reason: 'invalid-key', rawRecord: { type: 'put', key: '', value: 'must-remain-quarantined' } }],
+      operations: [],
+      pause: undefined,
+    });
+
+    await expect(page.locator('[data-state-notice-region] p[role="status"]'))
+      .toContainText('Некоторые записи из прежней очереди не удалось импортировать');
+    expect(server.stateWriteKeys).not.toContain('');
+    expect(server.unexpectedApi).toEqual([]);
+  } finally {
+    await server.close();
+  }
+});
+
 function itemForKey(items: MigrationItem[], key: string): MigrationItem | undefined {
   return items.find((item) => {
     try { return (JSON.parse(item.canonical) as unknown[])[1] === key; } catch { return false; }

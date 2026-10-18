@@ -1,5 +1,29 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 follow-up — показывать неперенесённые legacy-записи, локальная проверка, 18.10.2026
+
+После полной миграции повреждённая запись правильно сохранялась в
+`outbox_migration_unknown`, а прогресс получал статус `partial`. При этом
+`sendAllowed` мог оставаться `true`: проверенные операции безопасно продолжали
+синхронизацию. Если других очередей или ошибок не было, интерфейс не сообщал о
+записях, оставшихся в карантине.
+
+Добавлен отдельный информационный статус для аккаунта. UI показывает, что
+неперенесённые записи сохранены для проверки, отдельно от блокировки отправки;
+пауза и разрешение на отправку не меняются. Счётчик берётся только из
+неразрешённых записей карантина, а не из общего числа несинхронизированных
+legacy-операций.
+
+Новая browser-регрессия на настоящем IndexedDB/Service Worker с синтетическим
+HTTP API прошла **7/7** desktop/mobile/PWA проектов без retries. Связанные
+legacy migration unit-тесты прошли **78/78**, typecheck и production build
+прошли. В одном запуске unit-проверка параллельно со сборкой превысила локальный
+5-секундный timeout; изолированный повтор и полный целевой набор прошли.
+Опубликованный HEAD `05bf14b` и [точный CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
+проверяют предыдущий код: на момент записи E2E ещё выполняются. Новый UI
+follow-up ожидает публикации и exact-head CI. Остальные P0.8/P0.9 lifecycle,
+staging, выпуск и интеграция в защищённую `main` остаются открытыми.
+
 ## P0.8 — не терять edit при source re-verification и полном storage clear, `152b7af`, 18.10.2026
 
 Desktop WebKit воспроизвёл гонку старой вкладки: её неудачная попытка отправки
@@ -6607,4 +6631,4 @@ Branch preview развернул `de56ab3`. Свежие анонимные GET
 
 Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258) для `de56ab3` завершился одним отказом `a native profile refresh cancelled by reload stays handled in Safari` на iPhone Safari. Trace показал `/api/ai due to access control checks` через 21 мс после начала `page.reload()`. Локальный повтор выявил, что Desktop WebKit иногда также логирует `Weekly AI reporting failed: TypeError: Load failed` при таком переходе.
 
-`useWeeklyAiReport` теперь инвалидирует попытку уже на `beforeunload`, сохраняя `pagehide` для остальных переходов и BFCache. Acceptance учитывает не более одного точного WebKit `/api/ai` access-control page error только внутри reload; остальные page/console errors остаются отказами теста. Целевые unit `weekly_ai_report_feature` и `ai_session_transport` прошли 32/32, reload acceptance — 9/9 на desktop WebKit, iPhone Safari и iPhone PWA без retries. Исправление ещё не опубликовано, exact CI follow-up ожидает push; P0.8/P0.9, staging и выпуск открыты.
+`useWeeklyAiReport` теперь инвалидирует попытку уже на `beforeunload`, сохраняя `pagehide` для остальных переходов и BFCache. Acceptance учитывает не более одного точного WebKit `/api/ai` access-control page error только внутри reload; остальные page/console errors остаются отказами теста. Целевые unit `weekly_ai_report_feature` и `ai_session_transport` прошли 32/32, reload acceptance — 9/9 на desktop WebKit, iPhone Safari и iPhone PWA без retries. Исправление опубликовано в `05bf14b`. Точный [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242) прошёл audit, schema/privacy/auth/API guards, unit, три typecheck и production build; E2E выполняются. Read-only smoke branch preview подтвердил bundle `05bf14b`: `/`, `/api/env`, `/api/me` — 200; защищённые `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401 без redirect и `Set-Cookie`. P0.8/P0.9, staging и выпуск открыты.

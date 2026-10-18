@@ -3,7 +3,7 @@ import { stateSync } from '../storage/stateSync';
 import { legacyRecoveryResource } from '../storage/durableOutbox';
 import { userStateDatabase } from '../storage/stateDatabase';
 import {
-  getStateQueueOperations, getStateQueueSummaries, getStateSaveIssues, getStateSyncPauses,
+  getStateLegacyMigrationNotices, getStateQueueOperations, getStateQueueSummaries, getStateSaveIssues, getStateSyncPauses,
   subscribeStateSaveIssues, type StateQueueOperation,
 } from '../storage/stateSaveStatus';
 
@@ -18,6 +18,7 @@ const messages = {
   access: 'Изменения сохранены на устройстве. Для синхронизации требуется доступ к FitFocus.',
   protocol: 'Изменения сохранены на устройстве и ожидают синхронизации. Сервер ещё не подтвердил совместимый формат отправки.',
   legacy: 'Изменения сохранены на устройстве и ожидают синхронизации. Сначала нужно проверить импорт прежних изменений.',
+  legacyPartial: 'Некоторые записи из прежней очереди не удалось импортировать. Они сохранены для проверки; проверенные изменения продолжают синхронизироваться.',
   pending: 'Изменения сохранены на устройстве и ожидают синхронизации.',
   recovery: 'Разрешить конфликт или повторить отправку',
 };
@@ -74,6 +75,7 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
   const queues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
   const queueOperations = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueOperations, getStateQueueOperations);
   const pauses = useSyncExternalStore(subscribeStateSaveIssues, getStateSyncPauses, getStateSyncPauses);
+  const legacyMigrationNotices = useSyncExternalStore(subscribeStateSaveIssues, getStateLegacyMigrationNotices, getStateLegacyMigrationNotices);
   const status = useSyncExternalStore(subscribeDatabase, databaseStatus, databaseStatus);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -82,15 +84,17 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
   const ownOperations = queueOperations.filter((operation) => operation.accountId === accountId);
   const recoveryGroups = groupRecoveryOperations(ownOperations);
   const pause = pauses.find((entry) => entry.accountId === accountId)?.reason;
+  const legacyMigrationNotice = legacyMigrationNotices.find((entry) => entry.accountId === accountId);
   const conflict = ownQueue?.conflicted || ownIssues.some((issue) => issue.kind === 'conflicted');
-  const visible = status === 'blocked' || ownIssues.length || ownQueue?.pending || ownQueue?.sending || ownQueue?.failed || conflict;
+  const visible = status === 'blocked' || ownIssues.length || ownQueue?.pending || ownQueue?.sending || ownQueue?.failed || conflict || legacyMigrationNotice;
   const message = status === 'blocked' ? messages.blocked
     : ownIssues.some((issue) => issue.kind === 'error') ? messages.error
       : conflict ? messages.conflict
         : pause === 'auth' ? messages.auth
           : pause === 'access' ? messages.access
             : pause === 'protocol' ? messages.protocol
-              : pause === 'legacy' ? messages.legacy
+              : pause === 'legacy' ? `${messages.legacy}${legacyMigrationNotice ? ` ${messages.legacyPartial}` : ''}`
+                : legacyMigrationNotice ? messages.legacyPartial
                 : ownQueue?.failed ? messages.failed : messages.pending;
 
   async function resolve(group: RecoveryGroup, choice: RecoveryChoice): Promise<void> {

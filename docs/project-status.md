@@ -4,12 +4,19 @@
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке
 `fix/durable-outbox` с base `fix/state-generations`; опубликованный code/test HEAD —
-`de56ab3`. Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
+`05bf14b`. В точном [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
+успешно завершились audit, guards, unit, три typecheck и production build; E2E
+ещё выполняются. Предыдущий [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
 завершился одним Safari E2E отказом на profile-refresh reload: WebKit выдал
-`/api/ai due to access control checks` в начале навигации. Локальный follow-up
-закрывает weekly-AI scope на `beforeunload`; целевые unit прошли 32/32,
-Safari/WebKit reload матрица — 9/9 без retries. Новый exact CI после публикации
-follow-up ожидает запуска.
+`/api/ai due to access control checks` в начале навигации. Follow-up закрывает
+weekly-AI scope на `beforeunload`; целевые unit прошли 32/32, Safari/WebKit reload
+матрица — 9/9 без retries.
+
+Локально подготовлен следующий P0.8 follow-up: UI теперь должен показывать
+неразрешённые записи legacy-карантина, даже когда проверенная отправка остаётся
+разрешённой. Новый сценарий прошёл 7/7 браузерных/PWA профилей без retries,
+связанные unit — 78/78; typecheck и production build прошли. Эти изменения ещё не
+в опубликованном HEAD `05bf14b` и не включены в CI #1605.
 
 В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
 перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
@@ -19,8 +26,9 @@ follow-up ожидает запуска.
 включена в этот HEAD и локально прошла 7/7. Целевые unit `legacy_queue` и
 `legacy_migration` прошли 128/128.
 
-Свежий read-only smoke текущего branch preview: `/`, `/api/env` и анонимный
-`/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`, `/api/state` и
+Read-only smoke branch preview подтвердил опубликованный bundle SHA `05bf14b`:
+`/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`,
+`/api/profile`, `/api/state` и
 `/api/push/status` вернули 401 без redirect и `Set-Cookie`. Google Client IDs
 пусты; OAuth, авторизованные действия, D1 и отдельная staging-база не подтверждены.
 

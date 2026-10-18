@@ -1,7 +1,7 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, legacyRecoveryResource, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome,
   type OutboxIntent, type OutboxReadGuard } from './durableOutbox';
-import { reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
+import { reportStateLegacyMigrationNotice, reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
 import { LegacyQueueMigration } from './legacyMigration';
 import { checkLegacyWriterFence, type LegacyWriterFenceProof } from './legacyWriterFence';
@@ -162,6 +162,10 @@ export class StateSync {
       try { currentSource = this.legacySource.getItem(LEGACY_QUEUE_SOURCE_KEY); }
       catch { currentSource = undefined; }
       const ready = progress.sendAllowed && progress.sourceMatches && currentSource === sourceSnapshot;
+      const quarantinedRecords = progress.status === 'partial'
+        ? (await this.legacyMigration.unknown()).filter((record) => !record.resolved).length
+        : 0;
+      reportStateLegacyMigrationNotice(accountId, quarantinedRecords);
       if (generation === this.generation && this.accountId === accountId) {
         this.legacyFenceReady = ready;
         this.legacySourceSnapshot = ready ? sourceSnapshot : undefined;

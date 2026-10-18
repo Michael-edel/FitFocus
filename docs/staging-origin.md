@@ -228,3 +228,16 @@ D1 binding/изоляцию, `APP_URL`, OAuth start/callback, реальные e
 
 До этих проверок staging и выпуск не подтверждены. Сохранение origin —
 один критерий общего [плана P0](../TASKS.md), не закрытие всех release gates.
+
+### Read-only branch preview smoke: `05bf14b`, 18.10.2026
+
+`https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт статический bundle,
+содержащий полный SHA `05bf14ba282595a175570f57b8e42be1e8874132`.
+`HttpClient` без cookies и auto-redirect получил: `/`, `/api/env`, `/api/me` —
+200; `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401.
+Redirect и `Set-Cookie` не обнаружены; `/api/env` сообщает пустые Google Client
+IDs и `requireInvite=false`.
+
+Это подтверждает публикацию branch preview и выбранные анонимные GET-маршруты.
+Оно не проверяет D1 binding/изоляцию, `APP_URL`, OAuth start/callback,
+аутентифицированные записи, остальные edge routes или отдельную staging-базу.

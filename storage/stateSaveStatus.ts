@@ -8,6 +8,24 @@ export function reportStateSyncPause(accountId: string, reason: StateSyncPause |
   pauseSnapshot = [...pauseSnapshot.filter((entry) => entry.accountId !== accountId), ...(reason ? [{ accountId, reason }] : [])];
   publish();
 }
+export type StateLegacyMigrationNotice = { accountId: string; quarantinedRecords: number };
+let legacyMigrationSnapshot: readonly StateLegacyMigrationNotice[] = [];
+export const getStateLegacyMigrationNotices = () => legacyMigrationSnapshot;
+export function reportStateLegacyMigrationNotice(accountId: string, quarantinedRecords: number | null): void {
+  const current = legacyMigrationSnapshot.find((entry) => entry.accountId === accountId);
+  if (quarantinedRecords === null || quarantinedRecords <= 0) {
+    if (!current) return;
+    legacyMigrationSnapshot = legacyMigrationSnapshot.filter((entry) => entry.accountId !== accountId);
+    publish();
+    return;
+  }
+  if (current?.quarantinedRecords === quarantinedRecords) return;
+  legacyMigrationSnapshot = [
+    ...legacyMigrationSnapshot.filter((entry) => entry.accountId !== accountId),
+    { accountId, quarantinedRecords },
+  ];
+  publish();
+}
 const issues = new Map<string, StateSaveIssue>();
 const listeners = new Set<() => void>();
 let snapshot: readonly StateSaveIssue[] = [];
