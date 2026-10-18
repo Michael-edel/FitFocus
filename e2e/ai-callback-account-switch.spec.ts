@@ -492,6 +492,79 @@ test('navigation aborts a held Coach retry without durable success effects', asy
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
+test('navigation aborts the plateau AI request during session hydration before the daily task is committed', async ({ page }) => {
+  const marker = '__e2e_hydration_plateau_unload__';
+  await page.addInitScript(markerKey => {
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${markerKey}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      let feature: unknown;
+      try { feature = typeof init?.body === 'string' ? JSON.parse(init.body).feature : undefined; } catch { /* Ignore unrelated requests. */ }
+      if (url.pathname === '/api/ai' && feature === 'plateau' && init?.signal) {
+        mark('request', 'started');
+        init.signal.addEventListener('abort', () => mark('signal', 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => mark('beforeunload', 'fired'));
+    window.addEventListener('pagehide', () => mark('pagehide', 'fired'));
+  }, marker);
+
+  const diary = [{
+    id: 'hydration-plateau-food', name: 'Завтрак', calories: 320, protein: 23, fat: 21, carbs: 4,
+    timestamp: new Date().toISOString(),
+  }];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id, true),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify(diary), exists: true, version: 1,
+    }, {
+      accountId: accountA.id, key: `fitfocus_data_${accountA.id}_habits`, value: '[]', exists: true, version: 1,
+    }],
+  };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fixture = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect.poll(() => fixture.counts.heldRequests).toBe(1);
+  await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:request`), marker)).toBe('started');
+  expect(fixture.counts.aiRequests).toEqual([{ feature: 'plateau', account: accountA.id, session: accountA.sid }]);
+  const before = await readDurableSnapshot(page);
+  const appOrigin = await page.evaluate(() => location.origin);
+
+  await page.goto('about:blank');
+  fixture.release();
+  await expect.poll(() => fixture.counts.releasedResponses).toBe(1);
+  await page.route('**/__e2e-idb-inspection', route => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><html><body>IndexedDB inspection</body></html>',
+  }));
+  await page.goto(`${appOrigin}/__e2e-idb-inspection`);
+  const after = await readDurableSnapshot(page);
+
+  expect(after.values).toEqual(before.values);
+  expect(after.operations).toEqual(before.operations);
+  expect(after.activeSession).toEqual(before.activeSession);
+  expect(fixture.counts.stateWrites).toEqual([]);
+  expect(fixture.counts.profileWrites).toEqual([]);
+  expect(fixture.counts.achievementChecks).toBe(0);
+  expect(fixture.counts.aiRequests).toEqual([{ feature: 'plateau', account: accountA.id, session: accountA.sid }]);
+  expect(await page.evaluate(markerKey => ({
+    request: localStorage.getItem(`${markerKey}:request`),
+    signal: localStorage.getItem(`${markerKey}:signal`),
+    beforeunload: localStorage.getItem(`${markerKey}:beforeunload`),
+    pagehide: localStorage.getItem(`${markerKey}:pagehide`),
+  }), marker)).toEqual({ request: 'started', signal: 'aborted', beforeunload: 'fired', pagehide: 'fired' });
+  expect(errors).toEqual([]);
+});
+
 test('held coach retry cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const profileA = profileFor(accountA.id);

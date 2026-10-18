@@ -1,5 +1,21 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — navigation abort во время hydration задачи плато, 19.10.2026
+
+Новый E2E запускает session hydration с профилем плато и удержанным scoped
+`/api/ai` запросом. Он выполняет реальный переход на другую страницу до
+завершения запроса, освобождает поздний mock response и проверяет порядок
+`beforeunload → abort → pagehide`, неизменность durable profile/state/outbox и
+отсутствие profile/state writes и achievement checks. Так проверяется отдельный
+AI writer, который запускается автоматически при входе, до появления экрана.
+
+Сценарий прошёл **7/7** на desktop Chromium/Firefox/WebKit, Android Chrome,
+Android PWA Chrome, iPhone Safari и iPhone PWA (`workers=1,retries=0`);
+`npm run typecheck` и `git diff --check` прошли. Runtime-код не менялся:
+проверка подтвердила существующую отмену scoped transport. Это mock API, не
+доказательство отмены работы внешнего AI-провайдера, реального BFCache или
+staging. Точный CI новой ревизии проверяется после push.
+
 ## P0.5 — навигация во время AI-генерации семейного меню, `e22b2bf`, 19.10.2026
 
 Новый E2E удерживает `/api/ai` для family-menu, затем выполняет реальную

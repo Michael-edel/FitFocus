@@ -1218,6 +1218,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     unit — 25/25, `npm run typecheck` и `git diff --check` прошли в `b4336d8`.
     Это mock API;
     отмена работы внешнего AI-провайдера, BFCache и staging этим не проверены.
+  - [x] Проверить реальный переход со страницы во время AI-объяснения плато,
+    запущенного при session hydration. Удержанный scoped `/api/ai` отменяется
+    на `beforeunload` до `pagehide`; поздний ответ после навигации не завершает
+    hydration и не меняет profile, значения, outbox или achievements. Сценарий
+    прошёл 7/7 на семи browser/PWA профилях без retries; root typecheck и
+    `git diff --check` прошли. Это mock API; реальный BFCache, внешний AI provider
+    и staging не подтверждены. Точный CI follow-up ожидает push.
   Отдельно добавлена account-switch проверка позднего ответа
   `/api/family/menu/generate`: после входа другого аккаунта preview не создаёт
   menu outbox operation; delayed `/api/family/menu/state` GET также не гидратирует
