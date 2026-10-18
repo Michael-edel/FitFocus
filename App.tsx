@@ -1267,24 +1267,57 @@ const App: React.FC = () => {
 
   // Load public env flags (no auth)
   useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    const removePageExit = listenForPageExit(() => {
-      active = false;
-      controller.abort();
-    });
-    void (async () => {
-      try {
-        const r = await fetchWithResilience('/api/env', { credentials: 'include', signal: controller.signal }, { retries: 1 });
-        if (!active || !r.ok) return;
-        const raw = await r.json().catch(() => null) as unknown;
-        if (active && isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
-      } catch {}
-    })();
-    return () => {
-      active = false;
+    let disposed = false;
+    let generation = 0;
+    let controller: AbortController | null = null;
+    let removePageExit = () => {};
+
+    const loadPublicEnv = () => {
+      const requestGeneration = ++generation;
       removePageExit();
-      controller.abort();
+      controller?.abort();
+      const requestController = new AbortController();
+      controller = requestController;
+      removePageExit = listenForPageExit(() => {
+        if (requestGeneration !== generation) return;
+        generation += 1;
+        requestController.abort();
+      });
+
+      void (async () => {
+        try {
+          const r = await fetchWithResilience('/api/env', {
+            credentials: 'include',
+            signal: requestController.signal,
+          }, { retries: 1 });
+          if (disposed || requestGeneration !== generation || !r.ok) return;
+          const raw = await r.json().catch(() => null) as unknown;
+          if (!disposed && requestGeneration === generation && isRecord(raw)
+            && typeof raw.requireInvite === 'boolean') {
+            setRequireInvite(raw.requireInvite);
+          }
+        } catch {
+          // Public configuration is optional until the next page load/restore.
+        } finally {
+          if (requestGeneration === generation) removePageExit();
+        }
+      })();
+    };
+
+    const onPageShow = (event: Event) => {
+      if (!(event as PageTransitionEvent).persisted || disposed) return;
+      setInviteChecking(false);
+      loadPublicEnv();
+    };
+
+    window.addEventListener('pageshow', onPageShow);
+    loadPublicEnv();
+    return () => {
+      disposed = true;
+      generation += 1;
+      removePageExit();
+      window.removeEventListener('pageshow', onPageShow);
+      controller?.abort();
     };
   }, []);
 
