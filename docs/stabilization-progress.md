@@ -6988,3 +6988,28 @@ admin guards, production build и `git diff --check` прошли. Новая р
 устройства и реальный BFCache остаются отдельными gates. Точный CI текущего
 опубликованного SHA проверяется через PR #93 после push. Общий P0.5/P0.9 не
 закрыт.
+
+## P0.5 — повторная загрузка публичной конфигурации после BFCache lifecycle, локальный follow-up, 19.10.2026
+
+Новая ранняя отмена `/api/env` прерывала запрос при уходе со страницы. При
+восстановлении документа React effect автоматически не запускается повторно,
+поэтому приложение могло оставить `requireInvite` устаревшим. Теперь при
+`pageshow.persisted` старый request generation инвалидируется, состояние
+`inviteChecking` сбрасывается и `/api/env` запрашивается заново. Поздний ответ
+предыдущего запроса не меняет состояние.
+
+`e2e/http-client-lifecycle.spec.ts` проверил удержанный `/api/env`, abort на
+`pagehide` и второй успешный запрос после синтетического persisted `pageshow`:
+**14/14** на семи Playwright desktop/mobile/PWA профилях, workers=1/retries=0.
+Полный unit suite — **1420/1420** в 216 файлах; root/domain-strict/storage-strict
+typecheck и production build прошли. Code/test сохранены локальным коммитом
+[`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041); он ещё не
+опубликован и не включён в точный CI.
+
+Попытка проверить настоящий browser back отдельно не дала BFCache в Playwright;
+CDP сообщил `BackForwardCacheDisabledForDelegate` даже после удаления явного
+флага из Chromium и запуска установленного Chrome. Этот harness-result не
+считается ошибкой приложения и не подтверждает реальный BFCache. Удалённый CI
+#1663 на опубликованном HEAD `7acfc86` всё ещё выполняет browser tests; новый
+HEAD не отправляется до его завершения. Реальный BFCache, staging/OAuth и общий
+P0.5/P0.9 остаются открытыми.

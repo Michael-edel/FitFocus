@@ -2,15 +2,24 @@
 
 Обновлено: 19.10.2026. Рабочая ветка `fix/durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base
-`fix/state-generations`. Последний локально проверенный code/test commit —
+`fix/state-generations`. Последний опубликованный HEAD —
+[`7acfc86`](https://github.com/Michael-edel/FitFocus/commit/7acfc86553e50696768b66fe000336389e1858cb);
+точный CI #1663 пока выполняет browser tests. Последний опубликованный
+code/test commit —
 [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30). Он
 добавляет раннюю отмену публичных auth callbacks `/api/env` и
 `POST /api/invite/validate`; `fetchWithResilience` соблюдает переданный
 `AbortSignal` и прекращает retry после отмены. Локально прошли 1420 unit-тестов
 в 216 файлах, root/domain/storage typecheck, API/auth/schema/privacy guards,
 production build и навигационный E2E 7/7 на desktop/mobile/PWA профилях.
-Точный CI нового SHA проверяется после push; прежний CI #1659 относится к
-родительскому `bb7e238` и не подтверждает этот follow-up.
+Локальный code/test commit [`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041)
+повторно запускает `/api/env` при `pageshow.persisted` и
+сбрасывает застрявший индикатор проверки приглашения. Его lifecycle E2E прошёл
+14/14 в семи desktop/mobile/PWA профилях; unit — 1420/1420, три typecheck и
+production build прошли. Коммит пока локальный и не входит в CI #1663.
+Эксперимент с реальным browser back не смог получить BFCache в Playwright:
+Chromium сообщает `BackForwardCacheDisabledForDelegate`; реальный BFCache остаётся
+открытым gate. Новый SHA будет отправлен после завершения текущего CI.
 
 В плане 32 незакрытых чекбокса: 18 в P0, 7 в P1, ещё 7 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
@@ -923,6 +932,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     retries. Изменение — [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30);
     точный CI этой ревизии проверяется после push. Остальные writers, полный
     lifecycle и staging остаются открыты.
+  - [x] При восстановлении страницы из BFCache (`pageshow.persisted`) заново
+    запросить `/api/env` и сбросить зависший `inviteChecking`; поколения запроса
+    не дают старому ответу примениться. Синтетический pagehide/pageshow acceptance
+    прошёл 14/14 на семи браузерных/PWA проектах, полный unit — 1420/1420, три
+    typecheck и production build прошли. Это не подтверждает реальный BFCache;
+    exact CI ожидает публикации вместе с локальным follow-up.
   `d2cbb25` добавляет account-switch acceptance для недельного AI-отчёта:
   удержанный ответ A после входа B не меняет report value/outbox ни A, ни B;
   сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit, без retries.

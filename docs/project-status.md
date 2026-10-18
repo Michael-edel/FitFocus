@@ -17,8 +17,16 @@
 меняет UI. Полный unit suite прошёл 1420/1420 в 216 файлах; root/domain/storage
 typecheck, API/auth/schema/privacy guards, production build и diff check прошли.
 Реальная навигация с удержанным `/api/env` прошла 7/7 desktop/mobile/PWA
-профилей без retries. Точный CI нового SHA проверяется после push; реальный
-BFCache, устройства, OAuth и staging ещё не подтверждены.
+профилей без retries. Удалённый HEAD `7acfc86`; точный CI #1663 ещё выполняет
+browser tests. Локальный code/test commit
+[`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041) добавил
+повторную загрузку `/api/env` и
+сброс invite-check при `pageshow.persisted`; синтетический lifecycle E2E прошёл
+14/14 на семи профилях, полный unit — 1420/1420, три typecheck и build прошли.
+Этот локальный follow-up пока не опубликован и не входит в текущий CI. Playwright сообщает
+`BackForwardCacheDisabledForDelegate` при попытке настоящего browser back, поэтому
+реальный BFCache остаётся незакрытым gate; устройства, OAuth и staging тоже не
+подтверждены.
 
 В плане 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных или
 компонентных разделах. Открыты полная lifecycle-матрица, UI разрешения
