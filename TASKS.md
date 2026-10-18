@@ -1845,6 +1845,14 @@ all-client Service Worker fence, атомарные migration items и quarantin
     сценарий прошёл 5/5, полная desktop WebKit family-menu спека — 16/16 без
     retries. Полный [CI #1491](https://github.com/Michael-edel/FitFocus/actions/runs/38996003342)
     для `0af2c30` выполняется; staging и общий lifecycle всё ещё открыты.
+  - [x] Устранить гонку legacy profile recovery с параллельным session reverify:
+    после scoped GET используется захваченный read guard, а его актуальность
+    атомарно проверяется по `active-session` и `auth-fence` в outbox transaction.
+    Регрессионный unit подтвердил отказ до правки и успех после неё; legacy
+    migration E2E прошёл 49/49 на семи профилях и Android Chrome 10/10.
+    Полный unit — 1421/1421, три typecheck, guards и production build прошли.
+    Полный CI нового follow-up ожидается после push; родительский P0.8 остаётся
+    открытым до общей приёмки.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

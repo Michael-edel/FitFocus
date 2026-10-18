@@ -256,8 +256,7 @@ export class StateSync {
           'X-FitFocus-State-Account': accountId, 'X-FitFocus-State-Session': serverSessionId,
         } }, controller, this.timeoutMs);
         const profile = body?.profile;
-        if (generation !== this.generation || this.accountId !== accountId || this.session?.serverSessionId !== serverSessionId
-          || this.readGuard?.sessionEpoch !== guard.sessionEpoch || this.readGuard.authFence !== guard.authFence
+        if (generation !== this.generation || this.accountId !== accountId
           || !response.ok || !this.profileScope(response, accountId, serverSessionId) || !isUserProfilePayload(profile)
           || profile.id !== accountId || typeof profile.version !== 'number' || !Number.isSafeInteger(profile.version) || profile.version < 1) return false;
         snapshot = { value: JSON.stringify(profile), version: profile.version, exists: true };
@@ -267,8 +266,7 @@ export class StateSync {
         const { response, body } = await requestJson(this.fetchFn, `/api/state?${query}`, { headers: {
           'X-FitFocus-State-Account': accountId, 'X-FitFocus-State-Session': serverSessionId,
         } }, controller, this.timeoutMs);
-        if (generation !== this.generation || this.accountId !== accountId || this.session?.serverSessionId !== serverSessionId
-          || this.readGuard?.sessionEpoch !== guard.sessionEpoch || this.readGuard.authFence !== guard.authFence
+        if (generation !== this.generation || this.accountId !== accountId
           || !response.ok || !this.stateScope(response, accountId, serverSessionId) || !Array.isArray(body?.items)) return false;
         const matches = body.items.filter((item) => isRecord(item) && item.key === key);
         if (matches.length > 1) return false;
@@ -286,8 +284,10 @@ export class StateSync {
     } finally {
       this.requests.delete(controller);
     }
-    if (!snapshot || generation !== this.generation || this.accountId !== accountId || this.session?.serverSessionId !== serverSessionId
-      || this.readGuard?.sessionEpoch !== guard.sessionEpoch || this.readGuard.authFence !== guard.authFence) return false;
+    if (!snapshot || generation !== this.generation || this.accountId !== accountId) return false;
+    // A concurrent reverify may temporarily clear the in-memory read guard. The
+    // outbox transaction below validates the captured guard against the current
+    // session epoch and auth fence atomically before resolving this operation.
     const resolved = await this.outbox.resolveLegacyConflictGroup({
       accountId, key, expectedOpIds: [...expectedOpIds], choice, resource, readGuard: guard, nowMs: this.now(), serverSnapshot: snapshot,
     });

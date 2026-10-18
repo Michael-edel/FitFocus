@@ -10,29 +10,32 @@
 открыт против `fix/state-generations` и зависит от PR #94 и #90. Коммит
 [`7777636`](https://github.com/Michael-edel/FitFocus/commit/7777636f0beb1b874529f89f1f7309c3b048e751)
 распространил общий page-exit guard на session-bound transports и StateSync.
-Следующий коммит [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30)
-закрыл два оставшихся публичных auth callback: `/api/env` и проверку приглашения.
-`fetchWithResilience` теперь соблюдает переданный `AbortSignal`, распознаёт
-отмену отдельно от timeout и не повторяет отменённый запрос; поздний ответ не
-меняет UI. Полный unit suite прошёл 1420/1420 в 216 файлах; root/domain/storage
-typecheck, API/auth/schema/privacy guards, production build и diff check прошли.
-Реальная навигация с удержанным `/api/env` прошла 7/7 desktop/mobile/PWA
-профилей без retries. Удалённый HEAD `7acfc86`; точный CI #1663 ещё выполняет
-browser tests. Локальный code/test commit
-[`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041) добавил
-повторную загрузку `/api/env` и
-сброс invite-check при `pageshow.persisted`; синтетический lifecycle E2E прошёл
-14/14 на семи профилях, полный unit — 1420/1420, три typecheck и build прошли.
-Этот локальный follow-up пока не опубликован и не входит в текущий CI. Playwright сообщает
-`BackForwardCacheDisabledForDelegate` при попытке настоящего browser back, поэтому
-реальный BFCache остаётся незакрытым gate; устройства, OAuth и staging тоже не
-подтверждены.
+Коммит [`050eb30`](https://github.com/Michael-edel/FitFocus/commit/050eb30)
+закрыл публичные auth callbacks `/api/env` и invite-check; `fetchWithResilience`
+соблюдает `AbortSignal`, отделяет отмену от timeout и не повторяет отменённый
+запрос. Реальная навигация с удержанным `/api/env` прошла 7/7 desktop/mobile/PWA
+профилей без retries. Локальные коммиты [`bd30041`](https://github.com/Michael-edel/FitFocus/commit/bd30041)
+и [`185661e`](https://github.com/Michael-edel/FitFocus/commit/185661e) добавили
+повтор `/api/env` и сброс invite-check при `pageshow.persisted`; синтетический
+lifecycle E2E прошёл 14/14 на семи профилях. Попытка проверить настоящий
+BFCache остаётся ограниченной Playwright `BackForwardCacheDisabledForDelegate`.
 
-В плане 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных или
-компонентных разделах. Открыты полная lifecycle-матрица, UI разрешения
-конфликтов, оставшиеся writers/callbacks, отдельные staging/OAuth/D1-проверки,
-релизный rollback и интеграция через защищённую `main`. Branch preview не
-считается staging; прямое слияние в `main` не выполнено.
+Удалённый HEAD ветки PR — `7acfc86`; [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
+завершился одним сбоем на Android Chrome при разрешении legacy-конфликта профиля.
+В трассе обнаружена гонка с параллельным reverify сессии: временно очищенный
+in-memory `readGuard` приводил к ложному отказу после успешного scoped profile
+GET. Исправление повторно проверяет сохранённый guard атомарно в outbox-транзакции.
+Unit-регрессия прошла red→green; полная legacy-migration E2E прошла **49/49**
+на семи browser/PWA профилях, точный Android Chrome сценарий — **10/10**.
+Полный unit прошёл **1421/1421**; root/domain/storage-strict typecheck,
+API/auth/schema/privacy guards и production build прошли. Follow-up ещё не
+опубликован, поэтому новый CI ожидает push.
+
+У плана остаются 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных
+или компонентных разделах. Открыты полная lifecycle-матрица, остальные writers
+и callbacks, staging/OAuth/D1-проверки, release rollback и интеграция через
+защищённую `main`. Branch preview не считается staging; прямое слияние в `main`
+ожидает одобряющего ревью.
 
 В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
 request-scoped `AiActionScope`; `a739c1e` применяет её к параллельным family

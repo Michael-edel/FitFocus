@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8 — гонка восстановления legacy-профиля с повторной проверкой сессии, 19.10.2026
+
+Точный [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
+на старом опубликованном merge SHA `d039538` завершился одним browser-сбоем на
+Android Chrome: `resolves a legacy profile through its guarded profile CAS endpoint`.
+Трасса показала успешный scoped `GET /api/profile`, после которого параллельная
+проверка `/api/me` временно очищала in-memory `readGuard`; восстановление затем
+ошибочно отказывало, хотя та же сессия оставалась активной в IndexedDB. Другие
+проверки CI, включая audit, unit, typecheck и production build, прошли.
+
+В локальном изменении после ответа сервера проверяются поколение и account, а
+захваченный read guard повторно проверяется атомарно в транзакции outbox по
+`active-session` и `auth-fence`. Это сохраняет отказ при фактической смене сессии
+и устраняет ложный отказ при параллельном reverify. Добавлен unit-регрессионный
+тест, который воспроизводит гонку: до исправления он падал, после — проходит.
+Профильная migration E2E прошла **49/49** на семи browser/PWA-профилях без
+retries; точный Android Chrome сценарий прошёл **10/10**. Полный unit —
+**1421/1421**, root/domain/storage-strict typecheck, admin/auth/API/schema/privacy
+guards и production build прошли. Изменение ещё не опубликовано; новый точный CI
+для этой ревизии ожидается после push. P0.8 и общая P0-приёмка остаются открыты.
+
 ## P0.5 — ранняя отмена callbacks поддержки, `d9317f7`, 19.10.2026
 
 `requestSupportJson` и чтение вложений в `requestSupportAttachmentBlob` раньше

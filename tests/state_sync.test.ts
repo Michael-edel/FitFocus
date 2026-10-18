@@ -446,6 +446,60 @@ describe('durable HTTP sender', () => {
     expect(receipt.resolution).toMatchObject({ kind: 'keep-latest-local', serverVersion: 9 });
   });
 
+  it('keeps a legacy profile resolution valid while another proof is in flight', async () => {
+    const profileKey = `fitfocus_data_${account}_profile`;
+    const localProfile = userProfile(account, { name: 'Локальный профиль', version: 1 });
+    const remoteProfile = userProfile(account, { name: 'Серверный профиль', version: 9 });
+    const legacy = await importLegacyConflict(profileKey, JSON.stringify(localProfile));
+    const profileScope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
+      'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sessionId };
+    let instance!: StateSync;
+    let meCalls = 0;
+    let resolveHeldProof!: (response: Response) => void;
+    let notifyHeldProofStarted!: () => void;
+    const heldProofStarted = new Promise<void>((resolve) => { notifyHeldProofStarted = resolve; });
+    let concurrentProof: Promise<boolean> | undefined;
+    const methods: string[] = [];
+    const fetchFn = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/me') {
+        meCalls += 1;
+        if (meCalls === 3) {
+          notifyHeldProofStarted();
+          return new Promise<Response>((resolve) => { resolveHeldProof = resolve; });
+        }
+        return json({ ...proof(), profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } });
+      }
+      if (url === '/api/profile' && method === 'GET') {
+        methods.push('GET profile');
+        concurrentProof = instance.syncNow(account);
+        await heldProofStarted;
+        return json({ profile: remoteProfile }, 200, profileScope);
+      }
+      if (url === '/api/profile' && method === 'PUT') {
+        methods.push('PUT profile');
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body).toMatchObject({ ...localProfile, baseVersion: 9 });
+        return json({ profile: { ...localProfile, version: 10 }, version: 10 }, 200, profileScope);
+      }
+      return json({ error: 'UNEXPECTED_REQUEST' }, 500, profileScope);
+    });
+    instance = new StateSync({ outbox, fetchImpl: fetchFn, now: () => now, random: () => 0.5, legacyPending: () => false });
+    clients.push(instance);
+    await instance.connect(account);
+
+    expect(await instance.resolveLegacyConflictedKey(account, profileKey, [legacy.opId], 'keep-latest-local')).toBe(true);
+    expect(methods).toEqual(['GET profile']);
+    const [receipt] = await stateTransaction(await db.open(), [STATE_STORES.migrationItems], 'readonly', (tx) =>
+      indexedRequest(tx.objectStore(STATE_STORES.migrationItems).getAll())) as MigrationItem[];
+    expect(receipt.resolution).toMatchObject({ kind: 'keep-latest-local', serverVersion: 9 });
+
+    resolveHeldProof(json({ ...proof(), profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } }));
+    expect(await concurrentProof).toBe(true);
+    expect(methods).toEqual(['GET profile', 'PUT profile']);
+    expect(await outbox.list(account)).toEqual([]);
+  });
+
   it('accepts a guarded server profile snapshot without sending the legacy local value', async () => {
     const profileKey = `fitfocus_data_${account}_profile`;
     const localProfile = userProfile(account, { name: 'Локальный профиль', version: 1 });
