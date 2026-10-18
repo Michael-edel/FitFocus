@@ -1,5 +1,23 @@
 # Текущее состояние FitFocus
 
+## Отдельная dashboard-ветка — 18.10.2026
+
+`fix/dashboard-readiness-20261018` остаётся независимой от основного checkout;
+её опубликованная база — `a84214f`. Follow-up проверяет раннюю отмену HTTP
+достижений при reload, адаптирует только profile-name readiness из `7f76a8e`
+и добавляет диагностику отказа legacy gate без изменения его защиты.
+Подробности и ограничения: [achievement-session](achievement-session.md),
+[legacy-migration](legacy-migration.md), [release-artifacts](release-artifacts.md).
+Сверено с опубликованным `9825e8d` durable-outbox: его `dc38a51` исправляет
+общий AI transport и registration action. Achievement transport и writer fence
+этими коммитами не меняются; их код в эту ветку не переносится. Результаты CI
+веток относятся к собственным SHA, а dashboard `errorsA` и writer proof
+проверяются отдельно.
+Полный exact-head CI этой итерации проверяется после её обычного push.
+Слияние, PR, deploy, production accounts и persistent access не изменяются.
+Ни один общий P0 этой отдельной проверкой не закрывается.
+
+
 Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке

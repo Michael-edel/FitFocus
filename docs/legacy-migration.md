@@ -1,5 +1,21 @@
 # Компонент импорта старой очереди
 
+## Диагностика независимой dashboard-ветки — 18.10.2026
+
+На рабочем дереве `fix/dashboard-readiness-20261018` поверх `a84214f` повтор
+full storage clear с двумя вкладками, настоящим Service Worker и native HTTP
+прошёл в Playwright-профиле iPhone Safari на Windows. Исторический отказ gate в CI `39114947822` этим не
+объявляется исправленным: его причина не установлена; runtime fence/importer,
+assertions и timeout не менялись.
+
+Failure attachment full-clear сценария теперь best effort сохраняет controller,
+active/waiting/installing registrations, module/build IDs и видимость обеих
+страниц, а также migration progress. Window API не раскрывает worker client
+inventory; дополнительных диагностических challenges тест не отправляет.
+Сохранённый conflicted intent не доказывает наличие all-client proof и не
+позволяет открыть send gate вручную.
+
+
 Обновлено: 18.10.2026. Реализация: `storage/legacyMigration.ts` и runtime в
 `storage/stateSync.ts`, проверки: `tests/legacy_migration.test.ts` и
 `tests/state_sync_legacy_migration.test.ts`, ветка

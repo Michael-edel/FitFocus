@@ -1,5 +1,30 @@
 # Сессия и очередь достижений
 
+## Независимый follow-up навигации — 18.10.2026
+
+Ветка `fix/dashboard-readiness-20261018`, рабочее дерево поверх `a84214f`.
+Транспорт отменяет активный request controller уже на `beforeunload`, перед
+отменой attempt/session controller; `pagehide` остаётся дополнительным барьером.
+Оба listener удаляются в `finally`. Account/session guard, response markers,
+deadline и отсутствие автоматического повтора мутации не меняются.
+
+Новый native HTTP тест `e2e/achievement-navigation.spec.ts` удерживает POST,
+проверяет исходные account/session headers и порядок
+`beforeunload → abort → pagehide` отдельно для старого документа. На исходной
+сборке `a84214f` он отказал: abort не был записан до ухода страницы; на
+исправленной сборке desktop WebKit прошёл. Транспортные unit: RED 15 passed /
+2 failed (GET/POST), GREEN 17 passed. Строгие pageerror/console-error assertions
+сохранены без фильтров.
+
+Исторический CI `39114947822` обнаружил WebKit
+`/api/achievements/check due to access control checks` через 28,097 мс после
+reload. Его точный браузерный механизм не воспроизведён стабильно: обычный и
+задержанный dashboard-сценарии локально прошли и до исправления. Проверенный
+lifecycle gap не является доказательством всех причин этой исторической ошибки.
+Отменённая пользователем навигация, BFCache, физические устройства и staging
+этим тестом не приняты.
+
+
 ## Актуальное уточнение — обязательный proof, `616f42c`, 15.10.2026
 
 Follow-up [`616f42c`](https://github.com/Michael-edel/FitFocus/commit/616f42ca2bb973cfb034f50112328843eaf837a4)

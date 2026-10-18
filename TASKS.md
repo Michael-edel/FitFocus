@@ -1,5 +1,15 @@
 # Стабилизация и развитие FitFocus
 
+## Независимая проверка dashboard — 18.10.2026
+
+В `fix/dashboard-readiness-20261018` поверх `a84214f` идёт отдельный follow-up
+трёх исторических браузерных отказов; распределение и границы указаны в
+[статусе ветки](docs/project-status.md#отдельная-dashboard-ветка--18102026).
+Проверенный lifecycle gap достижений не заменяет установление причины legacy
+gate; локальная успешная симуляция не закрывает staging, физические устройства
+или общий P0. Число незавершённых пунктов ниже не меняется.
+
+
 Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `05bf14b`.
 Точный [CI #1605](https://github.com/Michael-edel/FitFocus/actions/runs/39105107242)
 прошёл audit, guards, unit, три typecheck и production build; E2E выполняются.

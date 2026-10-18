@@ -10,6 +10,7 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
 export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
   retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+  achievementCheckGate?: { started: (scope: { method: string | undefined; account: string | undefined; session: string | undefined }) => void; wait: Promise<void> };
   profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let sessionId = initialSessionId;
   let disconnectStateWrites = false;
@@ -138,6 +139,12 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     }
     if (path === '/api/shopping/list') return json({ family_id: familyId, week_start: week,
       items: familyMenu.shoppingListItems?.map(item => ({ ...item, checked: false })) });
+    if (path === '/api/achievements/check' && method === 'POST' && options.achievementCheckGate) {
+      options.achievementCheckGate.started({ method, account: request.headers['x-fitfocus-state-account'] as string | undefined,
+        session: request.headers['x-fitfocus-state-session'] as string | undefined });
+      await options.achievementCheckGate.wait;
+      if (response.destroyed) return;
+    }
     if (path === '/api/achievements' || path === '/api/achievements/check') return json({ enabled: true, catalog: [], unlocked: [], newlyUnlocked: [] });
     if (path === '/api/ai' && body.feature === 'wis_text') return json({ text: 'E2E: питание и прогресс остаются в пределах персонального плана.' });
     if (path === '/api/wearable/huawei/status') return json({ connected: false, configured: false });

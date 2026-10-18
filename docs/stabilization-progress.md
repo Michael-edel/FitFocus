@@ -1,5 +1,63 @@
 # Стабилизация: проверяемые изменения
 
+## 18.10.2026 — независимый dashboard follow-up
+
+Ветка `fix/dashboard-readiness-20261018`; проверено рабочее дерево поверх
+`a84214f0052ed62f5e89bf0418233feb77400859` с локальными изменениями этой
+итерации, до commit/push. Основной checkout не изменялся.
+
+Сравнение: `7f76a8e` содержит известный profile readiness барьер и посторонний
+conflict selector; адаптирован только первый. CI `39136081427` на `702b4d1`
+проверен как success. Опубликованный `9825e8d` включает раннюю отмену общего
+AI transport из `dc38a51`; achievement transport, client, legacy fence и importer
+этими коммитами не меняются. Их изменения в эту ветку не переносились.
+
+Изменения и доказательства:
+
+- Achievement HTTP: ранняя отмена request controller на `beforeunload`, затем
+  attempt controller; `pagehide` и cleanup сохранены. Unit RED 15 passed /
+  2 failed (GET/POST), GREEN 17 passed.
+- Native HTTP regression: held scoped POST на старом dist записал
+  `request, beforeunload, pagehide` без abort и отказал. На исправленном
+  dist проверка порядка `beforeunload < abort < pagehide` прошла на всех
+  семи Playwright-профилях; ошибки консоли/страницы не фильтруются.
+- Dashboard normal/delayed: исходная сборка прошла 2/2 на WebKit; после
+  исправления все три desktop engines прошли обе версии с прежними
+  account-B/no-profile-write и `errorsA=[]` assertions.
+- Legacy full-clear: исходный iPhone Safari повтор прошёл 1/1. Первый локальный
+  запуск не загрузил app из-за отсутствующего fixture cache; этот harness
+  отказ не является воспроизведением исторического gate failure. После
+  подключения закреплённого legacy bundle `22a7788` сценарий прошёл; итоговая
+  матрица — 7/7 с настоящим SW/native HTTP. Runtime, proof, assertions и
+  timeout не менялись. Добавлен best-effort failure attachment controller/
+  registrations обеих вкладок и progress, без новых challenges.
+- Rollback: исходный conflicted iPhone PWA повтор прошёл 1/1. Барьер ожидает
+  исходное имя, затем exact post-fill значение до Save; прежняя проверка IDB
+  сохранена. Pending/conflicted матрица — 14/14, закреплённый rollback
+  artifact `98d4910` проверяется существующим verifier.
+
+Команды и среда: Windows, Node24.19.0, Playwright1.64.1, Vite6.4.3,
+Vitest4.1.11 из существующих зависимостей. Browser plugin отсутствует;
+использован Playwright, один worker, retries0. Preview127.0.0.1:43184;
+native HTTP fixtures используют отдельные loopback origins.
+`node node_modules/vitest/vitest.mjs run --maxWorkers=1` — 1370/1370,
+213 файлов. Общий, domain-strict, storage-strict TypeScript, admin guard,
+production build и `git diff --check` прошли. Targeted browser config вне repo
+`../dashboard-validation.config.mjs` — 34 passed / 8 skipped за12,2мин;
+пропуски — существующая desktop-only граница dashboard, новые skips не добавлены.
+JSON/артефакты вне repo: `../dashboard-validation.json`,
+`../dashboard-validation-results`,
+`../dashboard-navigation-baseline-results`. Независимый code/docs review
+блокирующих замечаний не нашёл.
+
+Ограничения: точный механизм исторического WebKit pageError и причина
+исторического закрытого legacy gate не установлены; проход не называется их
+доказанным устранением. Физические iOS/PWA, BFCache, отменённая навигация,
+реальные аккаунты/D1/staging не приняты. Ни один общий P0 не закрыт.
+Следующий gate — обычный push и terminal CI точного нового SHA; локальные числа
+не переносятся на него заранее. Merge, PR, deploy и persistent access не менялись.
+
+
 ## P0.8 follow-up — показывать неперенесённые legacy-записи, локальная проверка, 18.10.2026
 
 После полной миграции повреждённая запись правильно сохранялась в
