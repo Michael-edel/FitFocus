@@ -3,10 +3,14 @@
 Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
 Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт, base —
-`fix/state-generations`; он зависит от PR #94 и #90. Опубликованный HEAD —
-`a739c1e`. Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
-прошёл audit, schema/privacy/auth/API guards, 1391 unit, три typecheck и build;
-browser matrix выполняется.
+`fix/state-generations`; он зависит от PR #94 и #90. Последний проверенный
+кодовый SHA — `a739c1e`; последующие коммиты содержат только документационные
+follow-up.
+Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+завершился success: 1391 unit в 215 файлах, 1058 browser passed / 307 skipped
+за 44,7 минуты без retries; audit, schema/privacy/auth/API guards, три typecheck,
+build и rollback/CAS gate на 23 HTTP/D1-запроса прошли. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
 
 В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
 request-scoped `AiActionScope`; недельный отчёт сохраняет свою проверенную

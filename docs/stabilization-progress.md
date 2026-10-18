@@ -1,5 +1,17 @@
 # Стабилизация: проверяемые изменения
 
+## CI unload-исправлений, `a739c1e`, 19.10.2026
+
+Точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+завершился success на кодовом SHA `a739c1e`: dependency audit, schema/privacy/
+auth/API guards, **1391 unit в 215 файлах**, три typecheck и production build
+прошли. Browser matrix завершилась с **1058 passed / 307 skipped** за 44,7 минуты,
+без retries. Rollback/CAS gate выполнил и сохранил 23 HTTP/D1-запроса.
+[Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564)
+доступны в run. Этот результат подтверждает опубликованный код `a739c1e`;
+отдельный staging, OAuth и интеграция в защищённую `main` остаются открыты.
+
 ## P0.5/P0.9 — unload недельного AI-отчёта, 18.10.2026
 
 `useWeeklyAiReport` больше не держит постоянный `beforeunload` listener в

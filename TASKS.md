@@ -8,9 +8,12 @@ audit, schema/privacy/auth/API guards, три typecheck и build прошли; r
 gate выполнил 23 HTTP/D1-запроса. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146635676)
 и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39151491224/artifacts/12146590323).
 
-Текущий опубликованный HEAD `a739c1e`; точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
-прошёл audit, guards, 1391 unit, три typecheck и production build; сейчас
-выполняется browser job. `589d49e` распространил request-scoped `beforeunload`
+Проверенный кодовый HEAD `a739c1e`; точный [CI #1642](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399)
+завершился success: 1391 unit в 215 файлах, 1058 browser passed / 307 skipped
+за 44,7 минуты без retries; audit, schema/privacy/auth/API guards, три typecheck,
+build и rollback/CAS gate на 23 HTTP/D1-запроса прошли. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148361054)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39155718399/artifacts/12148176564).
+`589d49e` распространил request-scoped `beforeunload`
 через `AiActionScope` на AI callbacks, сохранив отдельную обработку недельного
 отчёта без дублирующего listener. `a739c1e` добавил один временный listener на
 группу активных family actions. Локально полный unit — 1391/1391, root/domain/
