@@ -75,7 +75,12 @@ function isLocalUserKey(key: string, userId: string): boolean {
   if (key === `ff_last_weekly_ai_attempt_${userId}`) return true;
   if (key === `ff_weekly_ai_inflight_${userId}`) return true;
   if (key === `ff_dev_plan_override_scope_${userId}`) return true;
-  return USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`);
+  if (USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`)) return true;
+  try {
+    return key === `fitfocus_usage_counters_v1:${encodeURIComponent(userId)}`;
+  } catch {
+    return false;
+  }
 }
 
 /** Automatic mirroring is retired; all synchronized edits require an explicit account editor. */
