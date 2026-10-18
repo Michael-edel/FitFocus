@@ -61,6 +61,18 @@ it('rejects a late family response after another tab invalidates the IDB session
   await vi.waitFor(() => expect(release).toBeTypeOf('function'));
   await session.outbox!.invalidateSessions(); release(json({ family: 'old' }, headers())); await result;
 });
+it.each(['beforeunload', 'pagehide'] as const)('aborts an active family request on %s before a late response is applied', async eventName => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));
+  session.fetchImpl = fetchImpl;
+  const pending = request();
+  const result = expect(pending).rejects.toThrow('STATE_REQUEST_ABORTED');
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+  target.dispatchEvent(new Event(eventName));
+  await result;
+  expect(session.controller.signal.aborted).toBe(true);
+});
 it('a proof started before auth pause cannot clear it or start family work', async () => {
   let release!: (response: Response) => void;
   const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(resolve => { release = resolve; })); session.fetchImpl = fetchImpl;

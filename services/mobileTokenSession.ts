@@ -1,6 +1,6 @@
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson, type JsonResponse } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson, type JsonResponse } from '../storage/sessionTransport';
 
 export type MobileTokenSession = {
   guard: OutboxReadGuard;
@@ -62,8 +62,7 @@ export async function requestMobileTokenJson(session: MobileTokenSession): Promi
   };
   session.controller.signal.addEventListener('abort', abortRequest, { once: true });
   if (session.controller.signal.aborted) abortRequest();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', abortRequest);
+  const removePageExit = listenForPageExit(abortRequest);
   try {
     const headers = new Headers({ Accept: 'application/json' });
     headers.set('X-Request-ID', `web-${crypto.randomUUID()}`);
@@ -90,6 +89,6 @@ export async function requestMobileTokenJson(session: MobileTokenSession): Promi
     throw error;
   } finally {
     session.controller.signal.removeEventListener('abort', abortRequest);
-    target?.removeEventListener('pagehide', abortRequest);
+    removePageExit();
   }
 }

@@ -1,7 +1,7 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson } from '../storage/sessionTransport';
 
 export type AiSession = {
   guard: OutboxReadGuard;
@@ -75,9 +75,7 @@ export async function postScopedAiJson(session: AiSession, url: '/api/ai' | '/ap
     requestController.abort();
     session.controller.abort();
   };
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('beforeunload', onHide, { once: true });
-  target?.addEventListener('pagehide', onHide);
+  const removePageExit = listenForPageExit(onHide);
   try {
     const result = await requestJson(session.fetchImpl ?? fetch, url, {
       method: 'POST', headers: {
@@ -96,7 +94,6 @@ export async function postScopedAiJson(session: AiSession, url: '/api/ai' | '/ap
     return result;
   } finally {
     session.controller.signal.removeEventListener('abort', onAbort);
-    target?.removeEventListener('beforeunload', onHide);
-    target?.removeEventListener('pagehide', onHide);
+    removePageExit();
   }
 }

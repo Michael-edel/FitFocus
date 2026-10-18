@@ -73,6 +73,24 @@ it('bounds a body that never completes and aborts it without a hidden retry', as
   await started; await vi.advanceTimersByTimeAsync(30); await rejected;
   expect(signal?.aborted).toBe(true); expect(fetchImpl).toHaveBeenCalledTimes(1); expect(cancel).toHaveBeenCalledTimes(1);
 });
+it.each(['beforeunload', 'pagehide'] as const)('cancels a scoped read on %s before its late response can apply', async eventName => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const guard = await activate(); let began!: () => void; let signal: AbortSignal | undefined;
+  const started = new Promise<void>(resolve => { began = resolve; });
+  const cancel = vi.fn();
+  const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+    signal = init?.signal as AbortSignal; began();
+    return new Response(new ReadableStream({ start: () => {}, cancel }), { headers: sessionHeaders(account, 'bootstrap') });
+  });
+  const pending = readScopedJson('/api/bootstrap', guard, 'bootstrap', { outbox, fetchImpl });
+  const result = expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  await started;
+  target.dispatchEvent(new Event(eventName));
+  await result;
+  expect(signal?.aborted).toBe(true);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(fetchImpl).toHaveBeenCalledOnce();
+});
 it('rejects an oversized successful response without retrying it', async () => {
   const guard = await activate();
   const fetchImpl = vi.fn<typeof fetch>(async () => new Response('x'.repeat(1024 * 1024 + 1), { headers: sessionHeaders(account, 'bootstrap') }));

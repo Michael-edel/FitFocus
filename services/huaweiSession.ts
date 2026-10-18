@@ -1,7 +1,7 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson } from '../storage/sessionTransport';
 
 export type HuaweiSession = {
   guard: OutboxReadGuard;
@@ -55,9 +55,7 @@ export async function requestHuaweiJson(session: HuaweiSession, url: string, ini
   const abortRequest = () => requestController.abort();
   session.controller.signal.addEventListener('abort', abortRequest, { once: true });
   if (session.controller.signal.aborted) abortRequest();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  const abortForPagehide = () => session.controller.abort();
-  target?.addEventListener('pagehide', abortForPagehide);
+  const removePageExit = listenForPageExit(() => session.controller.abort());
   try {
     const headers = new Headers(init.headers);
     headers.set('X-Request-ID', `web-${crypto.randomUUID()}`);
@@ -81,6 +79,6 @@ export async function requestHuaweiJson(session: HuaweiSession, url: string, ini
     throw error;
   } finally {
     session.controller.signal.removeEventListener('abort', abortRequest);
-    target?.removeEventListener('pagehide', abortForPagehide);
+    removePageExit();
   }
 }

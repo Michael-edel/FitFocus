@@ -1,6 +1,6 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from './durableOutbox';
-import { requestJson, type JsonResponse } from './sessionTransport';
+import { listenForPageExit, requestJson, type JsonResponse } from './sessionTransport';
 
 export class SessionReadError extends Error {
   constructor(readonly kind: 'session' | 'protocol' | 'auth' | 'access') {
@@ -34,8 +34,7 @@ async function readJson(url: string, headers: HeadersInit, options: SessionReadO
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort, { once: true });
   if (options.signal?.aborted) controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', onHide);
+  const removePageExit = listenForPageExit(onHide);
   const deadline = Date.now() + (options.timeoutMs ?? 12_000);
   const requestHeaders = new Headers(headers);
   requestHeaders.set('X-Request-ID', `web-${crypto.randomUUID()}`);
@@ -59,7 +58,7 @@ async function readJson(url: string, headers: HeadersInit, options: SessionReadO
     if (hidden || options.signal?.aborted) throw new SessionReadError('session');
     throw error;
   } finally {
-    target?.removeEventListener('pagehide', onHide);
+    removePageExit();
     options.signal?.removeEventListener('abort', onAbort);
   }
 }

@@ -1,7 +1,7 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson } from '../storage/sessionTransport';
 
 export type AchievementSession = {
   guard: OutboxReadGuard;
@@ -42,8 +42,7 @@ export async function requestAchievementJson(session: AchievementSession, contex
   session.controller.signal.addEventListener('abort', onAbort, { once: true });
   if (session.controller.signal.aborted) requestController.abort();
   const onHide = () => session.controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', onHide);
+  const removePageExit = listenForPageExit(onHide);
   try {
     const headers = {
       'Content-Type': 'application/json', 'X-Request-ID': `web-${crypto.randomUUID()}`,
@@ -64,6 +63,6 @@ export async function requestAchievementJson(session: AchievementSession, contex
     return result;
   } finally {
     session.controller.signal.removeEventListener('abort', onAbort);
-    target?.removeEventListener('pagehide', onHide);
+    removePageExit();
   }
 }

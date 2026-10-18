@@ -1,7 +1,7 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MobileTokenApiError, requestMobileToken } from '../features/settings/mobileTokenApi';
-import { prepareMobileTokenSession } from '../services/mobileTokenSession';
+import { prepareMobileTokenSession, requestMobileTokenJson } from '../services/mobileTokenSession';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { StateDatabase } from '../storage/stateDatabase';
 
@@ -90,5 +90,18 @@ describe('mobile token feature API', () => {
     release(json({ token: 'account-a-secret' }, scopedHeaders()));
 
     await expect(result).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+  });
+
+  it.each(['beforeunload', 'pagehide'] as const)('aborts a pending one-time token issuance on %s', async eventName => {
+    const target = new EventTarget(); vi.stubGlobal('window', target);
+    const fetchMock = vi.fn<typeof fetch>(async input => String(input).startsWith('/api/me')
+      ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: scopedHeaders() }));
+    const session = await prepare(fetchMock);
+    const pending = requestMobileTokenJson(session);
+    const result = expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    target.dispatchEvent(new Event(eventName));
+    await result;
+    expect(session.controller.signal.aborted).toBe(false);
   });
 });

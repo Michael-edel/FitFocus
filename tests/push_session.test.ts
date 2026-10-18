@@ -135,4 +135,17 @@ describe('push session transport', () => {
     });
     expect(fetchImpl.mock.calls.filter(([input]) => String(input) === '/api/push/subscribe')).toHaveLength(1);
   });
+
+  it.each(['beforeunload', 'pagehide'] as const)('aborts a pending push mutation on %s', async eventName => {
+    const target = new EventTarget(); vi.stubGlobal('window', target);
+    const fetchImpl = vi.fn<typeof fetch>(async input => String(input).startsWith('/api/me')
+      ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: scopeHeaders() }));
+    const session = await prepare(fetchImpl);
+    const pending = requestPushJson(session, '/api/push/subscribe', { method: 'POST', body: '{}' });
+    const result = expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    target.dispatchEvent(new Event(eventName));
+    await result;
+    expect(session.controller.signal.aborted).toBe(true);
+  });
 });

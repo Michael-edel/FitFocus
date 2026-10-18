@@ -1,5 +1,6 @@
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
+import { listenForPageExit } from '../storage/sessionTransport';
 
 export type AdminSession = {
   guard: OutboxReadGuard;
@@ -82,9 +83,7 @@ export async function requestAdminResponse(
   const abort = () => controller.abort();
   session.controller.signal.addEventListener('abort', abort, { once: true });
   if (session.controller.signal.aborted) controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('beforeunload', abort, { once: true });
-  target?.addEventListener('pagehide', abort);
+  const removePageExit = listenForPageExit(abort);
   const timeout = setTimeout(abort, session.timeoutMs ?? 12_000);
   try {
     const headers = new Headers(init.headers);
@@ -114,7 +113,6 @@ export async function requestAdminResponse(
   } finally {
     clearTimeout(timeout);
     session.controller.signal.removeEventListener('abort', abort);
-    target?.removeEventListener('beforeunload', abort);
-    target?.removeEventListener('pagehide', abort);
+    removePageExit();
   }
 }

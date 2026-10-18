@@ -97,4 +97,17 @@ describe('billing session transport', () => {
     await expect(requestBillingJson(session, '/api/billing/checkout', { method: 'POST' }))
       .rejects.toThrow('SESSION_READ_PROTOCOL');
   });
+
+  it.each(['beforeunload', 'pagehide'] as const)('aborts a pending billing mutation on %s', async eventName => {
+    const target = new EventTarget(); vi.stubGlobal('window', target);
+    const fetchImpl = vi.fn<typeof fetch>(async input => String(input).startsWith('/api/me')
+      ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: scopeHeaders() }));
+    const session = await prepare(fetchImpl);
+    const pending = requestBillingJson(session, '/api/billing/checkout', { method: 'POST' });
+    const result = expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    target.dispatchEvent(new Event(eventName));
+    await result;
+    expect(session.controller.signal.aborted).toBe(true);
+  });
 });

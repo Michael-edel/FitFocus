@@ -1,6 +1,29 @@
 import { isRecord } from '../safeJson';
 export type JsonResponse = { response: Response; body: Record<string, unknown> | null };
 
+/** Run a request/session guard on the first page-exit signal and remove both listeners. */
+export function listenForPageExit(onPageExit: () => void, target?: EventTarget): () => void {
+  const page = target ?? (typeof window !== 'undefined' ? window : undefined);
+  if (!page) return () => {};
+
+  let active = true;
+  const cleanup = () => {
+    if (!active) return;
+    active = false;
+    page.removeEventListener('beforeunload', handlePageExit);
+    page.removeEventListener('pagehide', handlePageExit);
+  };
+  const handlePageExit = () => {
+    if (!active) return;
+    cleanup();
+    onPageExit();
+  };
+
+  page.addEventListener('beforeunload', handlePageExit, { once: true });
+  page.addEventListener('pagehide', handlePageExit);
+  return cleanup;
+}
+
 /** One transport attempt includes headers and the bounded response body; no hidden mutation retries. */
 export async function requestJson(fetchFn: typeof fetch, url: string, init: RequestInit, controller: AbortController, timeoutMs: number): Promise<JsonResponse> {
   if (controller.signal.aborted) throw new Error('STATE_REQUEST_ABORTED');

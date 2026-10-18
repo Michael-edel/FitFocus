@@ -71,12 +71,12 @@ it('an automatic proof already in flight cannot clear a newly established auth p
   await expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
   expect(await outbox.sessionState()).toEqual(paused);
 });
-it('cancels a held body on pagehide even if the transport ignores AbortSignal', async () => {
+it.each(['beforeunload', 'pagehide'] as const)('cancels a held body on %s even if the transport ignores AbortSignal', async eventName => {
   const target = new EventTarget(); vi.stubGlobal('window', target);
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));
   const session = await prepare(fetchImpl);
   const result = expect(requestAchievementJson(session)).rejects.toThrow('STATE_REQUEST_ABORTED');
-  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2)); target.dispatchEvent(new Event('pagehide')); await result;
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2)); target.dispatchEvent(new Event(eventName)); await result;
   expect(session.controller.signal.aborted).toBe(true);
 });
 it('times out a held body without retrying the mutation or cancelling the page lifetime', async () => {

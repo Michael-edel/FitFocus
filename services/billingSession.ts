@@ -1,7 +1,7 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson, type JsonResponse } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson, type JsonResponse } from '../storage/sessionTransport';
 
 export type BillingSession = {
   guard: OutboxReadGuard;
@@ -69,9 +69,7 @@ export async function requestBillingJson(
   const abortRequest = () => requestController.abort();
   session.controller.signal.addEventListener('abort', abortRequest, { once: true });
   if (session.controller.signal.aborted) abortRequest();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  const abortForPagehide = () => session.controller.abort();
-  target?.addEventListener('pagehide', abortForPagehide);
+  const removePageExit = listenForPageExit(() => session.controller.abort());
   try {
     const result = await requestJson(session.fetchImpl ?? fetch, url, {
       ...init,
@@ -96,6 +94,6 @@ export async function requestBillingJson(
     throw error;
   } finally {
     session.controller.signal.removeEventListener('abort', abortRequest);
-    target?.removeEventListener('pagehide', abortForPagehide);
+    removePageExit();
   }
 }

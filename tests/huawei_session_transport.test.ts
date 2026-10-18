@@ -71,3 +71,16 @@ it('maps a session failure response to the session guard', async () => {
   session.fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me()) : json({ error: 'UNAUTH' }, scope(), 401));
   await expect(requestHuaweiJson(session, '/api/wearable/huawei/status')).rejects.toThrow('SESSION_READ_AUTH');
 });
+
+it.each(['beforeunload', 'pagehide'] as const)('aborts a pending Huawei action on %s', async eventName => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: scope() }));
+  session.fetchImpl = fetchImpl;
+  const pending = requestHuaweiJson(session, '/api/wearable/huawei/sync', { method: 'POST' });
+  const result = expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+  target.dispatchEvent(new Event(eventName));
+  await result;
+  expect(session.controller.signal.aborted).toBe(true);
+});

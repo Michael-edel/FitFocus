@@ -1,7 +1,7 @@
 import { errorMessage, isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from '../storage/durableOutbox';
 import { assertReadSession, SessionReadError, verifyReadSession } from '../storage/sessionRead';
-import { requestJson } from '../storage/sessionTransport';
+import { listenForPageExit, requestJson } from '../storage/sessionTransport';
 
 export type FamilySession = {
   guard: OutboxReadGuard;
@@ -48,8 +48,7 @@ export async function requestFamilyJson(session: FamilySession, url: string, ini
   const hide = () => session.controller.abort();
   session.controller.signal.addEventListener('abort', abort, { once: true });
   if (session.controller.signal.aborted) controller.abort();
-  const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
-  target?.addEventListener('pagehide', hide);
+  const removePageExit = listenForPageExit(hide);
   try {
     const headers = new Headers(init.headers);
     headers.set('X-Request-ID', `web-${crypto.randomUUID()}`);
@@ -66,6 +65,6 @@ export async function requestFamilyJson(session: FamilySession, url: string, ini
     return result;
   } finally {
     session.controller.signal.removeEventListener('abort', abort);
-    target?.removeEventListener('pagehide', hide);
+    removePageExit();
   }
 }
