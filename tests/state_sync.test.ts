@@ -500,6 +500,50 @@ describe('durable HTTP sender', () => {
     expect(await outbox.list(account)).toEqual([]);
   });
 
+  it('rejects legacy profile resolution if a concurrent proof changes the active session', async () => {
+    const profileKey = `fitfocus_data_${account}_profile`;
+    const localProfile = userProfile(account, { name: 'Локальный профиль', version: 1 });
+    const remoteProfile = userProfile(account, { name: 'Серверный профиль', version: 9 });
+    const legacy = await importLegacyConflict(profileKey, JSON.stringify(localProfile));
+    const profileScope = { 'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
+      'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sessionId };
+    let instance!: StateSync;
+    let meCalls = 0;
+    let concurrentProof: Promise<boolean> | undefined;
+    const methods: string[] = [];
+    const fetchFn = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/me') {
+        meCalls += 1;
+        const session = meCalls === 3 ? 'b'.repeat(64) : sessionId;
+        return json({ ...proof(account, session), profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 } });
+      }
+      if (url === '/api/profile' && method === 'GET') {
+        methods.push('GET profile');
+        concurrentProof = instance.syncNow(account);
+        expect(await concurrentProof).toBe(false);
+        return json({ profile: remoteProfile }, 200, profileScope);
+      }
+      if (url === '/api/profile' && method === 'PUT') {
+        methods.push('PUT profile');
+        return json({ profile: { ...localProfile, version: 10 }, version: 10 }, 200, profileScope);
+      }
+      return json({ error: 'UNEXPECTED_REQUEST' }, 500, profileScope);
+    });
+    instance = new StateSync({ outbox, fetchImpl: fetchFn, now: () => now, random: () => 0.5, legacyPending: () => false });
+    clients.push(instance);
+    await instance.connect(account);
+    const resolveOutbox = vi.spyOn(outbox, 'resolveLegacyConflictGroup');
+
+    expect(await instance.resolveLegacyConflictedKey(account, profileKey, [legacy.opId], 'keep-latest-local')).toBe(false);
+    expect(methods).toEqual(['GET profile']);
+    expect(resolveOutbox).toHaveBeenCalledTimes(1);
+    expect(await outbox.list(account)).toEqual([expect.objectContaining({ opId: legacy.opId, status: 'conflicted' })]);
+    const [receipt] = await stateTransaction(await db.open(), [STATE_STORES.migrationItems], 'readonly', (tx) =>
+      indexedRequest(tx.objectStore(STATE_STORES.migrationItems).getAll())) as MigrationItem[];
+    expect(receipt.resolution).toBeUndefined();
+  });
+
   it('accepts a guarded server profile snapshot without sending the legacy local value', async () => {
     const profileKey = `fitfocus_data_${account}_profile`;
     const localProfile = userProfile(account, { name: 'Локальный профиль', version: 1 });

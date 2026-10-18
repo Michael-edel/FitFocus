@@ -1850,9 +1850,11 @@ all-client Service Worker fence, атомарные migration items и quarantin
     атомарно проверяется по `active-session` и `auth-fence` в outbox transaction.
     Регрессионный unit подтвердил отказ до правки и успех после неё; legacy
     migration E2E прошёл 49/49 на семи профилях и Android Chrome 10/10.
-    Полный unit — 1421/1421, три typecheck, guards и production build прошли.
-    Полный CI нового follow-up ожидается после push; родительский P0.8 остаётся
-    открытым до общей приёмки.
+    Дополнительный тест подтверждает отказ при реальной смене session guard.
+    Полный текущий локальный unit — 1422/1422, три typecheck, guards и production
+    build прошли. Точный [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+    для `856e3f5` выполняется; дополнительный negative unit в него не входит.
+    Родительский P0.8 остаётся открытым до общей приёмки.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

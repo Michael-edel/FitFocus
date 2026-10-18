@@ -17,9 +17,13 @@ Android Chrome: `resolves a legacy profile through its guarded profile CAS endpo
 тест, который воспроизводит гонку: до исправления он падал, после — проходит.
 Профильная migration E2E прошла **49/49** на семи browser/PWA-профилях без
 retries; точный Android Chrome сценарий прошёл **10/10**. Полный unit —
-**1421/1421**, root/domain/storage-strict typecheck, admin/auth/API/schema/privacy
-guards и production build прошли. Изменение ещё не опубликовано; новый точный CI
-для этой ревизии ожидается после push. P0.8 и общая P0-приёмка остаются открыты.
+**1421/1421** на опубликованном коммите [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5),
+root/domain/storage-strict typecheck, admin/auth/API/schema/privacy guards и
+production build прошли. Дополнительный negative unit проверяет, что реальная
+смена server session во время profile GET всё ещё отклоняет старый guard; с ним
+локальный unit suite прошёл **1422/1422**. Exact [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+для `856e3f5` выполняется; дополнительный regression test пока не входит в этот
+run. P0.8 и общая P0-приёмка остаются открыты.
 
 ## P0.5 — ранняя отмена callbacks поддержки, `d9317f7`, 19.10.2026
 

@@ -20,16 +20,19 @@
 lifecycle E2E прошёл 14/14 на семи профилях. Попытка проверить настоящий
 BFCache остаётся ограниченной Playwright `BackForwardCacheDisabledForDelegate`.
 
-Удалённый HEAD ветки PR — `7acfc86`; [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
+Удалённый HEAD ветки PR — `856e3f5`; [CI #1663](https://github.com/Michael-edel/FitFocus/actions/runs/39166463413)
 завершился одним сбоем на Android Chrome при разрешении legacy-конфликта профиля.
 В трассе обнаружена гонка с параллельным reverify сессии: временно очищенный
 in-memory `readGuard` приводил к ложному отказу после успешного scoped profile
 GET. Исправление повторно проверяет сохранённый guard атомарно в outbox-транзакции.
 Unit-регрессия прошла red→green; полная legacy-migration E2E прошла **49/49**
 на семи browser/PWA профилях, точный Android Chrome сценарий — **10/10**.
-Полный unit прошёл **1421/1421**; root/domain/storage-strict typecheck,
-API/auth/schema/privacy guards и production build прошли. Follow-up ещё не
-опубликован, поэтому новый CI ожидает push.
+Полный unit прошёл **1421/1421** на опубликованном коммите
+[`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5);
+root/domain/storage-strict typecheck, API/auth/schema/privacy guards и production
+build прошли. Дополнительный negative unit о фактической смене server session
+прошёл локально; с ним текущий локальный suite — **1422/1422**. [Точный CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
+для удалённого `856e3f5` выполняется и не включает этот дополнительный тест.
 
 У плана остаются 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных
 или компонентных разделах. Открыты полная lifecycle-матрица, остальные writers
