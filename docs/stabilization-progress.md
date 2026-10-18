@@ -6591,11 +6591,20 @@ Android Chrome/PWA, iPhone Safari/PWA), `workers=1`, `retries=0`; root typecheck
 для этого SHA прошёл audit, guards, unit, три typecheck и production build;
 E2E ещё выполняется.
 
-### Следующая строка P0.9 — reorder и retryCount в browser migration
+### P0.9 — reorder и retryCount в browser migration, `de56ab3`
 
-В local-only follow-up добавлена проверка повторного runtime-импорта двух
-конфликтных legacy operations после перестановки массива и изменения `retryCount`.
-Старые opId сохраняются, новый snapshot получает processed marker, второй reload
-не создаёт дубликаты; реальная IndexedDB/Service Worker матрица прошла 7/7 без
-retries. Root typecheck прошёл. Follow-up пока не опубликован и ждёт exact CI;
-staging и общая P0.9 приёмка остаются открыты.
+Проверка повторного runtime-импорта двух конфликтных legacy operations после перестановки массива и изменения `retryCount` опубликована в `de56ab3`. Старые opId сохраняются, новый snapshot получает processed marker, повторная загрузка не создаёт дубликаты; реальная IndexedDB/Service Worker матрица прошла 7/7 без retries. Точный CI #1603 завершился одним Safari E2E отказом; staging и общая P0.9 приёмка остаются открыты.
+
+## P0.9 — опубликованная browser-проверка fingerprint миграции, `de56ab3`, 18.10.2026
+
+В текущий code/test HEAD добавлена browser acceptance стабильности legacy fingerprint после изменения порядка исходного массива и `retryCount`: обе конфликтные операции сохраняют исходные opId, новый снимок получает processed marker, последующая загрузка не создаёт дубликатов. Используются реальная IndexedDB и Service Worker. Локальная матрица прошла 7/7 desktop/mobile/PWA профилей без retries; целевые unit-наборы `legacy_queue` и `legacy_migration` прошли 128/128.
+
+Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258) для `de56ab3` прошёл audit, schema/privacy/auth/API guards, unit, root/domain/storage typecheck и production build. E2E завершился одним Safari reload отказом; follow-up описан ниже. Предыдущая проверка атомарного abort legacy import из `f9bf4e6` также содержится в этом SHA.
+
+Branch preview развернул `de56ab3`. Свежие анонимные GET подтвердили: `/`, `/api/env`, `/api/me` — 200; `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401 без redirect и `Set-Cookie`. `/api/env` сообщает пустые Google Client IDs и `requireInvite=false`. Это не подтверждает авторизованные действия, OAuth, D1 или staging. Полный P0.9 и выпуск остаются открыты.
+
+## P0.8/P0.9 — Safari reload отменяет фоновый weekly AI, локальный follow-up, 18.10.2026
+
+Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258) для `de56ab3` завершился одним отказом `a native profile refresh cancelled by reload stays handled in Safari` на iPhone Safari. Trace показал `/api/ai due to access control checks` через 21 мс после начала `page.reload()`. Локальный повтор выявил, что Desktop WebKit иногда также логирует `Weekly AI reporting failed: TypeError: Load failed` при таком переходе.
+
+`useWeeklyAiReport` теперь инвалидирует попытку уже на `beforeunload`, сохраняя `pagehide` для остальных переходов и BFCache. Acceptance учитывает не более одного точного WebKit `/api/ai` access-control page error только внутри reload; остальные page/console errors остаются отказами теста. Целевые unit `weekly_ai_report_feature` и `ai_session_transport` прошли 32/32, reload acceptance — 9/9 на desktop WebKit, iPhone Safari и iPhone PWA без retries. Исправление ещё не опубликовано, exact CI follow-up ожидает push; P0.8/P0.9, staging и выпуск открыты.

@@ -35,8 +35,17 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     },
   });
   const errors: string[] = [];
+  const expectedWebKitAiReloadWarnings: string[] = [];
+  const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
+  let reloadStarted = false;
   const cancelledProfileReads: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => {
+    if (isWebKit && reloadStarted && /^\/127\.0\.0\.1:\d+\/api\/ai due to access control checks\.$/.test(error.message)) {
+      expectedWebKitAiReloadWarnings.push(error.message);
+      return;
+    }
+    errors.push(error.message);
+  });
   page.on('requestfailed', request => {
     if (new URL(request.url()).pathname === '/api/profile' && request.method() === 'GET') {
       cancelledProfileReads.push(request.failure()?.errorText ?? 'unknown failure');
@@ -58,8 +67,12 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     await profileReadStarted;
 
-    const reload = page.reload();
-    await reload;
+    reloadStarted = true;
+    try {
+      await page.reload();
+    } finally {
+      reloadStarted = false;
+    }
     shouldHoldProfileRead = false;
     release();
 
@@ -69,6 +82,7 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     expect(cancelledProfileReads[0]).toMatch(/cancel|abort/i);
     expect(server.counts.profile).toBe(0);
     expect(server.unexpectedApi).toEqual([]);
+    expect(expectedWebKitAiReloadWarnings.length).toBeLessThanOrEqual(isWebKit ? 1 : 0);
     expect(errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {

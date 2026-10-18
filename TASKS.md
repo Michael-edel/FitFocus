@@ -1,20 +1,17 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 18.10.2026. PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93)
-остаётся draft с base `fix/state-generations`; опубликованный code/test HEAD —
-`f9bf4e6`. Точный [CI #1601](https://github.com/Michael-edel/FitFocus/actions/runs/39100776970)
-для него выполняет E2E; audit, guards, unit, три typecheck и production build
-завершились успешно. В опубликованный commit добавлен browser acceptance реального
-IndexedDB abort при legacy import: operation, значение и migration marker
-откатываются вместе, после повтора остаётся один opId; тест локально прошёл 7/7
-desktop/mobile/PWA проектов без retries. Дополнительный local-only тест перестановки
-legacy-записей и изменения `retryCount` тоже прошёл 7/7; он ещё не опубликован.
-Основные локальные проверки: legacy clear/keyed-delete acceptance 7/7,
-account-cache sweep 21/21, progress draft/archive 3/3, unit 1368/1368, три
-typecheck, production build и `git diff --check` прошли. В плане остаются 33
-пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging,
-выпуск и интеграция в защищённую `main` не подтверждены.
+Обновлено: 18.10.2026. Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), base `fix/state-generations`; опубликованный code/test HEAD — `de56ab3`.
+Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
+завершился одним Safari E2E отказом: WebKit сообщил об отменённом `/api/ai` во
+время reload. Trace привязал сообщение к началу навигации; локальный follow-up
+закрывает раннюю отмену weekly-AI на `beforeunload` и ограниченно учитывает
+browser warning только внутри reload. Целевые unit прошли 32/32, reload browser
+matrix — 9/9 без retries; exact CI исправления ожидает публикации. Browser
+migration acceptance и preview smoke пройдены, но не заменяют staging,
+авторизованную приёмку, OAuth или D1.
 
+В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не
+закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
 который завершился ошибкой в E2E: summary сообщил `341 failed`, а доступные
@@ -1796,13 +1793,11 @@ legacy-ключ не используется для новой очереди �
     транзакции, но до commit, транзакция принудительно отменяется. Значение,
     operation, ledger и snapshot processed marker остаются целиком до повтора;
     повтор создаёт одну операцию и сохраняет тот же opId. Сценарий прошёл 7/7
-    desktop/mobile/PWA проектов, workers=1, retries=0. Это локальная browser
-    acceptance; точный CI и staging ещё открыты.
+    desktop/mobile/PWA проектов, workers=1, retries=0. Тест включён в точный CI #1603 для `de56ab3`; этот run завершился одним Safari E2E отказом, а локальный reload follow-up описан в журнале стабилизации. Staging остаётся открытым.
   - [x] Проверить browser migration после перестановки legacy-записей и изменения
     `retryCount`: две операции остаются конфликтными, сохраняют исходные opId,
     processed marker нового snapshot завершён, дублей после следующего reload нет.
-    Тест с реальной IndexedDB и Service Worker прошёл 7/7 профилей без retries;
-    точный CI этой локальной добавки ещё не выполнялся.
+    Тест с реальной IndexedDB и Service Worker прошёл 7/7 профилей без retries и опубликован в [`de56ab3`](https://github.com/Michael-edel/FitFocus/commit/de56ab3d9a1f2379ae3413af675545f5c99bbd41). Точный CI #1603 завершился одним Safari E2E отказом; follow-up на `beforeunload` локально прошёл 9/9 WebKit reload профилей, exact CI ожидает публикации.
   - [x] Проверить `401 → новая правка → login`: локальный follow-up
     [`cb22abe`](https://github.com/Michael-edel/FitFocus/commit/cb22abe40740ed8b1f55b6d0d7c716d9c4d7364c)
     сохраняет доступ к локальным настройкам в auth-паузе после обновления

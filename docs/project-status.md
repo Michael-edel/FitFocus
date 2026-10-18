@@ -1,36 +1,30 @@
 # Текущее состояние FitFocus
 
-Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), общий статус —
-здесь, результаты проверок — в [журнале](stabilization-progress.md).
-Опубликованный draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-по-прежнему основан на `fix/state-generations`; опубликованный code/test HEAD —
-`f9bf4e6`.
-`152b7af` устраняет потерю старой вкладочной правки,
-если изменение legacy source запускает повторную проверку сессии и следующий
-StorageEvent приходит до ответа `/api/me`. Последний принятый local-commit guard
-сохраняет edit как конфликт; IndexedDB транзакционно отклоняет запись при смене
-account/sessionEpoch. Полная `localStorage.clear()` перепроверена как единый
-`key=null` event: существующие migration snapshot, quarantine и intent сохраняются
-в IndexedDB, ложные DELETE и сетевые state write не создаются.
-В `fd026b5` добавлена account-switch приёмка отдельного UI-кэша архива прогресса
-и устранено монтирование свернутого mobile-графика с нулевым размером. Старый
-аккаунт сохраняет свою открытую галерею, аккаунт B получает собственное
-default-состояние.
+Сверено: 18.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), результаты проверок — в [журнале](stabilization-progress.md).
 
-Локальная проверка: legacy clear и keyed-delete acceptance прошли 7/7 каждая;
-account-cache sweep — 21/21, progress draft — 3/3 и новый progress archive —
-3/3 на desktop Chromium/Firefox/WebKit без retries. Целевые legacy unit 12/12,
-полный unit 1368/1368, root/domain/storage strict typecheck, production build и
-`git diff --check` прошли. Browser acceptance legacy migration abort из `f9bf4e6`
-прошёл 7/7 desktop/mobile/PWA профилей без retries; операция,
-значение и оба migration marker атомарно откатываются, повтор сохраняет один
-opId. Точный [CI #1601](https://github.com/Michael-edel/FitFocus/actions/runs/39100776970)
-для `f9bf4e6` выполняет E2E; audit, guards, unit, три typecheck и production
-build прошли. Дополнительный локальный migration тест на reorder/retryCount
-прошёл 7/7, но не входит в опубликованный SHA. Нового exact CI для него ещё нет.
-Остаются 33 пункта:
-19 P0, 7 P1 и 7 следующих задач; staging, выпуск и защищённая `main` открыты.
+Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93) открыт в ветке
+`fix/durable-outbox` с base `fix/state-generations`; опубликованный code/test HEAD —
+`de56ab3`. Точный [CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258)
+завершился одним Safari E2E отказом на profile-refresh reload: WebKit выдал
+`/api/ai due to access control checks` в начале навигации. Локальный follow-up
+закрывает weekly-AI scope на `beforeunload`; целевые unit прошли 32/32,
+Safari/WebKit reload матрица — 9/9 без retries. Новый exact CI после публикации
+follow-up ожидает запуска.
 
+В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
+перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
+новый снимок помечается обработанным, повторная загрузка не создаёт дубликаты.
+Матрица реального IndexedDB/Service Worker прошла локально 7/7 desktop/mobile/PWA
+профилей без retries. Проверка атомарного abort legacy-import из `f9bf4e6` также
+включена в этот HEAD и локально прошла 7/7. Целевые unit `legacy_queue` и
+`legacy_migration` прошли 128/128.
+
+Свежий read-only smoke текущего branch preview: `/`, `/api/env` и анонимный
+`/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`, `/api/state` и
+`/api/push/status` вернули 401 без redirect и `Set-Cookie`. Google Client IDs
+пусты; OAuth, авторизованные действия, D1 и отдельная staging-база не подтверждены.
+
+В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
 неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
 удаливший отдельный localStorage scaffold outbox без runtime-потребителей.

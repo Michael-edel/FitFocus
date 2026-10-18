@@ -120,10 +120,13 @@ export function useWeeklyAiReport({
       weeklyReportGenerationRef.current = null;
       setResumeEpoch((value) => value + 1);
     };
+    // WebKit can reject an in-flight fetch while navigation is starting, before pagehide.
+    window.addEventListener('beforeunload', hide);
     window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', show);
     return () => {
       scope.invalidate();
+      window.removeEventListener('beforeunload', hide);
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
     };
