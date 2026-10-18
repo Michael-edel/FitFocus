@@ -22,8 +22,18 @@ async function saved(page: Page) {
     } finally { db.close(); }
   }, key);
 }
-async function setup(page: Page) {
+async function setup(page: Page, options: { holdAi?: boolean } = {}) {
   const errors: string[] = []; const requests = { ai: 0, profile: 0 };
+  let navigatedAway = false;
+  page.on('framenavigated', frame => {
+    if (frame === page.mainFrame() && frame.url() === 'about:blank') navigatedAway = true;
+  });
+  let signalAiStarted!: () => void;
+  let releaseHeldAi!: () => void;
+  let signalAiFinished!: () => void;
+  const aiStarted = new Promise<void>(resolve => { signalAiStarted = resolve; });
+  const heldAi = new Promise<void>(resolve => { releaseHeldAi = resolve; });
+  const aiFinished = new Promise<void>(resolve => { signalAiFinished = resolve; });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => {
     if (message.type() !== 'error') return;
@@ -34,12 +44,23 @@ async function setup(page: Page) {
   await page.route('**/api/**', async route => {
     const request = route.request(); const path = new URL(request.url()).pathname;
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: scope, body: JSON.stringify(body) });
-    if (path === '/api/me') return json({ user: { sub: account, name: 'Registration owner', email: 'e2e@example.com' }, hasAccess: true,
-      stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
+    if (path === '/api/me') {
+      if (navigatedAway) return json({ user: null, hasAccess: true });
+      return json({ user: { sub: account, name: 'Registration owner', email: 'e2e@example.com' }, hasAccess: true,
+        stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid }, profileSync: { protocol: 1, guard: 1, weeklyMenuProjection: 1 }, bootstrapSync: { protocol: 1, guard: 1 }, aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 } });
+    }
     if (path === '/api/bootstrap' || path === '/api/profile' && request.method() === 'GET') return json({ user: { sub: account }, profile: null, items: [] });
     if (path === '/api/ai' && request.postDataJSON()?.feature === 'personal_plan') {
       requests.ai += 1;
       expect((await saved(page)).value?.id).toBe(account); expect(requests.profile).toBe(0);
+      if (options.holdAi) {
+        signalAiStarted();
+        await heldAi;
+        if (!request.failure()) await route.abort('failed');
+        signalAiFinished();
+        return;
+      }
+      signalAiFinished();
       return json({ text: JSON.stringify(buildMockProfile().aiPlan) });
     }
     if (path === '/api/profile' && request.method() === 'PUT') {
@@ -51,7 +72,7 @@ async function setup(page: Page) {
     if (path === '/api/state' && request.method() === 'GET') return json({ items: [] });
     return route.fallback();
   });
-  return { errors, requests };
+  return { errors, requests, aiStarted, aiFinished, releaseHeldAi: () => releaseHeldAi() };
 }
 
 test('registration is durable before AI and reload restores it without an OAuth marker during auth pause', async ({ page }, info) => {
@@ -88,4 +109,58 @@ test('registration remains on the form and sends no AI or profile request after 
   await expect(page.getByText('AI Инициализация')).toHaveCount(0); await expect(create).toBeEnabled();
   expect(await saved(page)).toEqual({ value: null, pause: undefined, operations: [] }); expect(requests).toEqual({ ai: 0, profile: 0 }); expect(errors).toEqual([]);
   await page.screenshot({ path: info.outputPath('registration-quota.png') });
+});
+
+test('pagehide aborts registration AI after the base profile is durable', async ({ page }) => {
+  const { errors, requests, aiStarted, aiFinished, releaseHeldAi } = await setup(page, { holdAi: true });
+  const abortMarker = '__e2e_registration_ai_abort__';
+  await page.addInitScript(marker => {
+    const aiSignals = new WeakSet<AbortSignal>();
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${marker}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      if (url.pathname === '/api/ai' && init?.signal) {
+        aiSignals.add(init.signal);
+        mark('request', 'started');
+        init.signal.addEventListener('abort', () => mark('signal', 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => mark('beforeunload', 'fired'));
+    window.addEventListener('pagehide', () => mark('pagehide', 'fired'));
+    const originalAbort = AbortController.prototype.abort;
+    AbortController.prototype.abort = function (reason?: unknown) {
+      if (aiSignals.has(this.signal)) mark('controller', 'ai-aborted');
+      return originalAbort.call(this, reason);
+    };
+  }, abortMarker);
+  await openApp(page, '/?auth=google#plan'); await expect(page).toHaveTitle(/FitFocus/);
+  const appOrigin = await page.evaluate(() => location.origin);
+  await page.evaluate(marker => {
+    for (const suffix of ['request', 'signal', 'beforeunload', 'pagehide', 'controller']) localStorage.removeItem(`${marker}:${suffix}`);
+  }, abortMarker);
+  const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
+  await aiStarted;
+  expect((await saved(page)).value).toMatchObject({ id: account });
+  expect((await saved(page)).operations).toHaveLength(1);
+
+  await page.goto('about:blank');
+  releaseHeldAi();
+  await aiFinished;
+  await page.goto(appOrigin);
+
+  expect(await page.evaluate(marker => ({
+    request: localStorage.getItem(`${marker}:request`),
+    signal: localStorage.getItem(`${marker}:signal`),
+    beforeunload: localStorage.getItem(`${marker}:beforeunload`),
+    pagehide: localStorage.getItem(`${marker}:pagehide`),
+    controller: localStorage.getItem(`${marker}:controller`),
+  }), abortMarker)).toEqual({ request: 'started', signal: 'aborted', beforeunload: 'fired', pagehide: 'fired', controller: 'ai-aborted' });
+  expect((await saved(page)).value).toMatchObject({ id: account });
+  expect((await saved(page)).operations).toHaveLength(1);
+  expect(requests).toEqual({ ai: 1, profile: 0 });
+  expect(errors).toEqual([]);
 });

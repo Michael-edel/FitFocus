@@ -166,6 +166,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       deps.setPlanError('Требуется код приглашения.');
       return;
     }
+    target?.addEventListener('beforeunload', hide, { once: true });
     target?.addEventListener('pagehide', hide, { once: true });
     try {
       const fetchFn = deps.fetchImpl ?? fetch;
@@ -198,11 +199,13 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       if (isCurrent() && !pageHidden) deps.setPlanError('Не удалось связаться с сервером для проверки приглашения.');
       return;
     } finally {
+      target?.removeEventListener('beforeunload', hide);
       target?.removeEventListener('pagehide', hide);
     }
   }
 
   if (!isCurrent() || controller.signal.aborted) return;
+  target?.addEventListener('beforeunload', hide, { once: true });
   target?.addEventListener('pagehide', hide, { once: true });
   const repository = new UserStateRepository(newUser.id);
   try {
@@ -211,10 +214,12 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     if (isCurrent() && !pageHidden) deps.setPlanError(error instanceof Error && error.message.startsWith('PROFILE_')
       ? 'На устройстве уже есть профиль или конфликт создания. Повторите вход, чтобы восстановить его.'
       : 'Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.');
+    target?.removeEventListener('beforeunload', hide);
     target?.removeEventListener('pagehide', hide);
     return;
   }
   if (!isCurrent() || controller.signal.aborted) {
+    target?.removeEventListener('beforeunload', hide);
     target?.removeEventListener('pagehide', hide);
     return;
   }
@@ -260,6 +265,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
       }
     }
   } finally {
+    target?.removeEventListener('beforeunload', hide);
     target?.removeEventListener('pagehide', hide);
   }
   if (!isCurrent()) return;

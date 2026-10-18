@@ -207,6 +207,27 @@ it('aborts a held response body rather than only waiting for headers', async () 
   const rejected = expect(postScopedAiJson(session, '/api/ai', {})).rejects.toThrow('STATE_REQUEST_ABORTED');
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2)); session.controller.abort(); await rejected;
 });
+it('aborts the active AI request before a page unload', async () => {
+  const target = new EventTarget();
+  vi.stubGlobal('window', target);
+  let requestSignal: AbortSignal | undefined;
+  const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+    if (String(url).startsWith('/api/me')) return json(me());
+    requestSignal = init?.signal ?? undefined;
+    return new Promise<Response>(() => {});
+  });
+  try {
+    const session = await prepare(fetchImpl);
+    const request = postScopedAiJson(session, '/api/ai', {});
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    target.dispatchEvent(new Event('beforeunload'));
+    await expect(request).rejects.toThrow('STATE_REQUEST_ABORTED');
+    expect(requestSignal?.aborted).toBe(true);
+    expect(session.controller.signal.aborted).toBe(true);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 it('times out a request without aborting the page action so the UI can report failure and retry', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me())
     : new Response(new ReadableStream({ start() {} }), { headers: headers() }));

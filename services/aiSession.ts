@@ -71,8 +71,12 @@ export async function postScopedAiJson(session: AiSession, url: '/api/ai' | '/ap
   const onAbort = () => requestController.abort();
   session.controller.signal.addEventListener('abort', onAbort, { once: true });
   if (session.controller.signal.aborted) requestController.abort();
-  const onHide = () => session.controller.abort();
+  const onHide = () => {
+    requestController.abort();
+    session.controller.abort();
+  };
   const target = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? window : undefined;
+  target?.addEventListener('beforeunload', onHide, { once: true });
   target?.addEventListener('pagehide', onHide);
   try {
     const result = await requestJson(session.fetchImpl ?? fetch, url, {
@@ -92,6 +96,7 @@ export async function postScopedAiJson(session: AiSession, url: '/api/ai' | '/ap
     return result;
   } finally {
     session.controller.signal.removeEventListener('abort', onAbort);
+    target?.removeEventListener('beforeunload', onHide);
     target?.removeEventListener('pagehide', onHide);
   }
 }
