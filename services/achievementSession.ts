@@ -36,7 +36,6 @@ export async function prepareAchievementSession(previous: OutboxReadGuard, contr
 
 /** A bounded, scoped request including the response body; mutations have no automatic retries. */
 export async function requestAchievementJson(session: AchievementSession, context?: unknown) {
-  await assertAchievementSession(session);
   const requestController = new AbortController();
   const onAbort = () => requestController.abort();
   session.controller.signal.addEventListener('abort', onAbort, { once: true });
@@ -44,6 +43,7 @@ export async function requestAchievementJson(session: AchievementSession, contex
   const onHide = () => session.controller.abort();
   const removePageExit = listenForPageExit(onHide);
   try {
+    await assertAchievementSession(session);
     const headers = {
       'Content-Type': 'application/json', 'X-Request-ID': `web-${crypto.randomUUID()}`,
       'X-FitFocus-State-Account': session.guard.accountId, 'X-FitFocus-State-Session': session.guard.serverSessionId,

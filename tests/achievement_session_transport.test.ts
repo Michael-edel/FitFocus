@@ -110,6 +110,34 @@ it.each([undefined, { source: 'app_open' }])('aborts an active achievement reque
   expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
   expect(fetchImpl).toHaveBeenCalledTimes(2);
 });
+it.each([undefined, { source: 'app_open' }])('does not start an achievement request after unload during its initial IDB assertion: %j', async context => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me')
+    ? json(me()) : json({ catalog: [], newlyUnlocked: [] }, headers()));
+  const session = await prepare(fetchImpl);
+  fetchImpl.mockClear();
+  let releaseAssertion!: () => void;
+  let assertionStarted!: () => void;
+  const started = new Promise<void>(resolve => { assertionStarted = resolve; });
+  const heldAssertion = new Promise<boolean>(resolve => { releaseAssertion = () => resolve(true); });
+  vi.spyOn(outbox, 'isReadSessionCurrent').mockImplementationOnce(() => {
+    assertionStarted();
+    return heldAssertion;
+  });
+  const pending = requestAchievementJson(session, context).then(
+    () => ({ cancelled: false, error: undefined }),
+    (error: unknown) => ({ cancelled: true, error }),
+  );
+  await started;
+  target.dispatchEvent(new Event('beforeunload'));
+  releaseAssertion();
+  const outcome = await pending;
+  expect(fetchImpl).not.toHaveBeenCalled();
+  expect(outcome.cancelled).toBe(true);
+  expect(session.controller.signal.aborted).toBe(true);
+  expect(outcome.error).toBeInstanceOf(Error);
+  expect((outcome.error as Error).message).toMatch(/LOGIN_SESSION_CHANGED|STATE_REQUEST_ABORTED/);
+});
 it('times out a held body without retrying the mutation or cancelling the page lifetime', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me()) : new Response(new ReadableStream({ start() {} }), { headers: headers() }));
   const session = await prepare(fetchImpl); session.timeoutMs = 25;
