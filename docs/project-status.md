@@ -21,8 +21,9 @@ API guards, unit suite, три typecheck, production build, browser matrix,
 rollback/CAS-проверки и сохранение артефактов прошли. Follow-up commit
 `8579486` исправляет частичную запись при malformed item в batch `PUT /api/state`;
 39 связанных тестов, root typecheck, API invariants и `git diff --check` прошли
-локально. Полный CI обновлённого PR HEAD — следующий gate. Предыдущий run #1684
-для `5250190` отменён после обновления PR по concurrency policy.
+локально. Новый [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
+на опубликованном HEAD `ba78ba0` сейчас выполняется. Предыдущий run #1684 для
+`5250190` отменён после обновления PR по concurrency policy.
 
 Локальные follow-up уже опубликованы: Firefox PWA update прошёл 13/13 без
 retries, а test-only проверка удаления аккаунта покрывает все текущие

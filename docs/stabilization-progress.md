@@ -8,8 +8,9 @@ Commit [`8579486`](https://github.com/Michael-edel/FitFocus/commit/8579486)
 `BAD_ITEM` до записи в D1. Явно пустой строковый ключ по существующему контракту
 по-прежнему пропускается. Добавлены unit- и route-level регрессии, а
 `API_CONTRACTS.md` описывает 400-ответ. Локально прошли 39 целевых тестов,
-root typecheck, API invariants и `git diff --check`. Это изменение ожидает
-публикации и отдельного полного CI.
+root typecheck, API invariants и `git diff --check`. Commit опубликован в draft
+PR #93; точный [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
+для HEAD `ba78ba0` выполняется.
 
 ## P0.9 — read-only branch-preview smoke точного HEAD `1546073`, 19.10.2026
 
@@ -49,7 +50,8 @@ URL-кодированный recipe usage key, очищение `__ffv` sidecar 
 
 Целевой privacy spec прошёл 8/8; полный unit suite — **1427/1427** в 216 файлах,
 root typecheck/admin guards и `git diff --check` прошли. Test-only commit входит
-в точный CI #1686 для HEAD `1546073`; браузерная матрица ещё выполняется.
+в точный CI #1686 для HEAD `1546073`, который завершился success, включая
+browser matrix и rollback/CAS gate.
 Общая account deletion/lifecycle приёмка остаётся открытой.
 
 ## PR CI #39183159791 — пять ошибок browser acceptance, 19.10.2026

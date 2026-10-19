@@ -1,15 +1,23 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
-[`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
-`fix/durable-outbox`, base `fix/state-generations`. Точный опубликованный
-`4281ccb` прошёл audit, guards, unit, typechecks и production build, но browser
-матрица завершилась **1105 passed / 311 skipped / 5 failed** в трёх сценариях.
-Локальный follow-up `ddba485` уточняет account-switch и losing-snapshot assertions
-и даёт до 60 секунд на строгую повторную проверку миграционного fence. Все пять
-затронутых browser-проектов, typecheck, build и `git diff --check` прошли
-локально. P0/P0.8/P0.9 остаются открытыми до полного CI, lifecycle-матрицы,
-staging, проверки OAuth/D1 и интеграции в защищённую `main`.
+Обновлено: 19.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
+приёмка полного lifecycle**. Последняя опубликованная ветка — `durable-outbox`,
+Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
+`fix/state-generations`; он зависит от открытых PR
+[#94](https://github.com/Michael-edel/FitFocus/pull/94) и
+[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
+проверенный HEAD `1546073` прошёл [CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688),
+включая browser matrix и rollback/CAS. Follow-up `8579486` fail-closed отклоняет
+malformed элементы batch `PUT /api/state`; 39 целевых тестов, root typecheck,
+API invariants и diff check прошли локально. Точный CI [#1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
+на опубликованном HEAD `ba78ba0` сейчас выполняется.
+
+Основные durable outbox, account/session guards, серверные поколения, семейный
+CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
+остаются открытыми. Дальше нужны полный lifecycle и callback acceptance,
+совместимость старых/новых bundles в целевом окружении, выделенный staging с
+реальными OAuth и D1, rollback/release checklist и интеграция через защищённую
+`main`.
 
 Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
 чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
@@ -1458,8 +1466,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   ключами: UI-настройки, черновики, usage, achievement counters, telemetry и
   user-state. Проверено, что похожий ключ соседнего аккаунта и `__ffv` sidecar
   обрабатываются корректно. Test-only commit [`ef5d66a`](https://github.com/Michael-edel/FitFocus/commit/ef5d66a5e660236eeb957a9bdbdfc86531bbec73);
-  полный unit suite — 1427/1427, root typecheck и diff check прошли. Тест включён в
-  точный CI #1686 на remote HEAD `1546073`; browser matrix ещё выполняется.
+  полный unit suite — 1427/1427, root typecheck и diff check прошли. Точный CI
+  #1686 на remote HEAD `1546073` завершился success, включая browser matrix и
+  rollback/CAS gate.
   Общий account lifecycle остаётся открытым.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
