@@ -742,6 +742,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     включая 4 мобильных запуска (`workers=1,retries=0`). Накопленная mobile
     account/session матрица — 65 сценариев и 260 запусков; полный CI нового HEAD
     ожидает завершения. Остальные callbacks/cache остаются открытыми.
+    Follow-up [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff)
+    расширил прямой success path анализа фото еды на все семь профилей: 7/7,
+    включая четыре мобильных запуска (`workers=1,retries=0`). Проверены дневник,
+    история, usage и пустой outbox активного аккаунта. Матрица составляет
+    66 сценариев и 264 мобильных запуска. CI #1788 пока проверяет предыдущий
+    опубликованный HEAD; точный CI этого follow-up запустится после push.
     Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
     закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity

@@ -7715,3 +7715,13 @@ Chromium/Firefox/WebKit и Android/iPhone Safari/PWA (`workers=1,retries=0`),
 (`workers=1,retries=0`), включая 4 мобильных запуска. Изменений production-кода
 нет; используется mock API. Накопленная mobile account/session матрица выросла
 до 65 сценариев и 260 запусков. Точный CI нового HEAD ожидает завершения.
+
+## P0.5 — мобильная приёмка прямого анализа фото еды, [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff), 19.10.2026
+
+Снят desktop-only skip со сценария успешного food-photo analysis. На всех семи
+desktop/mobile/PWA профилях проверены запись блюда в дневник и историю, списание
+usage активного аккаунта и отсутствие оставшихся outbox операций. Сценарий
+прошёл 7/7 (`workers=1,retries=0`), включая 4 мобильных запуска. Production-код
+не менялся; используется mock API. Матрица выросла до 66 сценариев и 264
+мобильных запусков. CI #1788 проверяет предыдущий опубликованный HEAD; точный CI
+этого follow-up ожидает push.

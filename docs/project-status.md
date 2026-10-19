@@ -56,8 +56,12 @@ input (`label` с `input[type=file][capture]`), поэтому модальна�
 другой или новой сессии. Затем [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0)
 снял desktop-only skip с успешного пошагового рецепта и сохранения избранного:
 сценарий прошёл 7/7 на семи профилях, включая 4 мобильных запуска.
-Накопленная матрица составляет 65 сценариев и 260 мобильных запусков. Точный CI
-нового HEAD ожидает завершения.
+Затем [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff)
+расширил прямой success path анализа фото еды: 7/7 на семи профилях, включая
+4 мобильных запуска; дневник, история и usage записаны для активного аккаунта.
+Накопленная матрица составляет 66 сценариев и 264 мобильных запуска. CI #1788
+проверяет предыдущий опубликованный HEAD; точный CI нового follow-up будет после
+push.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
