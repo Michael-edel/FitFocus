@@ -2592,7 +2592,7 @@ test('an adaptation notice from account A is hidden after another tab activates 
 });
 
 test('an open mobile navigation menu from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('iphone-'), 'Mobile navigation account-switch acceptance runs in iPhone browser profiles.');
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'), 'Mobile navigation account-switch acceptance runs in phone browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
