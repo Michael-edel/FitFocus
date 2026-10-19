@@ -67,6 +67,29 @@ describe('account-scoped UI state visibility', () => {
     expect(state.value).toBe(accountAInsight);
   });
 
+  it('hides profile-sync and adaptation notes outside their owning login session', () => {
+    const state = {
+      scopeKey: 'account-a:session-1',
+      value: {
+        profileSync: 'Профиль аккаунта A обновлён из облака.',
+        adaptation: 'С учётом динамики веса аккаунта A рекомендуется изменить план питания.',
+      },
+    };
+
+    expect(getAccountScopedUiStateValue(state, null, { profileSync: null, adaptation: '' }))
+      .toEqual({ profileSync: null, adaptation: '' });
+    expect(getAccountScopedUiStateValue(
+      state,
+      'account-b:session-1',
+      { profileSync: null, adaptation: '' },
+    )).toEqual({ profileSync: null, adaptation: '' });
+    expect(getAccountScopedUiStateValue(
+      state,
+      'account-a:session-2',
+      { profileSync: null, adaptation: '' },
+    )).toEqual({ profileSync: null, adaptation: '' });
+  });
+
   it('does not accept transient UI updates while no account session is active', () => {
     const previous = { scopeKey: 'account-a:session-1', value: 'private draft' };
     expect(getAccountScopedUiStateValue(previous, null, '')).toBe('');

@@ -273,7 +273,6 @@ const App: React.FC = () => {
   const uiAccountId = allowCachedUiStateRestore ? currentUser?.id ?? null : null;
   const { inviteCode, setInviteCode } = useInviteCodeState(uiAccountId);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScopeState, setPlanScopeState] = useState<{ ownerId: string | null; value: 'personal' | 'family' }>({
     ownerId: null,
@@ -300,6 +299,10 @@ const App: React.FC = () => {
   const rootAccountSessionScope = allowCachedUiStateRestore && currentUser?.id
     ? accountSessionRenderKey(loginReadGuard, currentUser.id)
     : null;
+  const { value: profileSyncNote, setValue: setProfileSyncNote } = useAccountScopedUiState<string | null>(
+    rootAccountSessionScope,
+    null,
+  );
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
@@ -496,7 +499,7 @@ const App: React.FC = () => {
 
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
-  const [adaptNote, setAdaptNote] = useState<string>('');
+  const { value: adaptNote, setValue: setAdaptNote } = useAccountScopedUiState(rootAccountSessionScope, '');
   const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
   const {
