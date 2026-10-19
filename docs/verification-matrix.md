@@ -275,7 +275,9 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 сценариев. Отложенное обновление цели при смене загруженной семьи, отложенное
 обновление цели участника после reauthentication и late member response A после
 входа B прошли каждое 7/7 на desktop, Android, iPhone Safari и PWA профилях при
-`workers=1,retries=0`. Полный точный CI этой расширенной матрицы проверяется
+`workers=1,retries=0`. Ещё 15 семейных A→B и same-account delayed callbacks
+прошли 60/60 на четырёх Android/iPhone/PWA профилях; их ранее проверенная desktop
+часть сохранена отдельно. Полный точный CI этой расширенной матрицы проверяется
 после push; остальные cloud callbacks/cache и writers семейного членства остаются
 открытыми.
 

@@ -789,6 +789,10 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     ответ не должен менять UI B или вызывать повторную загрузку семьи A. После
     снятия desktop-only skip E2E прошёл 7/7 на desktop, Android, iPhone и PWA
     профилях без retries; точный CI актуального HEAD проверяется после push.
+  - [x] Расширить account-switch приёмку 15 delayed family callbacks на Android,
+    iPhone Safari и PWA профили, ранее пропущенные desktop-only фильтром. Новая
+    мобильная часть прошла 60/60 (`workers=1,retries=0`); историческая desktop
+    часть проверена отдельно. Совместный exact-head CI запускается после push.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

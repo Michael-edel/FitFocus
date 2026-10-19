@@ -575,7 +575,6 @@ async function openAccountB(context: BrowserContext, state: FixtureState, errors
 }
 
 test('a delayed family callback from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -611,7 +610,6 @@ test('a delayed family callback from account A is ignored after another tab sign
 });
 
 test('a delayed family callback stays bound to its captured family when the same login reloads another family', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA,
@@ -658,7 +656,6 @@ test('a delayed family callback stays bound to its captured family when the same
 });
 
 test('a delayed family-join response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-join account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -701,7 +698,6 @@ test('a delayed family-join response from account A cannot publish success after
 });
 
 test('a delayed family-create response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-create account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -745,7 +741,6 @@ test('a delayed family-create response from account A cannot publish success aft
 });
 
 test('a delayed family-context read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-context account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -781,7 +776,6 @@ test('a delayed family-context read from account A cannot appear after account B
 });
 
 test('a delayed shared family-menu read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-menu account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const oldMenuName = 'MENU_ACCOUNT_A_ONLY';
   const currentMenuName = 'MENU_ACCOUNT_B_ONLY';
@@ -845,7 +839,6 @@ test('a delayed shared family-menu read from account A cannot appear after accou
 });
 
 test('a delayed family-context read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -897,7 +890,6 @@ test('a delayed family-context read from the previous same-account session is di
 });
 
 test('a delayed shared family-menu read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account shared family-menu reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const oldMenuName = 'MENU_OLD_SERVER_SESSION';
   const newMenuName = 'MENU_NEW_SERVER_SESSION';
@@ -979,7 +971,6 @@ test('a delayed shared family-menu read from the previous same-account session i
 });
 
 test('a delayed family invite from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family invite reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], inviteSessionIds: [], releasedInvites: 0,
@@ -1038,7 +1029,6 @@ test('a delayed family invite from the previous same-account session is discarde
 });
 
 test('a delayed family create from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-create reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1099,7 +1089,6 @@ test('a delayed family create from the previous same-account session is discarde
 });
 
 test('a delayed family join from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-join reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1161,7 +1150,6 @@ test('a delayed family join from the previous same-account session is discarded 
 });
 
 test('a delayed family shopping-list read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1204,7 +1192,6 @@ test('a delayed family shopping-list read from account A cannot appear after acc
 });
 
 test('a delayed family shopping-list read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-shopping reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const oldListName = 'СПИСОК_СТАРОЙ_СЕССИИ';
   const newListName = 'СПИСОК_НОВОЙ_СЕССИИ';
@@ -1284,7 +1271,6 @@ test('a delayed family shopping-list read from the previous same-account session
 });
 
 test('a delayed family shopping response cannot trigger an achievement after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family shopping callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1329,7 +1315,6 @@ test('a delayed family shopping response cannot trigger an achievement after ano
 });
 
 test('a delayed family shopping check from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family shopping reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,

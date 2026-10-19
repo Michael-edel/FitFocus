@@ -7508,3 +7508,12 @@ A. Проверка подтверждает, что экран B остаётс
 повторный family GET, ошибки и page error отсутствуют. Тест прошёл 7/7 на desktop,
 Android, iPhone Safari и PWA профилях (`workers=1,retries=0`). Точный CI нового
 HEAD проверяется после push; остальные callbacks/cache остаются открытыми.
+
+## P0.4 — расширение delayed family callbacks на мобильные профили, 19.10.2026
+
+Сняты desktop-only skips с 15 тестов A→B и same-account reauthentication для
+family invite/join/create/context/menu и shopping list/check. Их мобильная часть
+прошла 60/60 в Android Chrome, Android PWA, iPhone Safari и iPhone PWA при
+`workers=1,retries=0`. Desktop-проверки существовали отдельно; точный CI с
+объединённой матрицей проверяется после push. Остальные cloud callbacks/cache
+и P0.4 остаются открытыми.

@@ -296,6 +296,11 @@ Production-код не менялся, runtime-дефект не найден; �
   Safari и PWA (`workers=1,retries=0`). Вместе с same-account reauthentication
   member update оба сценария теперь проверены на семи профилях; точный CI нового
   HEAD проверяется после push.
+  Дополнительно 15 delayed family account-switch callbacks были расширены на
+  Android, iPhone Safari и PWA проекты: family invite/join/create/context/menu,
+  shopping list/check и соседние ответы прошли 60/60 на четырёх мобильных
+  профилях (`workers=1,retries=0`). До снятия фильтра они выполнялись только на
+  desktop; общий exact-head CI для расширенной матрицы ещё требуется.
   Покрытие остальных callbacks всё ещё неполное.
 - [x] Подтвердить invite/member family target `2bbec11` в точном CI
   [`9bdeb47` / run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051).
