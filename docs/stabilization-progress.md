@@ -7307,3 +7307,23 @@ Account-switch acceptance дополнен двумя UI cache-путями. Н�
 typecheck, build, browser tests и rollback/CAS. Runtime-дефект в этих двух
 сценариях не воспроизведён. Это закрывает только две acceptance-проверки;
 общий аудит callbacks/cache и P0.4 остаются открытыми.
+
+## P0.4 — область login-сессии для root overlays, `24180d7`, 19.10.2026
+
+Проверка App выявила root UI-state, который переживал выход в памяти компонента:
+`insightModal` хранил фото и разбор еды, `editFoodModal` — поля блюда, а камера,
+индикатор анализа и paywall оставались обычными несвязанными `useState`. При
+возврате из auth choice с другим аккаунтом эти значения могли снова стать
+видимыми: текущий render gate скрывал их во время выхода, но не связывал с
+владельцем. Теперь эти overlays используют общий `accountSessionRenderKey`;
+при logout, закрытой durable-сессии, смене аккаунта или повторном входе они
+получают значения по умолчанию, а их setters отбрасывают обновление старого
+scope. Кнопка сброса UI также закрывает paywall.
+
+Добавлена unit-регрессия на скрытие частного payload root overlay после выхода,
+смены аккаунта и повторного входа в новую сессию. `npm run typecheck` прошёл,
+включая admin guards; `git diff --check` прошёл. Проверка runtime/browser и
+точный CI нового PR-head ещё не подтверждены. Кодовый коммит
+[`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea). Это устраняет
+владение конкретными transient overlays, но не закрывает аудит всех callbacks,
+кэшей или общий P0.4.

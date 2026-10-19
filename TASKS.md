@@ -695,6 +695,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
+  - [ ] Привязать содержимое root overlays к активной login-сессии: фоторазбор
+    и редактор блюда, окно камеры, scanning status, навигационное меню и paywall
+    не должны возвращаться после logout/login другого аккаунта. Реализация
+    добавлена в [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea); root typecheck и diff check прошли,
+    точный CI нового PR-head ещё не подтверждён.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

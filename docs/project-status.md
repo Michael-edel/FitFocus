@@ -13,13 +13,14 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
-и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний проверенный
-code HEAD — `544f3f563fbb966ff0620adef436c0aede315282`; точный
-[CI #1696](https://github.com/Michael-edel/FitFocus/actions/runs/39199188429)
-успешен: audit, guards, 1454 unit / 216 файлов, 1110 browser passed / 311 skipped,
-три typecheck, production build, rollback/CAS и артефакты прошли. Документационный
-HEAD `9ba464b57a073bfea51136a04f627c8c4a41908e` повторно прошёл [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
-с теми же успешными результатами.
+и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
+проверенный code/test HEAD — `6f189038a52f05826d83a427130c1c49903edfd5`; точный
+[CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952)
+успешен: audit, schema/privacy/auth/API guards, unit, три typecheck, production
+build, browser tests, rollback/CAS и сохранение артефактов прошли. Документационный
+follow-up [`02b3d79`](https://github.com/Michael-edel/FitFocus/commit/02b3d79cb8dba1596b0f150f60de1e56d1be1f36)
+обновил журнал. Новый root-overlay follow-up [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea)
+прошёл root typecheck, точный полный CI для него ещё не подтверждён.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
