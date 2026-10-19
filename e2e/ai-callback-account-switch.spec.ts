@@ -2248,6 +2248,12 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
   try {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
+  const initialAchievements = delayedStateHydration ? page.waitForResponse(response => {
+    const request = response.request();
+    return new URL(response.url()).pathname === '/api/achievements' && request.method() === 'GET'
+      && request.headers()['x-fitfocus-state-account'] === accountA.id
+      && request.headers()['x-fitfocus-state-session'] === accountA.sid;
+  }) : null;
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
@@ -2257,6 +2263,12 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
   const weightDraftKeyA = `fitfocus.dashboard.new-weight.v1:${accountA.id}`;
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
   mark('draft-cached-before-reload');
+  if (initialAchievements) {
+    const response = await initialAchievements;
+    expect(response.status()).toBe(200);
+    await response.finished();
+    mark('initial-achievements-complete');
+  }
 
   let delayedHydrationReads = 0;
   let heldHydrationRequest: Request | undefined;
