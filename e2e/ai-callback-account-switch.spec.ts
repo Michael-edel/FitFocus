@@ -2527,7 +2527,7 @@ test('an open food insight from account A is hidden after another tab activates 
 });
 
 test('an open camera dialog from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Camera account-switch acceptance runs in desktop browser profiles.');
+  test.skip(!info.project.name.startsWith('desktop-'), 'Mobile profiles use a native capture input instead of the in-app camera dialog.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2552,7 +2552,6 @@ test('an open camera dialog from account A is hidden after another tab activates
 });
 
 test('an open paywall from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Paywall account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2577,7 +2576,6 @@ test('an open paywall from account A is hidden after another tab activates accou
 });
 
 test('a profile sync notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Profile settings account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2606,7 +2604,6 @@ test('a profile sync notice from account A is hidden after another tab activates
 });
 
 test('an adaptation notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Adaptation account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
