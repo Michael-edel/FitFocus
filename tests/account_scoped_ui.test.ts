@@ -50,6 +50,23 @@ describe('account-scoped UI state visibility', () => {
     expect(newSessionA).toEqual({ scopeKey: 'account-a:session-2', value: 'new draft' });
   });
 
+  it('does not revive a private root overlay after logout or a different login session', () => {
+    const accountAInsight = {
+      id: 'food-a',
+      photo: 'data:image/jpeg;base64,account-a',
+      name: 'Блюдо аккаунта A',
+    };
+    const state = { scopeKey: 'account-a:session-1', value: accountAInsight };
+
+    expect(getAccountScopedUiStateValue(state, null, null)).toBeNull();
+    expect(getAccountScopedUiStateValue(state, 'account-b:session-1', null)).toBeNull();
+    expect(getAccountScopedUiStateValue(state, 'account-a:session-2', null)).toBeNull();
+
+    const signedOut = updateAccountScopedUiState(state, null, null, null);
+    expect(signedOut).toBe(state);
+    expect(state.value).toBe(accountAInsight);
+  });
+
   it('does not accept transient UI updates while no account session is active', () => {
     const previous = { scopeKey: 'account-a:session-1', value: 'private draft' };
     expect(getAccountScopedUiStateValue(previous, null, '')).toBe('');
