@@ -23,7 +23,7 @@ beforeEach(async () => {
     ? json(me()) : json({ connected: true }, scope()));
   session = await prepareHuaweiSession(guard, new AbortController(), () => true, { outbox, fetchImpl, timeoutMs: 200 });
 });
-afterEach(() => { database.close(); vi.restoreAllMocks(); });
+afterEach(() => { database.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it.each([undefined, { protocol: 1 }, { protocol: 2, guard: 1 }])('requires the huaweiSync capability %j before the request', async capabilityValue => {
   const before = (await outbox.sessionState()).active!;

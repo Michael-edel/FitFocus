@@ -16,7 +16,7 @@ beforeEach(async () => {
   database = new StateDatabase({ factory: new IDBFactory() }); const outbox = new DurableOutbox(database);
   session = { guard: (await outbox.acceptReadSession(account, sid, 0))!, outbox, controller: new AbortController(), isCurrentSession: () => true, timeoutMs: 200 };
 });
-afterEach(() => { database.close(); vi.restoreAllMocks(); });
+afterEach(() => { database.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const request = (method = 'GET') => requestFamilyJson(session, '/api/family', { method });
 
 it.each([undefined, { protocol: 1 }, { protocol: 2, guard: 1 }])('requires family capability %j before API work', async capability => {

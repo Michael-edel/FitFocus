@@ -65,6 +65,11 @@ it.each(['beforeunload', 'pagehide'] as const)('aborts an in-flight admin respon
   await result;
 
   expect(session.controller.signal.aborted).toBe(false);
+  if (eventName === 'pagehide') {
+    const pageshow = new Event('pageshow');
+    Object.defineProperty(pageshow, 'persisted', { value: true });
+    target.dispatchEvent(pageshow);
+  }
   const afterReturn = await requestAdminResponse(session, '/api/admin/stats');
   await expect(afterReturn.json()).resolves.toEqual({ ok: true });
   expect(removeListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));

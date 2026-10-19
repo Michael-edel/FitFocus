@@ -8,7 +8,7 @@ let db: StateDatabase; let outbox: DurableOutbox;
 const account = 'account-a';
 const json = (body: unknown, headers?: HeadersInit) => new Response(JSON.stringify(body), { headers });
 beforeEach(() => { db = new StateDatabase({ factory: new IDBFactory() }); outbox = new DurableOutbox(db); });
-afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { db.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const activate = async (): Promise<OutboxReadGuard> => (await outbox.acceptReadSession(account, testSessionId, (await outbox.sessionState()).fence))!;
 it('cannot accept a delayed proof after a cross-tab logout', async () => {
   let began!: () => void; let release!: (response: Response) => void;

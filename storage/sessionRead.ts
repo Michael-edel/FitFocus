@@ -1,6 +1,6 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, type OutboxReadGuard } from './durableOutbox';
-import { listenForPageExit, requestJson, type JsonResponse } from './sessionTransport';
+import { listenForPageExit, requestJson, trackPageExit, type JsonResponse } from './sessionTransport';
 
 export class SessionReadError extends Error {
   constructor(readonly kind: 'session' | 'protocol' | 'auth' | 'access') {
@@ -67,6 +67,7 @@ async function readJson(url: string, headers: HeadersInit, options: SessionReadO
 export async function verifyReadSession(options: SessionReadOptions & {
   accountId?: string; bootstrap?: boolean; previous?: OutboxReadGuard;
 } = {}): Promise<{ body: Record<string, unknown> | null; guard: OutboxReadGuard | null }> {
+  trackPageExit();
   const outbox = options.outbox ?? new DurableOutbox();
   if (options.previous) await assertReadSession(options.previous, { ...options, outbox });
   const before = await outbox.sessionState(); current(options);
@@ -95,6 +96,7 @@ export async function verifyReadSession(options: SessionReadOptions & {
 }
 
 export async function readScopedJson(url: string, guard: OutboxReadGuard, protocol: 'bootstrap' | 'state', options: SessionReadOptions = {}): Promise<JsonResponse> {
+  trackPageExit();
   await assertReadSession(guard, options);
   const result = await readJson(url, {
     'X-FitFocus-State-Account': guard.accountId, 'X-FitFocus-State-Session': guard.serverSessionId,

@@ -1,10 +1,31 @@
 import { isRecord } from '../safeJson';
 export type JsonResponse = { response: Response; body: Record<string, unknown> | null };
 
-/** Run a request/session guard on the first page-exit signal and remove both listeners. */
+type PageExitState = { exited: boolean };
+const pageExitStates = new WeakMap<EventTarget, PageExitState>();
+
+/** Remember pagehide across asynchronous preparation and the next request's listener registration. */
+export function trackPageExit(target?: EventTarget): PageExitState | null {
+  const page = target ?? (typeof window !== 'undefined' ? window : undefined);
+  if (!page) return null;
+  const existing = pageExitStates.get(page);
+  if (existing) return existing;
+  const state = { exited: false };
+  pageExitStates.set(page, state);
+  page.addEventListener('pagehide', () => { state.exited = true; });
+  page.addEventListener('pageshow', event => {
+    if ((event as PageTransitionEvent).persisted) state.exited = false;
+  });
+  return state;
+}
+
+if (typeof window !== 'undefined') trackPageExit(window);
+
+/** Run a request/session guard on exit, including an exit before listener registration. */
 export function listenForPageExit(onPageExit: () => void, target?: EventTarget): () => void {
   const page = target ?? (typeof window !== 'undefined' ? window : undefined);
   if (!page) return () => {};
+  if (trackPageExit(page)?.exited) { onPageExit(); return () => {}; }
 
   let active = true;
   const cleanup = () => {
