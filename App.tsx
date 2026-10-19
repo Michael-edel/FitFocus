@@ -947,7 +947,7 @@ const App: React.FC = () => {
     hasPendingProfileChangesRef.current = false;
     setProfileSyncState('idle');
     setProfileSyncNote('Профиль обновлён из облака.');
-  }, []);
+  }, [setProfileSyncNote]);
 
   const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
