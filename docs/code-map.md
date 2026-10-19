@@ -1,6 +1,6 @@
 # Карта кода FitFocus
 
-Сверено: 15.10.2026. Фото-рецепт защищён на `71d2ca4`. Код bootstrap/hydration — `dac2de2`, исправление
+Сверено: 19.10.2026. Фото-рецепт защищён на `71d2ca4`. Код bootstrap/hydration — `dac2de2`, исправление
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
 Последующий локально проверенный компонент меню — `f4b4eee`; автоматический
@@ -22,7 +22,7 @@ CI каждой ревизии сверяется отдельно.
 | Семейное меню: CAS и доставка | [useFamilyMenu.ts](../useFamilyMenu.ts), [repository](../storage/familyMenuRepository.ts), [server CAS](../functions/api/_lib/family_menu_state.ts), [shared ingredients](../shoppingIngredients.ts) | [Контракт](family-menu-state.md), [ADR-008](adr/ADR-008-family-menu-generation.md), [SQL tests](../tests/family_menu_state.test.ts), [outbox/AI](../tests/family_menu_durable.test.ts), [E2E](../e2e/family-menu-durable.spec.ts) |
 | Сборка интерфейса и сценариев | [App.tsx](../App.tsx), [AppWorkspace.tsx](../AppWorkspace.tsx) | [Продукт](../PRODUCT.md), [архитектура](current-architecture.md); feature hooks находятся в `features/` |
 | Вход и загрузка данных | [authSession.ts](../authSession.ts), [loginSession.ts](../features/auth/loginSession.ts), [sessionRead.ts](../storage/sessionRead.ts) | [Bootstrap/hydration](bootstrap-hydration.md), [read guard tests](../tests/session_read_guard.test.ts), [браузерные сценарии](../e2e/bootstrap-session.spec.ts) |
-| Регистрация и первоначальный план | [registrationFlow.ts](../registrationFlow.ts) | [Сохранение регистрации](registration-persistence.md), [unit](../tests/registration_flow.test.ts), [durability E2E](../e2e/registration-durability.spec.ts), [account-switch E2E](../e2e/registration-account-switch.spec.ts) |
+| Регистрация и первоначальный план | [registrationFlow.ts](../registrationFlow.ts), [registrationSession.ts](../features/auth/registrationSession.ts) | [Сохранение регистрации](registration-persistence.md), [unit](../tests/registration_flow.test.ts), [durability E2E](../e2e/registration-durability.spec.ts), [account-switch E2E](../e2e/registration-account-switch.spec.ts) |
 | Редактирование, fallback-план и восстановление профиля | [useProfilePersistence.ts](../features/profile/useProfilePersistence.ts), [loginSession.ts](../features/auth/loginSession.ts), [App.tsx](../App.tsx), [profileState.ts](../storage/profileState.ts) | [Контракт профиля](profile-persistence.md), [profile tests](../tests/profile_sync.test.ts), [E2E](../e2e/profile-durability.spec.ts); fallback остаётся скрытым до guarded durable commit |
 | Автоматический profile flush | [useProfileAutoSync.ts](../features/profile/useProfileAutoSync.ts), [App.tsx](../App.tsx), [stateSync.ts](../storage/stateSync.ts) | `flushPending` сохраняет текущую паузу; ручной `syncNow` проверяет свежий proof. [Контракт](state-sender.md#автоматическая-отправка-и-ручная-проверка-сессии) |
 | Уведомление о сохранении и стабильность формы | [StateStorageNotice.tsx](../ui/StateStorageNotice.tsx) | [Контракт](profile-persistence.md#дополнительная-проверка-до-pointerdown-12102026), [E2E](../e2e/profile-durability.spec.ts): область учитывает все переносы сообщений и не двигает Save после фонового ack |

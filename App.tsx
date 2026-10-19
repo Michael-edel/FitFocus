@@ -100,6 +100,7 @@ import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
 import { useCloudSyncRecovery } from './features/profile/useCloudSyncRecovery';
 import { buildCloudSyncBadge } from './features/profile/cloudSyncBadge';
 import { clearAppUiStorage } from './features/profile/clearUiState';
+import { isRegistrationSessionReady, type RegistrationSessionState } from './features/auth/registrationSession';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
@@ -340,10 +341,12 @@ const App: React.FC = () => {
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
-  const [registrationSessionState, setRegistrationSessionState] = useState<{
-    identity: string | null;
-    status: 'checking' | 'active' | 'unavailable' | 'changed';
-  }>({ identity: null, status: 'checking' });
+  const [registrationSessionState, setRegistrationSessionState] = useState<RegistrationSessionState>({
+    identity: null,
+    status: 'checking',
+  });
+  const registrationSessionStateRef = useRef(registrationSessionState);
+  registrationSessionStateRef.current = registrationSessionState;
   const registrationSessionGuardRef = useRef<{
     identity: string;
     sessionKey: string | null;
@@ -1555,8 +1558,13 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     registrationControllerRef.current = controller;
     const bootstrap = authBootstrapAttemptRef.current;
     const accountId = googleMe?.sub;
-    const isCurrent = () => attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
-      && accountId === authIdentityRef.current;
+    const isCurrent = () => {
+      const sessionGuard = registrationSessionGuardRef.current;
+      return attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
+        && accountId === authIdentityRef.current
+        && isRegistrationSessionReady(accountId, registrationSessionStateRef.current)
+        && sessionGuard?.identity === accountId && sessionGuard.sessionKey !== null && !sessionGuard.invalid;
+    };
     try {
       await runRegistrationFlow({
         regData,
@@ -1580,7 +1588,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       if (registrationControllerRef.current === controller) registrationControllerRef.current = null;
     }
   }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe,
-    setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
+    registrationSessionState, setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
 
   const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
     totalMs: ACTIVATION_TOTAL_MS,
@@ -1903,11 +1911,13 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     </React.Suspense>
   );
 
-  if (authState === 'register' && registrationSessionState.identity === googleMe?.sub
-    && registrationSessionState.status !== 'active') {
-    const registrationSessionMessage = registrationSessionState.status === 'checking'
+  if (authState === 'register' && !isRegistrationSessionReady(googleMe?.sub, registrationSessionState)) {
+    const status = registrationSessionState.identity === googleMe?.sub
+      ? registrationSessionState.status
+      : 'checking';
+    const registrationSessionMessage = status === 'checking'
       ? 'Проверяем активную сессию…'
-      : registrationSessionState.status === 'unavailable'
+      : status === 'unavailable'
         ? 'Не удалось подтвердить активную сессию. Данные регистрации скрыты; повторите вход.'
         : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
     return (

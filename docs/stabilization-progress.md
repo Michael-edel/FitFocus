@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## Регистрация блокируется до подтверждения владельца — 19.10.2026
+
+В audit обнаружен fail-open в root gate: форма показывалась, когда состояние
+проверки имело `identity`, отличный от текущего Google subject, либо ещё не
+успело обновиться. Форма и обработчик теперь требуют точное совпадение subject и
+статус `active`; обработчик дополнительно проверяет текущий session guard и его
+invalid-флаг. При несовпадении личные поля скрыты, запуск durable profile write
+и AI не начинается.
+
+Локальная проверка выполнялась в ветке `durable-outbox` на чистом HEAD `42683ae`
+с незакоммиченным follow-up: registration unit — **21/21**;
+`registration-account-switch.spec.ts` — **7/7** и `registration-durability.spec.ts`
+— **21/21** на desktop Chromium/Firefox/WebKit, Android Chrome/PWA Chrome и
+iPhone Safari/PWA, `workers=1`, `retries=0`; `npm run typecheck`, production
+build и `git diff --check` прошли. Это browser acceptance через mock API;
+выделенный staging и OAuth не проверялись. PR #93 остаётся draft, merge/deploy
+не выполнены. CI родительской ревизии #1746 не включает эту правку; exact-head
+CI итоговой ревизии нужно подтвердить перед слиянием.
+
 ## P0.4 — root UI и черновик регистрации привязаны к владельцу, `b405761`, 19.10.2026
 
 Продолжая аудит root state, нашёл ещё два сообщения без владельца: заметка

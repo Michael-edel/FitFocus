@@ -8,8 +8,21 @@ import { DurableOutbox } from '../storage/durableOutbox';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { userStateDatabase } from '../storage/stateDatabase';
 import { type AiSession, prepareAiSession } from '../services/aiSession';
+import { isRegistrationSessionReady } from '../features/auth/registrationSession';
 
 const account = 'registration-owner';
+
+describe('registration session gate', () => {
+  it('fails closed until the exact identity has an active session', () => {
+    expect(isRegistrationSessionReady('account-a', { identity: null, status: 'checking' })).toBe(false);
+    expect(isRegistrationSessionReady('account-b', { identity: 'account-a', status: 'active' })).toBe(false);
+    expect(isRegistrationSessionReady('account-a', { identity: 'account-a', status: 'checking' })).toBe(false);
+    expect(isRegistrationSessionReady('account-a', { identity: 'account-a', status: 'unavailable' })).toBe(false);
+    expect(isRegistrationSessionReady('account-a', { identity: 'account-a', status: 'changed' })).toBe(false);
+    expect(isRegistrationSessionReady('account-a', { identity: 'account-a', status: 'active' })).toBe(true);
+  });
+});
+
 function deps() {
   const sid = 'a'.repeat(64);
   return { regData: { name: 'Test User', gender: Gender.FEMALE, weight: 72, height: 170, age: 32,
@@ -41,6 +54,17 @@ beforeEach(() => {
 afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('durable registration', () => {
+  it('does not save a profile or start AI when the registration session is not current', async () => {
+    const d = deps();
+    d.isCurrentSession = () => false;
+
+    await runRegistrationFlow(d);
+
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+  });
+
   it('commits the canonical account profile before generating AI and enters the app without a direct profile request', async () => {
     const d = deps();
     d.generatePersonalPlan.mockImplementation(async (_user, session) => {

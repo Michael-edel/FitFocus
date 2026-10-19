@@ -65,6 +65,13 @@ typecheck и production build прошли. До изменения межакк
 cross-identity сбоя до изменения не было; правка опубликована в PR #93. Exact-head
 CI следует подтвердить перед слиянием.
 
+Локальный follow-up закрывает fail-open в регистрации: пока состояние не
+подтверждает `active` для текущего Google identity, форма скрыта, а обработчик
+не запускает сохранение или AI callbacks. На рабочем дереве поверх `42683ae`
+прошли registration unit 21/21, account-switch E2E 7/7 и durability E2E 21/21
+на desktop, Android, iPhone и PWA, root typecheck и production build. Exact-head
+CI этой правки нужно подтвердить перед слиянием.
+
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
 push-status — 401 без redirect и cookie. Это preview, не выделенный staging;
