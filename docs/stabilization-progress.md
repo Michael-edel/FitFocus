@@ -7640,7 +7640,7 @@ account/session матрица составляет 55 сценариев и 220
 follow-up ожидает push; CI предыдущего опубликованного HEAD продолжает
 выполняться.
 
-## P0.4/P0.5 — мобильная приёмка позднего PDF download, 19.10.2026
+## P0.4/P0.5 — мобильная приёмка позднего PDF download, [`39ff89e`](https://github.com/Michael-edel/FitFocus/commit/39ff89e43bf939ebc83c4e0789fe76efd4d2cb4a), 19.10.2026
 
 Снят desktop-only skip с account-switch теста health-report PDF: запрос шрифта
 удерживается после нажатия экспорта, в другой вкладке активируется аккаунт B,

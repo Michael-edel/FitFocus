@@ -1112,6 +1112,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   прошёл 1311/1311 в 211 файлах, три typecheck и production build прошли.
   Точный CI ожидается; остальные callback-контракты, staging и lifecycle
   остаются открытыми.
+  Мобильный follow-up [`39ff89e`](https://github.com/Michael-edel/FitFocus/commit/39ff89e43bf939ebc83c4e0789fe76efd4d2cb4a)
+  прошёл 4/4 на Android/iPhone/PWA; вместе с desktop Chromium/Firefox/WebKit
+  account-switch PDF acceptance составляет 7/7 (`workers=1,retries=0`). Точный
+  CI этой расширенной матрицы ожидает публикации.
   Остальные callback-контракты, точный CI, проверка внешних потребителей и
   staging остаются открытыми.
 - [x] Привязать обычный logout к актуальному IDB guard; account delete требует
