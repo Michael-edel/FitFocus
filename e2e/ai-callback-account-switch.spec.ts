@@ -2273,6 +2273,42 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   expect(switched.errors).toEqual([]);
 });
 
+test('a nutrition search cached for account A stays private after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace search-cache account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const search = page.getByPlaceholder('Поиск блюда в истории...');
+  const queryA = 'аллергены и ограничения аккаунта A';
+  const searchKeyA = `fitfocus.nutrition.search.v1:${accountA.id}`;
+  const searchKeyB = `fitfocus.nutrition.search.v1:${accountB.id}`;
+  await search.fill(queryA);
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), searchKeyA))
+    .toBe(JSON.stringify({ query: queryA, open: true }));
+
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByPlaceholder('Поиск блюда в истории...')).toHaveValue(queryA, { timeout: 30_000 });
+
+  const switched = await openAccountB(context, state, true, '/#nutrition');
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(search).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), searchKeyA))
+    .toBe(JSON.stringify({ query: queryA, open: true }));
+  const searchForB = switched.page.getByPlaceholder('Поиск блюда в истории...');
+  await expect.poll(() => switched.page.evaluate(key => localStorage.getItem(key), searchKeyB))
+    .toBe(JSON.stringify({ query: '', open: false }));
+  await expect(searchForB).toHaveValue('');
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), searchKeyB)).not.toContain(queryA);
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(switched.errors).toEqual([]);
+});
+
 test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const baseProfileA = profileFor(accountA.id);
