@@ -749,6 +749,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     прошли. Межаккаунтный UI-сбой до изменения не воспроизведён; это защита
     stale UI-state. Код опубликован в PR #93; точный CI актуального HEAD нужно
     проверить перед слиянием.
+    Локальный follow-up [`e9a14c2`](https://github.com/Michael-edel/FitFocus/commit/e9a14c2)
+    перевёл `planError` на Google-identity scope: сообщение регистрации A скрыто
+    для B и после выхода. Целевые unit — 33/33, registration account-switch E2E —
+    7/7, typecheck, production build и diff check прошли. До этого конкретный
+    визуальный cross-identity сбой не воспроизведён; это защита stale root state.
+    Коммит добавлен в PR #93; exact-head CI новой ревизии нужно подтвердить
+    перед слиянием.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

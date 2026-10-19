@@ -105,6 +105,17 @@ Chromium/Firefox/WebKit. `npm run typecheck`, `npm run build` и
 изменение закрывает риск stale loading state. Остальной аудит callbacks/cache и
 P0.4 остаются открытыми.
 
+Follow-up [`e9a14c2`](https://github.com/Michael-edel/FitFocus/commit/e9a14c2)
+привязал `planError` к Google-identity scope, совпадающему с registration draft.
+Сообщение об ошибке входа/создания профиля сбрасывается при смене identity или
+выходе; оно остаётся доступно текущему владельцу после перехода в приложение.
+Целевые unit — **33/33** (`account_scoped_ui` и `registration_flow`),
+`registration-account-switch.spec.ts` — **7/7** на desktop, Android и iPhone/PWA.
+`npm run typecheck`, `npm run build` и `git diff --check` прошли. Cross-identity
+сбой до изменения не воспроизводился; это профилактическое ограничение stale
+root state. Коммит опубликован в PR #93; CI #1744 относится к предыдущему PR
+HEAD и не проверяет эту правку. Exact-head CI следует подтвердить перед слиянием.
+
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен с временным origin

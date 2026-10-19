@@ -59,6 +59,12 @@ typecheck и production build прошли. До изменения межакк
 воспроизвёлся; это профилактика stale UI-state. Коммит опубликован в PR #93;
 точный CI актуального HEAD следует проверить перед слиянием.
 
+Коммит [`e9a14c2`](https://github.com/Michael-edel/FitFocus/commit/e9a14c2)
+привязал ошибку регистрации к Google identity. Unit — 33/33, account-switch E2E —
+7/7 на desktop/Android/iPhone/PWA, typecheck и production build прошли. Видимого
+cross-identity сбоя до изменения не было; правка опубликована в PR #93. Exact-head
+CI следует подтвердить перед слиянием.
+
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
 push-status — 401 без redirect и cookie. Это preview, не выделенный staging;
