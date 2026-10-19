@@ -310,6 +310,12 @@ diary/history и не запускают лишние achievement effects. Cumul
 coverage: 46 account/session сценариев и 184 запуска; exact-head CI всё ещё
 ожидает завершения.
 
+Поздние profile save и refresh прошли ещё 14/14 на desktop, Android, iPhone и
+PWA профилях. Ответ A не подменяет профиль B; при возврате A исходная операция
+повторяется с новой session epoch. Production-код не менялся. Накопленное
+мобильное расширение — 48 сценариев и 192 запуска; полный P0.4/P0.5 lifecycle
+и точный CI текущего HEAD остаются открытыми.
+
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
 `serverSnapshot` после 409/reload; явное принятие записывает серверный снимок,

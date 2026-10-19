@@ -3455,7 +3455,6 @@ test('health report PDF is not downloaded when the account changes during font l
 });
 
 test('a late profile save from account A cannot acknowledge or overwrite after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile save acceptance runs in desktop browser profiles.');
   let started!: () => void;
   const writeStarted = new Promise<void>(resolve => { started = resolve; });
   const releaseWrite = deferred();
@@ -3570,7 +3569,6 @@ test('a late profile save from account A cannot acknowledge or overwrite after a
 });
 
 test('a late profile refresh from account A cannot hydrate after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile refresh acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));

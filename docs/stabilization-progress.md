@@ -7579,3 +7579,14 @@ Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Удержанный о
 42/42; их мобильная часть — 24/24. Cumulative mobile acceptance включает 46
 account/session сценариев и 184 запуска. Production-код не менялся; exact-head
 CI ещё не завершён, полный P0.5 и staging остаются открытыми.
+
+## P0.4/P0.5 — мобильная приёмка profile save и refresh, 19.10.2026
+
+Сняты desktop-only skips с двух account-switch сценариев. Удержанный profile PUT
+от A не подтверждает правку в интерфейсе B; после повторного входа A тот же
+outbox operation повторяется с новой `sessionEpoch`. Поздний profile GET от A
+не гидратирует страницу B. Проверки прошли 14/14 на desktop Chromium/Firefox/
+WebKit, Android Chrome/PWA и iPhone Safari/PWA при `workers=1,retries=0`.
+Production-код не менялся. Совокупное мобильное расширение составляет 48
+account/session сценариев и 192 запуска. Exact-head CI ещё не завершён; общий
+P0.4/P0.5, staging и lifecycle остаются открытыми.

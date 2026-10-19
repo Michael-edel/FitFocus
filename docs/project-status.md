@@ -26,8 +26,9 @@ P0.4 и остальные callbacks/cache остаются открытыми.
 прошла 21/21 на всех семи профилях, включая 12 мобильных/PWA и 9 desktop
 запусков, без retries. Два personal weekly-menu и два weekly-report callback
 сценария прошли по 14/14 на той же матрице; четыре food/recipe photo сценария
-прошли 28/28. В сумме расширены 46 account/session сценариев и выполнены
-184 мобильных запуска; точный CI текущего HEAD ещё не завершён.
+прошли 28/28; поздние profile save/refresh прошли ещё 14/14. В сумме расширены
+48 account/session сценариев и выполнены 192 мобильных запуска; точный CI
+текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
