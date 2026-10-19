@@ -380,6 +380,70 @@ async function waitForOutboxKeyIdle(page: Page, account: Account, key: string) {
     .filter(operation => operation.accountId === account.id && operation.key === key), { timeout: 15_000 }).toEqual([]);
 }
 
+async function installProgressPhotoDecodeGate(page: Page) {
+  await page.addInitScript(() => {
+    const scopedWindow = window as Window & {
+      __fitfocusHoldProgressPhoto?: boolean;
+      __fitfocusProgressPhotoDecodeHeld?: boolean;
+      __fitfocusProgressPhotoDecodeLoaded?: boolean;
+      __fitfocusProgressPhotoDecodeError?: string;
+      __fitfocusReleaseProgressPhoto?: () => void;
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!descriptor?.set) throw new Error('HTML_IMAGE_SRC_SETTER_NOT_AVAILABLE');
+    let pending: { image: HTMLImageElement; url: string } | null = null;
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: descriptor.configurable,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get ? function(this: HTMLImageElement) { return descriptor.get?.call(this); } : undefined,
+      set: function(this: HTMLImageElement, value: string) {
+        if (scopedWindow.__fitfocusHoldProgressPhoto && value.startsWith('blob:')) {
+          pending = { image: this, url: value };
+          scopedWindow.__fitfocusProgressPhotoDecodeHeld = true;
+          return;
+        }
+        descriptor.set?.call(this, value);
+      },
+    });
+    scopedWindow.__fitfocusReleaseProgressPhoto = () => {
+      const held = pending;
+      if (!held) throw new Error('PROGRESS_PHOTO_DECODE_NOT_HELD');
+      pending = null;
+      scopedWindow.__fitfocusHoldProgressPhoto = false;
+      held.image.addEventListener('load', () => { scopedWindow.__fitfocusProgressPhotoDecodeLoaded = true; }, { once: true });
+      held.image.addEventListener('error', () => { scopedWindow.__fitfocusProgressPhotoDecodeError = 'IMAGE_DECODE_FAILED'; }, { once: true });
+      descriptor.set?.call(held.image, held.url);
+    };
+  });
+}
+
+async function selectHeldProgressPhoto(page: Page, note: string) {
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusHoldProgressPhoto?: boolean }).__fitfocusHoldProgressPhoto = true;
+  });
+  await page.getByPlaceholder('Подпись к фото: например, месяц 1').fill(note);
+  const photoInput = page.locator('input[type="file"][accept="image/*"][capture]');
+  await expect(photoInput).toHaveCount(1);
+  await photoInput.setInputFiles({
+    name: 'progress.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeHeld?: boolean }).__fitfocusProgressPhotoDecodeHeld === true,
+  )).toBe(true);
+}
+
+async function releaseHeldProgressPhoto(page: Page) {
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusReleaseProgressPhoto?: () => void }).__fitfocusReleaseProgressPhoto?.();
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeLoaded?: boolean }).__fitfocusProgressPhotoDecodeLoaded === true,
+  )).toBe(true);
+  expect(await page.evaluate(() => (window as Window & { __fitfocusProgressPhotoDecodeError?: string }).__fitfocusProgressPhotoDecodeError ?? null)).toBeNull();
+}
+
 async function waitForAccountSwitch(page: Page) {
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
   const snapshot = await readDurableSnapshot(page);
@@ -2641,40 +2705,7 @@ test('a progress photo decode released after account switch cannot update accoun
   page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
   const fixtureA = await installAccountApi(page, state);
 
-  await page.addInitScript(() => {
-    const scopedWindow = window as Window & {
-      __fitfocusHoldProgressPhoto?: boolean;
-      __fitfocusProgressPhotoDecodeHeld?: boolean;
-      __fitfocusProgressPhotoDecodeLoaded?: boolean;
-      __fitfocusProgressPhotoDecodeError?: string;
-      __fitfocusReleaseProgressPhoto?: () => void;
-    };
-    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-    if (!descriptor?.set) throw new Error('HTML_IMAGE_SRC_SETTER_NOT_AVAILABLE');
-    let pending: { image: HTMLImageElement; url: string } | null = null;
-    Object.defineProperty(HTMLImageElement.prototype, 'src', {
-      configurable: descriptor.configurable,
-      enumerable: descriptor.enumerable,
-      get: descriptor.get ? function(this: HTMLImageElement) { return descriptor.get?.call(this); } : undefined,
-      set: function(this: HTMLImageElement, value: string) {
-        if (scopedWindow.__fitfocusHoldProgressPhoto && value.startsWith('blob:')) {
-          pending = { image: this, url: value };
-          scopedWindow.__fitfocusProgressPhotoDecodeHeld = true;
-          return;
-        }
-        descriptor.set?.call(this, value);
-      },
-    });
-    scopedWindow.__fitfocusReleaseProgressPhoto = () => {
-      const held = pending;
-      if (!held) throw new Error('PROGRESS_PHOTO_DECODE_NOT_HELD');
-      pending = null;
-      scopedWindow.__fitfocusHoldProgressPhoto = false;
-      held.image.addEventListener('load', () => { scopedWindow.__fitfocusProgressPhotoDecodeLoaded = true; }, { once: true });
-      held.image.addEventListener('error', () => { scopedWindow.__fitfocusProgressPhotoDecodeError = 'IMAGE_DECODE_FAILED'; }, { once: true });
-      descriptor.set?.call(held.image, held.url);
-    };
-  });
+  await installProgressPhotoDecodeGate(page);
 
   await openApp(page, '/#settings');
   await expect(page).toHaveTitle(/FitFocus/);
@@ -2684,20 +2715,7 @@ test('a progress photo decode released after account switch cannot update accoun
   const profileABefore = rawValue(before, profileKey(accountA.id));
   const valuesBefore = valuesFor(before, accountA);
   const operationsBefore = operationsFor(before, accountA);
-  await page.evaluate(() => {
-    (window as Window & { __fitfocusHoldProgressPhoto?: boolean }).__fitfocusHoldProgressPhoto = true;
-  });
-  await page.getByPlaceholder('Подпись к фото: например, месяц 1').fill('Черновик фото аккаунта A');
-  const photoInput = page.locator('input[type="file"][accept="image/*"][capture]');
-  await expect(photoInput).toHaveCount(1);
-  await photoInput.setInputFiles({
-    name: 'progress.svg',
-    mimeType: 'image/svg+xml',
-    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
-  });
-  await expect.poll(() => page.evaluate(() =>
-    (window as Window & { __fitfocusProgressPhotoDecodeHeld?: boolean }).__fitfocusProgressPhotoDecodeHeld === true,
-  )).toBe(true);
+  await selectHeldProgressPhoto(page, 'Черновик фото аккаунта A');
 
   const switched = await openAccountB(context, state, true, '/#settings');
   const snapshotB = await readDurableSnapshot(switched.page);
@@ -2709,12 +2727,7 @@ test('a progress photo decode released after account switch cannot update accoun
   await expect(page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
   await expect(switched.page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
 
-  await page.evaluate(() => {
-    (window as Window & { __fitfocusReleaseProgressPhoto?: () => void }).__fitfocusReleaseProgressPhoto?.();
-  });
-  await expect.poll(() => page.evaluate(() =>
-    (window as Window & { __fitfocusProgressPhotoDecodeLoaded?: boolean }).__fitfocusProgressPhotoDecodeLoaded === true,
-  )).toBe(true);
+  await releaseHeldProgressPhoto(page);
   await waitForAccountOutboxIdle(page, accountA);
   const after = await readDurableSnapshot(page);
   expect(after.activeSession?.accountId).toBe(accountB.id);
@@ -2724,13 +2737,74 @@ test('a progress photo decode released after account switch cannot update accoun
   expect(operationsFor(after, accountA)).toEqual(operationsBefore);
   expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeRelease);
   expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeRelease);
-  expect(await page.evaluate(() => (window as Window & { __fitfocusProgressPhotoDecodeError?: string }).__fitfocusProgressPhotoDecodeError ?? null)).toBeNull();
   await expect(page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
   await expect(switched.page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
   expect(errorsA).toEqual([]);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('a progress photo decode released after same-account reauthentication cannot update the renewed profile session', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await installProgressPhotoDecodeGate(page);
+
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const profileBefore = rawValue(before, profileKey(accountA.id));
+  const valuesBefore = valuesFor(before, accountA);
+  const operationsBefore = operationsFor(before, accountA);
+  await selectHeldProgressPhoto(page, 'Черновик фото прежней сессии');
+
+  const reauthenticated = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const errorsReauthenticated: string[] = [];
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (message.type() === 'error') errorsReauthenticated.push(message.text());
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#settings');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect(reauthenticatedPage.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  const renewedSnapshot = await readDurableSnapshot(reauthenticatedPage);
+  expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+  expect(renewedSnapshot.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+  expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(before.activeSession?.sessionEpoch);
+  expect(rawValue(renewedSnapshot, profileKey(accountA.id))).toBe(profileBefore);
+  const profileWritesBeforeRelease = [...fixtureA.counts.profileWrites];
+  const stateWritesBeforeRelease = [...fixtureA.counts.stateWrites];
+  await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+  await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+  await expect(page.getByText('Черновик фото прежней сессии', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Черновик фото прежней сессии', { exact: true })).toHaveCount(0);
+
+  await releaseHeldProgressPhoto(page);
+  await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+  const after = await readDurableSnapshot(reauthenticatedPage);
+  expect(after.activeSession?.accountId).toBe(accountA.id);
+  expect(after.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+  expect(rawValue(after, profileKey(accountA.id))).toBe(profileBefore);
+  expect(valuesFor(after, accountA)).toEqual(valuesBefore);
+  expect(operationsFor(after, accountA)).toEqual(operationsBefore);
+  expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeRelease);
+  expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeRelease);
+  await expect(page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  await expect(reauthenticatedPage.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  expect(errorsA).toEqual([]);
+  expect(errorsReauthenticated).toEqual([]);
+  expect(fixtureReauthenticated.counts.profileWrites).toEqual([]);
+  expect(fixtureReauthenticated.counts.stateWrites).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
 });
 
 test('an adaptation notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
