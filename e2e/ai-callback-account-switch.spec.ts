@@ -1677,6 +1677,7 @@ test('held food photo analysis cannot write for account A after another tab sign
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Анализирую фото...', { exact: true })).toBeVisible();
 
   const beforeSwitch = await readDurableSnapshot(page);
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
@@ -1692,6 +1693,9 @@ test('held food photo analysis cannot write for account A after another tab sign
   try {
     const switched = await openAccountB(context, state);
     const snapshotB = await readDurableSnapshot(switched.page);
+    await waitForAccountSwitch(page);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
     const profileBBefore = rawValue(snapshotB, profileKey(accountB.id));
     const valuesBBefore = valuesFor(snapshotB, accountB);
     const operationsBBefore = operationsFor(snapshotB, accountB);
@@ -2481,6 +2485,56 @@ test('an open food insight from account A is hidden after another tab activates 
   await expect(switched.page.getByText('Тестовый омлет', { exact: true })).toHaveCount(0);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('an open camera dialog from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Camera account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Снять', exact: true }).click();
+  await expect(page.getByText('Камера', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#nutrition');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Камера', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Камера', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('camera-dialog-hidden-after-account-switch.png') });
+});
+
+test('an open paywall from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Paywall account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Выбрать тарифный план', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#pro');
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  await expect(switched.page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('paywall-hidden-after-account-switch.png') });
 });
 
 test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {
