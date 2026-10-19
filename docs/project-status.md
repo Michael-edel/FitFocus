@@ -11,7 +11,7 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль теперь записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Follow-up семейного callback расширил delayed-goal acceptance с desktop до семи профилей (7/7 локально); точный GitHub CI для ветки проверяется отдельно после push.
+Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль теперь записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Follow-up семейных callbacks проверил delayed goal при смене семьи и повторном входе: каждый сценарий прошёл 7/7 на desktop, Android, iPhone и PWA (`workers=1,retries=0`). Полный точный CI нового HEAD проверяется после push; другие cloud callbacks/cache остаются открытыми.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

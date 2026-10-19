@@ -1907,7 +1907,6 @@ test('a delayed family member update stays bound to its captured family after th
 });
 
 test('a delayed family member update from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-member reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
