@@ -39,7 +39,13 @@ PDF account-switch acceptance прошёл 7/7, включая четыре мо
 сценария (переход на аккаунт B и новая server session аккаунта A) прошли вместе
 14/14 на семи профилях, включая 8 мобильных/PWA запусков. Накопленная матрица —
 58 сценариев и 232 мобильных запуска. Это mock API-приёмка; реальный Huawei OAuth,
-устройства и staging остаются открытыми. Точный CI текущего HEAD ещё не завершён.
+устройства и staging остаются открытыми. Follow-up [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369)
+расширил account-switch проверки paywall и profile-sync/adaptation notices:
+21/21 на семи desktop/mobile/PWA профилях, включая 12 мобильных запусков.
+Камерный dialog остаётся desktop-only: мобильный экран использует native capture
+input (`label` с `input[type=file][capture]`), поэтому модальная проверка там
+неприменима. Накопленная матрица теперь — 61 сценарий и 244 мобильных запуска.
+Точный CI текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

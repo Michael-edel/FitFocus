@@ -7665,3 +7665,21 @@ Chromium/Firefox/WebKit оба сценария прошли 14/14 (`workers=1,r
 P0.5 lifecycle остаются открытыми. Накопленная мобильная account/session
 матрица выросла до 58 сценариев и 232 запусков. Точный CI нового HEAD ожидает
 push; CI предыдущего опубликованного HEAD продолжает выполняться.
+
+## P0.5 — мобильная приёмка account-scoped notices, [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369), 19.10.2026
+
+Paywall, сообщение об обновлении профиля и недельная adaptation notice больше не
+ограничены desktop-only в account-switch acceptance. Все три сценария прошли
+21/21 на desktop Chromium/Firefox/WebKit и Android/iPhone Safari/PWA
+(`workers=1,retries=0`), включая 12 мобильных запусков. Тесты проверяют, что
+состояние аккаунта A скрывается в обеих вкладках после входа B; runtime-код не
+менялся.
+
+При попытке включить сюда camera-dialog сценарий mobile run 4/4 раз не нашёл
+`getByRole('button', { name: 'Снять' })`. Сохранённый экран показывает, что
+телефонный путь использует `<label>` с `input[type=file][capture]`, а desktop
+открывает in-app `CameraCapture` dialog; это разные UI-потоки. Поэтому mobile
+остался ожидаемо пропущен именно для dialog-сценария, а desktop Chromium/
+Firefox/WebKit прошли 3/3. Это несовпадение тестового селектора с mobile DOM,
+не воспроизведение runtime-дефекта. Общая mobile account/session матрица выросла
+до 61 сценария и 244 запусков. Точный CI follow-up ожидает push.

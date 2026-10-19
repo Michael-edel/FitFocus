@@ -721,6 +721,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     исправляет stale setter заметки profile sync и добавляет UI acceptance обеих
     notices: 6/6 на desktop Chromium/Firefox/WebKit, typecheck и diff check прошли.
     Оба коммита опубликованы в PR #93.
+    Следующий follow-up [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369)
+    расширил account-switch UI acceptance paywall и profile-sync/adaptation notices:
+    21/21 на семи desktop/mobile/PWA профилях, включая 12 мобильных запусков
+    (`workers=1,retries=0`). Камерный dialog остаётся desktop-only, поскольку на
+    телефонах его заменяет native capture input; locator-проверка подтвердила,
+    что это `<label>` с `input[type=file][capture]`, не in-app dialog.
     Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
     закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity

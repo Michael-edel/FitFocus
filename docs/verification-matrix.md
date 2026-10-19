@@ -323,7 +323,11 @@ PWA профилях. Ответ A не подменяет профиль B; п�
 мобильных запуска. Два задержанных Huawei sync сценария прошли вместе 14/14 на
 семи профилях (8 мобильных/PWA запусков), доведя накопленную матрицу до 58
 сценариев и 232 мобильных запусков. Проверка использует mock API; настоящий
-Huawei OAuth, устройство и staging не покрыты. Полный P0.4/P0.5 lifecycle и
+Huawei OAuth, устройство и staging не покрыты. Follow-up [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369)
+добавил мобильную приёмку paywall и profile-sync/adaptation notices: 21/21 на
+семи профилях (12 мобильных запусков). Camera dialog остаётся desktop-only:
+мобильный экран использует native capture input, не in-app modal. Итоговая
+матрица — 61 сценарий и 244 мобильных запуска. Полный P0.4/P0.5 lifecycle и
 точный CI текущего HEAD остаются открытыми.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
