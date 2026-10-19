@@ -10,7 +10,7 @@
 открыт против `fix/state-generations` и зависит от PR #94 и #90. Ветка PR
 `fix/durable-outbox` содержит P0.8 исправления и тесты; последний runtime-код —
 `4e8adff`, опубликованный вместе с последующими тестовыми и документационными
-коммитами; последний HEAD PR — `17b96fb`.
+коммитами; последний HEAD PR — `de93fa0`.
 `8b7fb2c` исправляет очистку account-scoped счётчика генерации рецептов при
 удалении аккаунта; `5d3d5b1` связывает writer и cleanup через общий storage key.
 Регрессия в `4e8adff` исправляет другой крайний случай: если сохранённая legacy-
@@ -28,6 +28,10 @@ typecheck, privacy/API guards и production build прошли. Точный CI 
 Она включена в `17b96fb`. Новый точный [CI #1675](https://github.com/Michael-edel/FitFocus/actions/runs/39179182135)
 идёт: зависимости, браузеры, audit, schema/privacy/auth/API и unit завершились
 успешно; typechecks и production build завершились; выполняются browser tests.
+В HEAD `de93fa0` добавлена E2E-проверка конфликта двух вкладок с полным JSON-
+снимком, прошедшая локально 7/7 desktop/mobile/PWA профилей без retries.
+Точный CI #1677 для `de93fa0` поставлен в очередь; CI #1675 проверяет предыдущий
+HEAD и пока остаётся в browser tests.
 Ручная чистая Chrome-сессия на локальной
 сборке подтвердила реальный BFCache restore для публичного `/api/env`:
 `pagehide.persisted=true`, `pageshow.persisted=true`, запрос повторён через 27 мс.

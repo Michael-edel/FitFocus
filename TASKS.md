@@ -1902,7 +1902,8 @@ legacy-ключ не используется для новой очереди �
     затирает первую запись, а сохраняется отдельным `local-revision-conflict`;
     после ответа первой операции подтверждённая версия и конфликт остаются в
     IndexedDB, второй PUT не отправляется. Browser acceptance прошёл 7/7
-    desktop/mobile/PWA профилей без retries; используется mock API.
+    desktop/mobile/PWA профилей без retries; используется mock API. Сценарий
+    включён в [`de93fa0`](https://github.com/Michael-edel/FitFocus/commit/de93fa0c5d7b5a46a4258ee80fbe8783be6bb5a2).
   - [x] Browser acceptance cloud hydration при pending: server `dark` версии 7,
     локальная правка `light`, scoped 503 и reload сохраняют локальное значение,
     исходные `opId`/payload, baseVersion и retry deadline; до срока повторный PUT
