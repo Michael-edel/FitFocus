@@ -286,7 +286,7 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
   const firstSettingsPutStarted = new Promise<void>(resolve => { signalFirstPut = resolve; });
   let firstPutCount = 0;
   let firstSettingsPutItems: Array<{ key?: unknown; value?: unknown; baseVersion?: unknown }> = [];
-  let secondTabSettingsPutCount = 0;
+  const settingsPutValues: string[] = [];
   const errorsA = await setup(page, false, undefined, true);
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
@@ -324,6 +324,13 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
     return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({ ok: true,
       items: items.map(item => ({ key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true })) }) });
   });
+  const observeSettingsPuts = (target: Page) => target.on('request', request => {
+    if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/state') return;
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; value?: unknown }> } | null;
+    for (const item of body?.items ?? []) {
+      if (item.key === settingsKey && typeof item.value === 'string') settingsPutValues.push(item.value);
+    }
+  });
 
   let second: Page | undefined;
   try {
@@ -333,11 +340,6 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
     second = await context.newPage();
     const errorsB = await setup(second, false, undefined, true);
     await observeSettingsRead(second);
-    second.on('request', request => {
-      if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/state') return;
-      const body = request.postDataJSON() as { items?: Array<{ key?: unknown }> } | null;
-      if (body?.items?.some(item => item.key === settingsKey)) secondTabSettingsPutCount += 1;
-    });
     await openApp(second, '/#settings');
     await expect(second.getByRole('button', { name: /Тёмная/ })).toHaveClass(/bg-indigo-500\/10/);
     await expect.poll(() => page.evaluate(() =>
@@ -367,6 +369,8 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
     // coordination, so gate the request on both pages after their baseline is ready.
     await holdFirstSettingsPut(page);
     await holdFirstSettingsPut(second);
+    observeSettingsPuts(page);
+    observeSettingsPuts(second);
 
     await page.getByRole('button', { name: /Светлая/ }).click();
     await firstSettingsPutStarted;
@@ -392,7 +396,9 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
       && operation.reason === 'local-revision-conflict' && operation.value === secondSettings)!;
     expect(JSON.parse(conflict.value!)).toEqual({ ...initialSettings, theme: 'premium' });
     expect(firstPutCount).toBe(1);
-    expect(secondTabSettingsPutCount).toBe(0);
+    // A sibling tab may carry the first operation. Assert on its payload so
+    // the losing snapshot is rejected regardless of which tab sends the PUT.
+    expect(settingsPutValues).toEqual([firstSettings]);
 
     releaseFirstPut();
     await expect.poll(async () => {
@@ -413,7 +419,7 @@ test('two same-origin tabs retain a losing full JSON snapshot while the first PU
       conflict: { opId: conflict.opId, status: 'conflicted', reason: 'local-revision-conflict', value: secondSettings },
     });
     expect(firstPutCount).toBe(1);
-    expect(secondTabSettingsPutCount).toBe(0);
+    expect(settingsPutValues).toEqual([firstSettings]);
     expect(await page.evaluate(() => navigator.locks)).toBeUndefined();
     expect(await second.evaluate(() => navigator.locks)).toBeUndefined();
     expect(errorsA).toEqual([]);

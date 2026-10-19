@@ -1176,19 +1176,22 @@ test('a delayed family shopping-list read from account A cannot appear after acc
   await expect(page).toHaveTitle(/FitFocus/);
   await expect(page.getByRole('heading', { name: accountA.name, exact: true })).toBeVisible();
   await expect.poll(() => state.familyShoppingListAccounts.filter(id => id === accountA.id).length).toBeGreaterThan(0);
-  const accountAFamilyShoppingRequests = state.familyShoppingListAccounts.filter(id => id === accountA.id).length;
 
   try {
     const accountBPage = await openAccountB(context, state, errorsB);
     expect(await activeAccount(page)).toBe(accountB.id);
+    // Account A can start more than one held read while B's login propagates.
+    // Count only after the shared session in this tab has committed B, then
+    // prove delayed A responses do not cause any further A reads.
+    const accountAFamilyShoppingRequestsAfterSwitch = state.familyShoppingListAccounts.filter(id => id === accountA.id).length;
     fixtureA.releaseFamilyShoppingList();
-    await expect.poll(() => state.releasedFamilyShoppingLists).toBeGreaterThanOrEqual(accountAFamilyShoppingRequests);
+    await expect.poll(() => state.releasedFamilyShoppingLists).toBeGreaterThanOrEqual(accountAFamilyShoppingRequestsAfterSwitch);
     await page.waitForTimeout(100);
     await expect(page.getByText('Семейный список A', { exact: false })).toHaveCount(0);
     const refreshB = accountBPage.getByRole('button', { name: 'Обновить список', exact: true });
     await refreshB.click();
     await expect(accountBPage.getByText('Семейный список B', { exact: false })).toBeVisible();
-    expect(state.familyShoppingListAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyShoppingRequests);
+    expect(state.familyShoppingListAccounts.filter(id => id === accountA.id)).toHaveLength(accountAFamilyShoppingRequestsAfterSwitch);
     await expect.poll(() => activeAccount(page)).toBe(accountB.id);
     expect(errorsA).toEqual([]);
     expect(errorsB).toEqual([]);

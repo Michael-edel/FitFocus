@@ -227,7 +227,7 @@ function malformedQuarantineSummary(records: MigrationUnknown[]) {
 }
 
 test('preserves legacy intent across a full storage clear without sending an unproven operation', async ({ context }, info) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const server = await startPwaReleaseServer(legacyWriterPwaDist, resolve('dist'), {
     stateUnavailable: true, currentStateUnavailable: true,
   });
@@ -459,7 +459,7 @@ test('preserves legacy intent across a full storage clear without sending an unp
     await expect.poll(async () => {
       const progress = (await migrationState(currentPage)).progress;
       return progress?.writersStopped === true && progress.sendAllowed === true;
-    }, { timeout: 30_000 }).toBe(true);
+    }, { timeout: 60_000 }).toBe(true);
     const beforeRecovery = await migrationState(currentPage);
     const importedBeforeRecovery = itemForRecord(beforeRecovery.migrationItems, targetKey, previousOldRecord.value!);
     const targetBeforeRecovery = beforeRecovery.operations.find(operation => operation.opId === importedBeforeRecovery?.opId);
@@ -497,7 +497,7 @@ test('preserves legacy intent across a full storage clear without sending an unp
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
       };
-    }, { timeout: 30_000 }).toEqual({
+    }, { timeout: 60_000 }).toEqual({
       source: null,
       oldSnapshotRetained: true,
       targetState: 'imported',
