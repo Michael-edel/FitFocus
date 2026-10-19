@@ -2867,7 +2867,6 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
