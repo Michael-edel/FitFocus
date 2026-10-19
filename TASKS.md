@@ -722,12 +722,15 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     исправляет stale setter заметки profile sync и добавляет UI acceptance обеих
     notices: 6/6 на desktop Chromium/Firefox/WebKit, typecheck и diff check прошли.
     Оба коммита опубликованы в PR #93; точный CI #1727 пока не завершён.
-    Новый локальный follow-up закрывает browser acceptance черновика регистрации:
+    Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
+    закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity
     не совпадает с сохранённой сессией. До guard тест воспроизводил открытые поля;
     после изменения сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit. Код ещё
-    не опубликован; точный CI для него не запускался. Остальные root callbacks и
-    P0.4 остаются открытыми.
+    опубликован в PR #93; точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
+    запущен и устанавливает Playwright-браузеры. Прежний CI #1727 для `f3e5b37`
+    остаётся в browser tests.
+    Остальные root callbacks и P0.4 остаются открытыми.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

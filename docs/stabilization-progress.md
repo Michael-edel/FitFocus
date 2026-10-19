@@ -71,9 +71,11 @@ IndexedDB-сессия не подтверждена, поля черновик�
 сессионного tuple во второй вкладке регистрация блокируется с сообщением обновить
 страницу. Новый E2E сначала воспроизвёл доступность полей после входа B, затем
 прошёл **3/3** на desktop Chromium, Firefox и WebKit. `npm run typecheck`,
-account-scoped unit **12/12** и `git diff --check` проходят. Это пока локальный
-follow-up без commit и GitHub CI; P0.4 остаётся открытым по остальным root
-callbacks.
+account-scoped unit **12/12** и `git diff --check` проходят. Изменение опубликовано
+в коммите [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
+в PR #93. Точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
+запущен и устанавливает Playwright-браузеры; CI #1727 для предыдущего `f3e5b37`
+ещё выполняет browser tests. P0.4 остаётся открытым по остальным root callbacks.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 

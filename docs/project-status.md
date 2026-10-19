@@ -33,11 +33,12 @@ unit suite прошли, browser tests ещё выполняются. Late adapt
 Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 [`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
 расширил mobile menu acceptance до Android; сценарий прошёл 2/2 на
-`android-chrome` и `android-pwa-chrome`. Новый локальный follow-up закрыл
-registration-draft browser acceptance: смена активной account session в другой
-вкладке скрывает медицинские поля, пока сессия не совпадёт с Google identity; 3/3
-на desktop Chromium/Firefox/WebKit. Follow-up ещё не опубликован. Другие root
-surfaces остаются открытыми.
+`android-chrome` и `android-pwa-chrome`. Коммит
+[`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
+добавил registration-draft account-switch guard: смена активной сессии в другой
+вкладке скрывает медицинские поля, пока сессия не совпадёт с Google identity; E2E
+прошёл 3/3 на desktop Chromium/Firefox/WebKit. Точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
+запущен; сейчас устанавливает Playwright-браузеры. Другие root surfaces остаются открытыми.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
