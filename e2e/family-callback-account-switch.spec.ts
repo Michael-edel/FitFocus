@@ -780,6 +780,70 @@ test('a delayed family-context read from account A cannot appear after account B
   }
 });
 
+test('a delayed shared family-menu read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-menu account-switch acceptance runs in desktop browser profiles.');
+  const errorsA: string[] = [], errorsB: string[] = [];
+  const oldMenuName = 'MENU_ACCOUNT_A_ONLY';
+  const currentMenuName = 'MENU_ACCOUNT_B_ONLY';
+  const state: FixtureState = {
+    current: accountA,
+    inviteRequests: 0,
+    inviteTargetIds: [],
+    releasedInvites: 0,
+    shoppingCheckRequests: 0,
+    shoppingCheckAccounts: [],
+    releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0,
+    personalShoppingListAccounts: [],
+    releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0,
+    personalShoppingCheckRequests: 0,
+    personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0,
+    shoppingAchievements: [],
+    memberRequests: 0,
+    memberTargetIds: [],
+    releasedMembers: 0,
+    familyLoadAccounts: [],
+    familyLoadSessions: [],
+    familyMenuSessions: [],
+    familyMenuNamesBySession: { [accountA.sid]: oldMenuName, [accountB.sid]: currentMenuName },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, false, false, true);
+
+  try {
+    await openApp(page, '/#family');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect.poll(() => state.familyMenuSessions?.filter(session => session === accountA.sid).length).toBe(1);
+
+    const accountBPage = await openAccountB(context, state, errorsB);
+    await expect.poll(() => state.familyMenuSessions?.filter(session => session === accountB.sid).length).toBeGreaterThan(0);
+    await accountBPage.getByRole('button', { name: 'План', exact: true }).click();
+    await expect(accountBPage.getByText(currentMenuName)).toBeVisible();
+    await expect(accountBPage.getByText(oldMenuName)).toHaveCount(0);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountB.id,
+      serverSessionId: accountB.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    const oldFamilyReadsBeforeRelease = state.familyLoadSessions?.filter(session => session === accountA.sid).length ?? 0;
+
+    fixtureA.releaseFamilyMenu();
+    await expect.poll(() => state.releasedFamilyMenus).toBe(1);
+    await expect(accountBPage.getByText(currentMenuName)).toBeVisible();
+    await expect(accountBPage.getByText(oldMenuName)).toHaveCount(0);
+    expect(state.familyMenuSessions?.filter(session => session === accountA.sid)).toHaveLength(1);
+    expect(state.familyLoadSessions?.filter(session => session === accountA.sid)).toHaveLength(oldFamilyReadsBeforeRelease);
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseFamilyMenu();
+  }
+});
+
 test('a delayed family-context read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];

@@ -7168,3 +7168,24 @@ production build и `git diff --check` прошли. Code/test commit `8b7fb2c`
 suite 1423/1423, root/domain/storage-strict typecheck, production build,
 privacy coverage и diff check повторно прошли; CI #1673 всё ещё проверяет
 предыдущий опубликованный SHA.
+
+## P0.5 — отложенное чтение семейного меню при смене аккаунта, локальная приёмка, 19.10.2026
+
+В `e2e/family-callback-account-switch.spec.ts` добавлен сценарий, который
+удерживает shared `GET /api/family/menu` от аккаунта A, пока соседняя вкладка
+входит под аккаунтом B. После освобождения ответа маркер меню B остаётся на
+экране, маркер A не появляется, старый callback не запускает повторный family
+GET, а обе вкладки остаются без page error. Сценарий прошёл **3/3** на desktop
+Chromium, Firefox и WebKit без retries; `npm run typecheck` и `git diff --check`
+прошли. Runtime-код не менялся, дефект не воспроизведён.
+
+Read-only smoke Cloudflare branch preview `fix-durable-outbox.fitfocus.pages.dev`
+проверил точный опубликованный SHA `e469959db1234011fe01cde0e9a270c4e7f5b2ae`:
+`/`, `/api/env` и `/api/me` вернули 200; анонимные `/api/bootstrap`,
+`/api/profile` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`;
+основной JS bundle содержит полный SHA и все загруженные JS assets вернули 200.
+Это branch preview, не staging, авторизованный сценарий или реальный OAuth.
+
+Точный CI #1679 для опубликованного `e469959` всё ещё выполняет browser tests;
+он не включает новый локальный E2E-сценарий. Отдельный HTTPS staging origin,
+полная callback-матрица, устройства и общий P0.5/P0.9 остаются открытыми.

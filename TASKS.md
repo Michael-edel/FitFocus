@@ -1320,6 +1320,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     как новое меню отображено. Маркер новой сессии остаётся виден, маркер старого
     ответа не появляется. Сценарий прошёл 3/3 на desktop Chromium/Firefox/WebKit;
     подтверждённого runtime-дефекта не обнаружено, exact CI follow-up ожидает push.
+  - [x] Удержать GET `/api/family/menu` аккаунта A до входа аккаунта B в соседней
+    вкладке. После освобождения ответа отображается меню B, маркер A не появляется,
+    повторное чтение семьи A не запускается. Новый account-switch сценарий прошёл
+    3/3 на desktop Chromium/Firefox/WebKit без retries; typecheck и diff check
+    прошли. Runtime-дефект не обнаружен; точный CI этого тестового SHA ожидает push.
   - [x] Удержать preview `POST /api/family/menu/generate`, повторно войти в тот же
     аккаунт с новой server session и освободить старый ответ. Outbox, семейное меню
     и число отправленных операций остаются без изменений; epoch новой сессии
