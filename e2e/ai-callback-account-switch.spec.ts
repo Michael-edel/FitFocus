@@ -3317,8 +3317,7 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
   await returningPage.screenshot({ path: info.outputPath('state-outbox-account-a-resumed.png') });
 });
 
-test('WIS share completion from a retired session cannot restore its notice after account reactivation', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab WIS share lifecycle acceptance runs in desktop browser profiles.');
+test('WIS share completion from a retired session cannot restore its notice after account reactivation', async ({ page, context }) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
