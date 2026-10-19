@@ -736,6 +736,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     server session того же аккаунта прошли 14/14 на семи профилях, включая 8
     мобильных запусков (`workers=1,retries=0`). Поздний результат не появляется
     и не меняет профиль/outbox другой или новой сессии.
+    Следующий follow-up [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0)
+    снял desktop-only skip с успешной генерации пошагового рецепта и сохранения
+    избранного: сценарий прошёл 7/7 на desktop, Android и iPhone/PWA профилях,
+    включая 4 мобильных запуска (`workers=1,retries=0`). Накопленная mobile
+    account/session матрица — 65 сценариев и 260 запусков; полный CI нового HEAD
+    ожидает завершения. Остальные callbacks/cache остаются открытыми.
     Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
     закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity

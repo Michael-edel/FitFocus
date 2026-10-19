@@ -335,9 +335,11 @@ Huawei OAuth, устройство и staging не покрыты. Follow-up [`f
 Затем [`c751260`](https://github.com/Michael-edel/FitFocus/commit/c751260ac7edbe328eea64a4220648ef570a9adb)
 расширил два held plateau-explanation callbacks: 14/14 на семи профилях,
 включая 8 мобильных запусков; поздний ответ после входа B или новой server
-session не меняет UI, профиль и outbox. Матрица составляет 64 сценария и 256
-мобильных запусков. Полный P0.4/P0.5 lifecycle и точный CI текущего HEAD остаются
-открытыми.
+session не меняет UI, профиль и outbox. Затем [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0)
+расширил успешную пошаговую генерацию рецепта и запись в избранное на все семь
+профилей: 7/7, включая четыре мобильных запуска. Матрица составляет 65 сценариев
+и 260 мобильных запусков. Полный P0.4/P0.5 lifecycle и точный CI нового HEAD
+остаются открытыми.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

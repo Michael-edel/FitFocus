@@ -7704,3 +7704,14 @@ Chromium/Firefox/WebKit и Android/iPhone Safari/PWA (`workers=1,retries=0`),
 включая 8 мобильных запусков. Production-код не менялся; это mock API acceptance.
 Накопленная mobile account/session матрица выросла до 64 сценариев и 256 запусков.
 Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка успешного пошагового рецепта, [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0), 19.10.2026
+
+Снят desktop-only skip со сценария успешной генерации пошагового рецепта из
+разобранного блюда и последующего сохранения в избранное. Проверка подтверждает
+запись рецепта в дневник, избранное и usage активного аккаунта; искусственный
+сбой durable-записи сначала оставляет рецепт доступным для повтора. Сценарий
+прошёл 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone Safari/PWA
+(`workers=1,retries=0`), включая 4 мобильных запуска. Изменений production-кода
+нет; используется mock API. Накопленная mobile account/session матрица выросла
+до 65 сценариев и 260 запусков. Точный CI нового HEAD ожидает завершения.
