@@ -1958,8 +1958,7 @@ test('held recipe photo analysis cannot create a draft after the same account st
   }
 });
 
-test('a scoped auth refusal during recipe photo analysis does not show an ordinary recipe error', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo auth-refusal acceptance runs in desktop browser profiles.');
+test('a scoped auth refusal during recipe photo analysis does not show an ordinary recipe error', async ({ page }) => {
   const state: FixtureState = {
     current: accountA,
     profile: profileFor(accountA.id),
