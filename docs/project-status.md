@@ -7,37 +7,27 @@
 
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-открыт против `fix/state-generations` и зависит от PR #94 и #90. Ветка PR
-`fix/durable-outbox` содержит P0.8 исправления и тесты; последний runtime-код —
-`4e8adff`, опубликованный вместе с последующими тестовыми и документационными
-коммитами; последний HEAD PR — `de93fa0`.
-`8b7fb2c` исправляет очистку account-scoped счётчика генерации рецептов при
-удалении аккаунта; `5d3d5b1` связывает writer и cleanup через общий storage key.
-Регрессия в `4e8adff` исправляет другой крайний случай: если сохранённая legacy-
-очередь содержит глобальную запись без доказанного владельца, очистка больше не
-возвращает ложное `complete: true`; исходная очередь остаётся нетронутой, а
-scoped-записи соседнего аккаунта не считаются данными удаляемого пользователя.
-Полный unit suite локально прошёл **1426/1426**, общий/domain/storage-strict
-typecheck, privacy/API guards и production build прошли. Точный CI #1673 для
-опубликованного HEAD завершился **1099 passed / 307 skipped / 1 failed**; единственный
-сбой — iPhone Safari в legacy migration test. На таймауте данные и операции были
-сохранены, а send gate оставался закрыт; shared progress временно показывал
-`importing`. Локально исходный сценарий прошёл 3/3. Добавлена тестовая
-корректировка: финальная проверка ждёт до 30 секунд завершения revalidation двух
-вкладок, сохраняя строгие проверки результата; после неё сценарий прошёл 1/1.
-Она включена в `17b96fb`. Новый точный [CI #1675](https://github.com/Michael-edel/FitFocus/actions/runs/39179182135)
-идёт: зависимости, браузеры, audit, schema/privacy/auth/API и unit завершились
-успешно; typechecks и production build завершились; выполняются browser tests.
-В HEAD `de93fa0` добавлена E2E-проверка конфликта двух вкладок с полным JSON-
-снимком, прошедшая локально 7/7 desktop/mobile/PWA профилей без retries.
-Точный CI #1677 для `de93fa0` поставлен в очередь; CI #1675 проверяет предыдущий
-HEAD и пока остаётся в browser tests.
-Ручная чистая Chrome-сессия на локальной
-сборке подтвердила реальный BFCache restore для публичного `/api/env`:
-`pagehide.persisted=true`, `pageshow.persisted=true`, запрос повторён через 27 мс.
-Это подтверждает один desktop Chrome сценарий; остальные callbacks, устройства,
-OAuth и staging этим не закрыты. Playwright CI по-прежнему сообщает
-`BackForwardCacheDisabledForDelegate`.
+открыт против `fix/state-generations` и зависит от PR #94 и #90. Точный HEAD PR —
+`4281ccb`; последний runtime-код — `4e8adff`. В `4281ccb` добавлена проверка
+задержанного `GET /api/family/menu` при переключении A → B; она прошла 3/3 на
+desktop Chromium, Firefox и WebKit, общий typecheck и `git diff --check` прошли.
+
+Точный [CI #39183159791](https://github.com/Michael-edel/FitFocus/actions/runs/39183159791)
+для `4281ccb` выполняется на браузерных тестах. Audit, schema/privacy/auth/API
+guards, unit suite, три typecheck и production build уже прошли. Предыдущий CI
+на `e469959` остановлен при отправке follow-up, пока шёл browser job; он не
+подменяет проверку нового SHA. Read-only branch-preview smoke для опубликованного
+`e469959` подтвердил полный SHA в JS bundle, ожидаемые 200 для публичных и 401
+для защищённых анонимных GET; preview не является staging.
+
+`8b7fb2c` очищает account-scoped счётчик генерации рецептов при удалении
+аккаунта; `5d3d5b1` связывает writer и cleanup общим storage key. В `4e8adff`
+неизвестная глобальная legacy-запись без доказанного владельца сохраняется как
+неполная очистка; исходная очередь и scoped-данные другого аккаунта не теряются.
+Локальные unit, typechecks и guards этого follow-up прошли. Зафиксированный
+реальный BFCache restore для публичного `/api/env` подтверждает только один
+desktop Chrome сценарий; полная callback/lifecycle матрица, устройства, OAuth,
+staging, rollback и интеграция через защищённую `main` остаются открытыми.
 
 Предыдущий [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
 завершился **1092 passed / 307 skipped / 1 failed**: desktop WebKit ожидал, что
