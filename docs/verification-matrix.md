@@ -1,6 +1,6 @@
 # Матрица проверки стабилизации FitFocus
 
-Сверено: 19.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
+Сверено: 20.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
@@ -375,6 +375,14 @@ WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
 Вместе матрица составляет 70 сценариев и 280 мобильных запусков. Root typecheck
 и `git diff --check` прошли. Используется mock API и SVG file fixture; физическая
 камера и staging не проверялись. Полный P0.4/P0.6 lifecycle остаётся открытым.
+
+Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
+для `4ed7f0b` завершился browser failure: 1441 passed / 60 skipped, четыре
+отказа в двух account-switch тестах. Проверка AI activity теперь допускает
+собственный `wis_text` cache B и исключает перенос fixture A; adaptation notice
+ждёт начальный AI handshake, подтверждает `plateau` request A и использует
+разные ответы аккаунтов. Оба сценария прошли локально 14/14 на семи профилях;
+root typecheck и `git diff --check` прошли. Точный CI follow-up ожидает push.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

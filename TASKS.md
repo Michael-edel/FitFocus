@@ -1,15 +1,17 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 19.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
+Обновлено: 20.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
 приёмка полного lifecycle**. Последняя опубликованная ветка — `durable-outbox`,
 Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
-[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний опубликованный
-Последний записанный полный зелёный прогон — [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
-на предыдущем SHA `d23ceb9`; последующие изменения требуют собственной проверки
-точного HEAD. Текущая мобильная приёмка AI/cache описана ниже и локально прошла;
-её точный CI ещё не завершён.
+[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полный
+зелёный прогон — [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+на предыдущем SHA `d23ceb9`. Более поздний CI #1793 для `4ed7f0b` прошёл
+зависимости, guards, unit, typecheck и build, но завершился 4 ошибками двух
+account-switch тестов (1441 passed / 60 skipped). Причины оказались в тестовых
+предположениях и синхронизации AI session; исправления локально прошли 14/14
+профилей и ожидают точного CI после публикации.
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
@@ -1727,6 +1729,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     прошли в [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393).
     Это mock API и Playwright file fixture, не физическая камера/staging;
     остальные callbacks, BFCache и lifecycle остаются открытыми.
+  - [x] Разобрать browser failures точного CI #1793 на `4ed7f0b`: B вправе иметь
+    собственную запись `wis_text`, а одинаковый mock-текст не идентифицировал
+    ответ callback аккаунта A. Тесты теперь сравнивают B-данные с A-снимком,
+    возвращают разные ответы для account A/B, ждут завершения начального
+    `wis_text` и подтверждают конкретный `plateau` request. Оба сценария прошли
+    14/14 на семи desktop/mobile/PWA профилях; root typecheck и diff check прошли.
+    Новый точный CI запускается после push; production-код не менялся.
   - [x] Обрабатывать отказ profile commit для ручного замера, wearable text/file
     import и выбора/отключения источника: показывать ошибку, не считать отказ
     успешным и оставлять файл/ввод для повтора; отбрасывать callback после смены

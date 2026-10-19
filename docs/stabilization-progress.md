@@ -1,5 +1,23 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4/P0.6 — исправить CI-предположения в account-switch acceptance, 20.10.2026
+
+Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
+на `4ed7f0b` завершился после 1441 browser passed / 60 skipped и четырёх отказов
+в двух account-switch тестах. AI-cache тест ошибочно требовал пустой кэш B,
+хотя B создал собственный `wis_text` action. Adaptation test принимал одинаковый
+текст AI-недельного отчёта за callback плато и запускал его до завершения
+начального AI handshake.
+
+Фикстура теперь различает ответы A/B; тест кэша проверяет, что данные A не
+попали в кэш B, сохраняя допустимые записи самого B. Проверка adaptation notice
+дожидается успешного `wis_text`, подтверждает scoped `plateau` request аккаунта A
+и затем проверяет, что именно ответ A скрыт после входа B. Оба теста прошли 14/14
+на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`; root typecheck и `git diff --check` прошли. Production-код
+не менялся. Полный точный CI исправленного SHA ожидает push; общий P0.4/P0.6
+lifecycle и staging остаются открытыми.
+
 ## P0.6 — фото прогресса после повторного входа в ту же учётную запись, [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393), 19.10.2026
 
 Новый account/session E2E выбирает файл под account A и удерживает декодирование.

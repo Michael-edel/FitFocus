@@ -1,6 +1,6 @@
 # Текущее состояние FitFocus
 
-Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
+Сверено: 20.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
 [`TASKS.md`](../TASKS.md), подробные ревизии и проверки — в
 [журнале стабилизации](stabilization-progress.md).
 
@@ -90,6 +90,14 @@ SHA `4630689` выполнялся и не включает этот тест; �
 проверка после выделения общего gate повторно прошла 7/7. Матрица теперь —
 70 сценариев и 280 мобильных запусков. Root typecheck и diff check прошли;
 реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
+
+Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
+для `4ed7f0b` прошёл audit, guards, unit, три typecheck и build, но browser
+матрица завершилась 4 ошибками в двух test-only account-switch assertions
+(1441 passed / 60 skipped). Уточнены владельцы AI-cache fixtures и ожидание
+начального AI-session handshake; оба сценария прошли 14/14 на семи
+desktop/mobile/PWA профилях. Root typecheck и diff check прошли. Точный CI
+исправленного SHA ожидает публикации; production-код не менялся.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

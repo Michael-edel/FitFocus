@@ -272,7 +272,9 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
               ingredients: [{ name: 'Яйца', amount: '100 г' }],
               steps: [{ n: 1, text: 'Приготовить блюдо', timeMin: 5 }], tips: [],
             })
-          : 'Тестовая интерпретация недели.';
+          : feature === 'plateau'
+            ? `Тестовая интерпретация недели для аккаунта ${responseAccount.id === accountA.id ? 'A' : 'B'}.`
+            : 'Тестовая интерпретация недели.';
       await json({ text }, responseAccount);
       if (typeof feature === 'string') counts.completedAiFeatures.push(feature);
       return;
@@ -2578,7 +2580,11 @@ test('AI activity cached for account A is hidden after another tab activates acc
   );
   expect(statusAAfterSwitch).not.toBeNull();
   expect(JSON.parse(actionAAfterSwitch ?? 'null').userId).toBe(accountA.id);
-  expect([statusBAfterSwitch, actionBAfterSwitch]).toEqual([null, null]);
+  expect(statusBAfterSwitch).not.toBe(JSON.stringify(cachedStatusA));
+  expect(actionBAfterSwitch).not.toBe(JSON.stringify(cachedActionA));
+  if (actionBAfterSwitch !== null) {
+    expect(JSON.parse(actionBAfterSwitch).userId).toBe(accountB.id);
+  }
   if (info.project.name.startsWith('desktop-')) {
     await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
@@ -2812,18 +2818,24 @@ test('an adaptation notice from account A is hidden after another tab activates 
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await installAccountApi(page, state);
+  const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
 
+  const accountANotice = 'Тестовая интерпретация недели для аккаунта A.';
   await page.getByRole('button', { name: 'Объяснить', exact: true }).click();
-  await expect(page.getByText('Тестовая интерпретация недели.', { exact: true })).toBeVisible();
+  await expect.poll(() => fixtureA.counts.aiRequests).toContainEqual({
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  });
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('plateau');
+  await expect(page.getByText(accountANotice, { exact: true }).first()).toBeVisible();
 
   const switched = await openAccountB(context, state, true, '/#dashboard');
   await waitForAccountSwitch(page);
-  await expect(page.getByText('Тестовая интерпретация недели.', { exact: true })).toHaveCount(0);
-  await expect(switched.page.getByText('Тестовая интерпретация недели.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText(accountANotice, { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
