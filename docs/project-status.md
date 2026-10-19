@@ -11,7 +11,7 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль теперь записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Семейные goal/member сценарии прошли по 7/7 на семи профилях; ещё 25 ранее desktop-only account-switch и shopping-race сценариев расширены на мобильные профили и прошли 100/100. Точный CI объединённой матрицы проверяется после push; другие cloud callbacks/cache остаются открытыми.
+Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Семейные goal/member сценарии прошли по 7/7 на семи профилях; ещё 25 ранее desktop-only account-switch и shopping-race сценариев расширены на мобильные профили и прошли 100/100. Следующие callback/cache проверки перечислены ниже; точный CI объединённой матрицы проверяется после push.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и
 кэшей в `ai-callback-account-switch.spec.ts`: мобильная/PWA-часть прошла 40/40,
@@ -26,9 +26,11 @@ P0.4 и остальные callbacks/cache остаются открытыми.
 прошла 21/21 на всех семи профилях, включая 12 мобильных/PWA и 9 desktop
 запусков, без retries. Два personal weekly-menu и два weekly-report callback
 сценария прошли по 14/14 на той же матрице; четыре food/recipe photo сценария
-прошли 28/28; поздние profile save/refresh прошли ещё 14/14. В сумме расширены
-48 account/session сценариев и выполнены 192 мобильных запуска; точный CI
-текущего HEAD ещё не завершён.
+прошли 28/28; поздние profile save/refresh прошли ещё 14/14. Три P0.6 outbox
+lifecycle сценария (смена аккаунта, reload и logout/login) прошли 21/21 на семи
+профилях, включая 12 мобильных/PWA запусков. В сумме расширен 51 account/session
+сценарий и выполнено 204 мобильных запуска; точный CI текущего HEAD ещё не
+завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

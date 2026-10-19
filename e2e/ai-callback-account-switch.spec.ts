@@ -3245,7 +3245,6 @@ test('a held achievement unlock from account A is ignored after another tab sign
   }
 });
 test('pending account A outbox stays scoped while B signs in and resumes with a fresh A session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox account-switch acceptance uses desktop tabs.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {
@@ -3624,7 +3623,6 @@ test('a late profile refresh from account A cannot hydrate after account B signs
 });
 
 test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox reload acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {
@@ -3677,7 +3675,6 @@ test('pending account A outbox resumes after reload with the same operation and 
 });
 
 test('pending account A outbox pauses on logout and resumes after login with a fresh session', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox logout/login acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {

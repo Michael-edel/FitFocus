@@ -7590,3 +7590,16 @@ WebKit, Android Chrome/PWA и iPhone Safari/PWA при `workers=1,retries=0`.
 Production-код не менялся. Совокупное мобильное расширение составляет 48
 account/session сценариев и 192 запуска. Exact-head CI ещё не завершён; общий
 P0.4/P0.5, staging и lifecycle остаются открытыми.
+
+## P0.6 — мобильная приёмка возобновления outbox, 19.10.2026
+
+Сняты desktop-only skips с трёх state outbox сценариев: pending операция
+аккаунта A остаётся изолированной при входе B и возобновляется после возврата A;
+та же операция с прежним `opId` переживает reload и отправляется с новой
+session; после logout sender ставится на паузу и возобновляет отправку после
+входа под свежей server session. Совместный прогон прошёл 21/21 в desktop
+Chromium/Firefox/WebKit и Android Chrome/PWA, iPhone Safari/PWA
+(`workers=1,retries=0`), включая 12 мобильных/PWA запусков. Production-код не
+менялся. Совокупная мобильная account/session матрица составляет 51 сценарий и
+204 запуска. Точный CI нового HEAD ещё не завершён; общий P0.6, callbacks,
+staging и полный lifecycle остаются открытыми.
