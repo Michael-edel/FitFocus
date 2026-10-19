@@ -24,9 +24,10 @@ P0.4 и остальные callbacks/cache остаются открытыми.
 отбрасывается после входа B и после новой server session того же аккаунта;
 временный вопрос из старой сессии не появляется в новой вкладке. Матрица
 прошла 21/21 на всех семи профилях, включая 12 мобильных/PWA и 9 desktop
-запусков, без retries. Два personal weekly-menu callback сценария также прошли
-14/14 на той же матрице. В сумме расширены 40 account/session сценариев и
-выполнены 160 мобильных запусков; точный CI текущего HEAD ещё не завершён.
+запусков, без retries. Два personal weekly-menu и два weekly-report callback
+сценария прошли по 14/14 на той же матрице; четыре food/recipe photo сценария
+прошли 28/28. В сумме расширены 46 account/session сценариев и выполнены
+184 мобильных запуска; точный CI текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

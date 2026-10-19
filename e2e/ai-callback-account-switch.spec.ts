@@ -1472,7 +1472,6 @@ test('held personal weekly-menu response cannot write after same-account reauthe
 });
 
 test('held weekly report cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The weekly AI report account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1556,7 +1555,6 @@ test('held weekly report cannot write for account A after another tab signs in a
 });
 
 test('held weekly report cannot write after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly AI report reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1655,7 +1653,6 @@ test('held weekly report cannot write after the same account starts a new server
 });
 
 test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1726,7 +1723,6 @@ test('held food photo analysis cannot write for account A after another tab sign
 });
 
 test('held food photo analysis cannot commit after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1819,7 +1815,6 @@ test('held food photo analysis cannot commit after the same account starts a new
 });
 
 test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1884,7 +1879,6 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
 });
 
 test('held recipe photo analysis cannot create a draft after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));

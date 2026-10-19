@@ -7568,3 +7568,14 @@ AI proof, profile/state writes и achievement side effects. Прогон про�
 расширенными account/session наборами мобильное покрытие составляет 40 сценариев
 и 160 запусков. Точный CI опубликованного HEAD ещё не завершён; общий P0.5,
 staging и lifecycle остаются открытыми.
+
+## P0.5 — мобильная приёмка weekly-report и photo-analysis callbacks, 19.10.2026
+
+Два delayed weekly-report сценария прошли 14/14, а четыре food/recipe
+photo-analysis сценария — 28/28 на desktop Chromium/Firefox/WebKit, Android
+Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Удержанный ответ не
+меняет отчёт, дневник, историю, профиль или outbox другой/новой сессии и не
+запускает лишние achievement effects. Совместно эти шесть сценариев прошли
+42/42; их мобильная часть — 24/24. Cumulative mobile acceptance включает 46
+account/session сценариев и 184 запуска. Production-код не менялся; exact-head
+CI ещё не завершён, полный P0.5 и staging остаются открытыми.

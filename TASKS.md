@@ -1252,6 +1252,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   сценария сверяют profile/state/outbox, AI-запросы и achievement effects;
   прошли 14/14 на desktop Chromium/Firefox/WebKit и Android/iPhone/PWA при
   `workers=1,retries=0`. Production-код не менялся; exact-head CI ещё не завершён.
+- [x] Расширить delayed weekly-report и food/recipe photo callbacks на Android,
+  iPhone и PWA. Шесть A→B и same-account reauthentication сценариев прошли
+  42/42 на семи desktop/mobile профилях (24/24 на четырёх мобильных профилях),
+  `workers=1,retries=0`. Поздние ответы не пишут профиль, дневник, историю или
+  отчёт старой сессии и не запускают лишние achievement effects. Production-код
+  не менялся; exact-head CI ещё не завершён.
 - [x] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
   read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135

@@ -303,6 +303,13 @@ Android, iPhone и PWA профилях: поздний ответ после в
 achievement effects. Production-код не менялся. В сумме мобильное расширение
 составляет 40 сценариев и 160 запусков; полный P0.5 остаётся открытым.
 
+Два held weekly-report сценария прошли 14/14, а четыре food/recipe photo
+analysis сценария — 28/28 на desktop Chromium/Firefox/WebKit и Android/iPhone/PWA.
+Суммарно 42/42 прогона без retries; поздние ответы не меняют profile, report,
+diary/history и не запускают лишние achievement effects. Cumulative mobile
+coverage: 46 account/session сценариев и 184 запуска; exact-head CI всё ещё
+ожидает завершения.
+
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
 `serverSnapshot` после 409/reload; явное принятие записывает серверный снимок,
