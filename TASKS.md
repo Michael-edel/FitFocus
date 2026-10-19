@@ -1454,6 +1454,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   в `STORAGE_KEYS.recipeUsagePrefix` коммитом `5d3d5b1`. Тесты privacy/usage прошли 9/9,
   полный unit — 1423/1423, typecheck/build/privacy guard прошли. P0.6 остаётся
   открытым для других callbacks, устройств, staging и полной lifecycle-приёмки.
+- [x] Покрыть удаление аккаунта всеми текущими account-scoped localStorage
+  ключами: UI-настройки, черновики, usage, achievement counters, telemetry и
+  user-state. Проверено, что похожий ключ соседнего аккаунта и `__ffv` sidecar
+  обрабатываются корректно. Test-only commit [`ef5d66a`](https://github.com/Michael-edel/FitFocus/commit/ef5d66a5e660236eeb957a9bdbdfc86531bbec73);
+  полный unit suite — 1427/1427, root typecheck и diff check прошли. Текущий
+  CI #1684 на remote SHA `5250190` не включает этот тест; точный CI follow-up
+  остаётся обязательным. Общий account lifecycle остаётся открытым.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.

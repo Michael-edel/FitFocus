@@ -9,6 +9,21 @@
 [CI #1684](https://github.com/Michael-edel/FitFocus/actions/runs/39187581529)
 для этого SHA выполняет полную browser-матрицу; его итог нужно проверить отдельно.
 
+## Удаление всех account-scoped localStorage ключей, 19.10.2026
+
+В test-only commit [`ef5d66a`](https://github.com/Michael-edel/FitFocus/commit/ef5d66a5e660236eeb957a9bdbdfc86531bbec73)
+расширена регрессия удаления аккаунта: тест заполняет каждый текущий
+account-scoped localStorage namespace, включая UI-настройки, черновики,
+achievement counters, telemetry, recipe usage и user-state. Он проверяет
+URL-кодированный recipe usage key, очищение `__ffv` sidecar и сохранение похожих
+ключей другого аккаунта. Runtime-код не менялся; это дополнительная гарантия
+для уже существующей очистки.
+
+Целевой privacy spec прошёл 8/8; полный unit suite — **1427/1427** в 216 файлах,
+root typecheck/admin guards и `git diff --check` прошли. Точный CI #1684 для
+опубликованного runtime HEAD `5250190` ещё выполняет browser tests и не содержит
+этот тестовый commit. Общая account deletion/lifecycle приёмка остаётся открытой.
+
 ## PR CI #39183159791 — пять ошибок browser acceptance, 19.10.2026
 
 Точный workflow для опубликованного `4281ccb` завершился **1105 passed / 311

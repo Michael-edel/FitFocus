@@ -69,24 +69,10 @@ npm run test:e2e
 
 Рабочий локальный checkout — `durable-outbox`; удалённая ветка PR —
 `fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-P0.8 включает общую IndexedDB outbox, миграцию legacy-очереди, атомарное
-сохранение пользовательских данных, профиль, регистрацию, личное и семейное
-меню, а также UI восстановления failed/conflicted операций. Приёмка всего
-lifecycle ещё продолжается: оставшиеся пункты и точные ограничения перечислены
-в [TASKS.md](TASKS.md) и [статусе проекта](docs/project-status.md).
-Последний runtime-код — [`856e3f5`](https://github.com/Michael-edel/FitFocus/commit/856e3f5).
-Опубликованный HEAD — `8ffa9e4`; локальные code follow-ups `8b7fb2c` и `5d3d5b1`
-исправляют очистку recipe usage counter при удалении аккаунта и используют для
-writer/cleanup общий storage key, не затрагивая другие account-scoped счётчики.
-Полный unit suite прошёл **1423/1423**, root и оба strict
-typecheck, privacy guard и production build прошли. Точный CI #1673 опубликованной
-ревизии ещё выполняет browser tests; новый follow-up ожидает завершения этого run.
-
-Реальный desktop Chrome BFCache smoke на сборке `856e3f5` подтвердил
-`pageshow.persisted=true` и повтор `/api/env` после восстановления. Это один
-публичный callback на локальном mock origin; прочие lifecycle callbacks,
-staging/OAuth, выпуск и интеграция PR #93 в защищённую `main` остаются открыты.
-В плане 32 пункта: 18 P0, 7 P1 и 7 подготовительных или компонентных; ни один
-P0 не закрыт целиком.
-Актуальные границы и подробные проверки см. в [статусе проекта](docs/project-status.md),
+Проект находится на этапе P0 стабилизации: общая IndexedDB outbox, миграция
+legacy-очереди, атомарная запись профиля и меню, session guards и восстановление
+конфликтов реализованы, но полный lifecycle и release acceptance продолжаются.
+Staging/OAuth/D1, совместимый откат и интеграция в защищённую `main` ещё не
+подтверждены. Текущие HEAD/CI, выполненные проверки, оставшиеся пункты и их
+ограничения ведутся отдельно в [статусе проекта](docs/project-status.md),
 [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

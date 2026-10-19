@@ -1,217 +1,42 @@
 # Текущее состояние FitFocus
 
 Сверено: 19.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
-[`TASKS.md`](../TASKS.md), результаты проверок — в [журнале](stabilization-progress.md).
+[`TASKS.md`](../TASKS.md), подробные ревизии и проверки — в
+[журнале стабилизации](stabilization-progress.md).
 
 ## Текущая стадия
 
-Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
-ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
-открыт против `fix/state-generations` и зависит от PR #94 и #90. Точный HEAD PR —
-`4281ccb`; последний runtime-код — `4e8adff`. Точный
-[CI #39183159791](https://github.com/Michael-edel/FitFocus/actions/runs/39183159791)
-для `4281ccb` завершился **1105 passed / 311 skipped / 5 failed**. Audit,
-schema/privacy/auth/API guards, unit suite, три typecheck и production build
-прошли; оставшиеся падения были в трёх browser-сценариях.
+Проект остаётся на этапе **P0: стабилизация сохранности данных и приёмка полного
+lifecycle**. Основные компоненты durable outbox, account/session guards,
+серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
+реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-В локальном follow-up [`ddba485`](https://github.com/Michael-edel/FitFocus/commit/ddba485)
-исправлены два тестовых race: A-запросы сравниваются после фиксации сессии B, а
-sender-tab больше не используется как замена payload-проверке. Для миграционного
-сценария ожидание окончательной межвкладочной проверки увеличено с 30 до 60
-секунд; запись остаётся fail-closed до полного Service Worker fence. Все пять
-затронутых browser-проектов прошли локально, также прошли typecheck, production
-build и `git diff --check`. В CI не было подтверждённых записей неподтверждённых
-legacy-операций; теперь нужен полный прогон после публикации follow-up.
+[Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
+`fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
+и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Текущий удалённый
+HEAD — `5250190`. GitHub Actions
+[CI #1684](https://github.com/Michael-edel/FitFocus/actions/runs/39187581529)
+для этого SHA ещё выполняет browser matrix: dependency audit, guards, unit,
+три typecheck и production build завершились успешно; итог браузерных тестов
+пока не получен. Предыдущий CI #39183159791 на `4281ccb` выявил пять browser
+сбоев; их test follow-up опубликован в `ddba485` и включён в `5250190`.
 
-Предыдущий read-only branch-preview smoke для `e469959` подтвердил полный SHA в
-JS bundle, ожидаемые 200 для публичных и 401 для защищённых анонимных GET; preview
-не является staging.
+Локальная ветка `durable-outbox` содержит `1b33fb8` с повторной проверкой
+Firefox PWA update (13/13, `retries=0`) и test-only commit `ef5d66a` с
+покрытием всех текущих account-scoped localStorage ключей при удалении аккаунта.
+Для тестового изменения полный unit suite прошёл **1427/1427**, root typecheck и
+`git diff --check` прошли. Эти два локальных commit ещё не опубликованы и не
+входят в текущий CI #1684; runtime-код локально совпадает с удалённым `5250190`.
+Firefox timeout не воспроизвёлся, но его первопричина остаётся недоказанной.
 
-`8b7fb2c` очищает account-scoped счётчик генерации рецептов при удалении
-аккаунта; `5d3d5b1` связывает writer и cleanup общим storage key. В `4e8adff`
-неизвестная глобальная legacy-запись без доказанного владельца сохраняется как
-неполная очистка; исходная очередь и scoped-данные другого аккаунта не теряются.
-Локальные unit, typechecks и guards этого follow-up прошли. Зафиксированный
-реальный BFCache restore для публичного `/api/env` подтверждает только один
-desktop Chrome сценарий; полная callback/lifecycle матрица, устройства, OAuth,
-staging, rollback и интеграция через защищённую `main` остаются открытыми.
+Открыты полная lifecycle-приёмка и оставшиеся callback/writer проверки,
+совместимость старых и новых bundles в реальном окружении, staging с OAuth и
+D1, проверка rollback в целевом окружении, прохождение release checklist и
+интеграция через защищённый `main`. Branch preview не считается staging.
+Зависимые PR не слиты; изменения PR #93 ещё не находятся в `main`.
 
-Предыдущий [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
-завершился **1092 passed / 307 skipped / 1 failed**: desktop WebKit ожидал, что
-счётчик achievement-check не изменится после повторного открытия приложения.
-Проверка стояла после запуска новой страницы, где штатная инициализация может
-отправить такой запрос. Её перенесли на момент после освобождения позднего AI
-ответа, пока приложение ещё закрыто; так проверяется именно эффект отменённого
-ответа. Исправленный сценарий прошёл **3/3** локально на desktop WebKit. Точный
-CI новой ревизии ожидает полного прогона; CI #1667 на `0faaddc` дошёл до
-браузерной матрицы, но не включает это уточнение.
-
-В P0.9 добавлен browser acceptance cloud hydration с уже сохранённым локальным
-изменением. При загрузке server `dark` version 7, последующем локальном `light`
-и scoped 503 после reload сохраняются локальный снимок, исходные `opId`/payload,
-baseVersion и retry deadline; до срока повторной отправки нет. Сценарий прошёл
-7/7 browser/PWA профилей без retries, `npm run typecheck` прошёл. Это mock API,
-не подтверждение staging или реального offline.
-
-Также проверена гонка двух вкладок с одним полным JSON-снимком: первый PUT
-удерживается, второе независимое редактирование сохраняется как
-`local-revision-conflict`, подтверждение первой версии не удаляет конфликт, а
-вторая запись не уходит на сервер. Без Web Locks сценарий прошёл 7/7
-desktop/mobile/PWA профилей без retries; используется mock API.
-
-У плана остаются 32 незакрытых пункта: 18 в P0, 7 в P1 и 7 в подготовительных
-или компонентных разделах. Открыты полная lifecycle-матрица, остальные writers
-и callbacks, staging/OAuth/D1-проверки, release rollback и интеграция через
-защищённую `main`. Branch preview не считается staging; прямое слияние в `main`
-ожидает одобряющего ревью.
-
-В `589d49e` активные AI-запросы получили раннюю отмену на `beforeunload` через
-request-scoped `AiActionScope`; `a739c1e` применяет её к параллельным family
-callbacks. Эти component-level проверки не закрывают весь P0.9.
-
-Code/test commit `dc38a51` исправляет отмену регистрации AI при
-навигации: `beforeunload` отменяет активный fetch и registration action до
-уничтожения страницы, `pagehide` остаётся дополнительной защитой. Полный
-`registration-durability.spec.ts` прошёл 21/21 на семи browser/PWA профилях без
-retries, targeted unit — 44/44, полный unit — 1388/1388 в 215 файлах; root,
-domain-strict и storage-strict typecheck, production build и diff check прошли.
-Новый CI #1630 включает fix; предыдущий CI #1628 на `5d5dca8` его не содержал.
-Test follow-ups `32d58d7`, `f4a4140` и `c219f17` также опубликованы.
-На `f4dcce8` прошли root/storage typecheck, auth-scope guard, production build и
-registration durability E2E 2/2 в desktop Chromium. Предыдущий
-[CI #1624](https://github.com/Michael-edel/FitFocus/actions/runs/39136081427)
-на `702b4d1` завершился success, включая browser matrix и rollback compatibility.
-
-Read-only branch-preview smoke на точном remote HEAD `9825e8d` прошёл 7/7 GET-
-проверок. Bundle `/assets/index-C_UPaACd.js` содержит полный SHA
-`9825e8d9bd3053b6158d06fdd4b04f32324b25d6`; `/`, `/api/env` и анонимный `/api/me`
-вернули 200, защищённые bootstrap/profile/state/push/status — 401 без redirect и
-`Set-Cookie`. Это preview, не отдельный staging, OAuth, авторизованные изменения
-или D1. Предыдущий smoke для `5d5dca8` записан в контракте staging.
-
-В `b97307a` интерфейс показывает агрегированные причины legacy quarantine для
-текущего подтверждённого аккаунта, скрывая ключи и raw payload. Old/new bundle
-acceptance прошёл 7/7 в desktop Chromium; migration unit — 78/78; root,
-domain-strict и storage-strict typecheck, production build и `git diff --check`
-прошли локально. Полный CI для новой ревизии ещё не завершён.
-
-В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
-закрыт целиком. Отдельный HTTPS staging origin не настроен: staging/OAuth/D1,
-выпуск и интеграция в защищённую `main` не подтверждены.
-
-Опубликованный P0.8 follow-up показывает записи legacy-карантина отдельно от
-блокировки отправки. Сценарий прошёл 7/7 браузерных/PWA профилей без retries,
-связанные migration unit — 78/78, полный unit suite — 1368/1368; три typecheck и
-production build прошли. CI #1607 завершился одним E2E timeout: после reload
-Desktop WebKit не нашёл dashboard weight input за 10 секунд. Trace показывает,
-что `/api/me` занял около 5,5 секунды и screenshot после ожидания уже содержит
-восстановленное значение. Test-only follow-up увеличил ожидание до 30 секунд;
-сценарий прошёл 5/5 на WebKit и 3/3 по трём desktop-браузерам. Точный
-[CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
-на новом HEAD `cff4b93` завершился success, включая E2E.
-
-P0.9-проверка в code/test commit `77d2679` проходит
-`delete → recreate → stale update` через production `/api/state` handlers и
-SQLite-backed D1 adapter. Целевой тест прошёл 1/1, полный unit suite — 1369/1369;
-общий/domain/storage typecheck, build и API invariants прошли. Точный CI #1616
-для `47bb7d9`, содержащего этот тест, завершился success; приёмка staging и
-полный P0.9 остаются открыты.
-
-В `de56ab3` опубликован browser acceptance стабильности legacy fingerprint: после
-перестановки массива и изменения `retryCount` операции сохраняют прежние opId,
-новый снимок помечается обработанным, повторная загрузка не создаёт дубликаты.
-Матрица реального IndexedDB/Service Worker прошла локально 7/7 desktop/mobile/PWA
-профилей без retries. Проверка атомарного abort legacy-import из `f9bf4e6` также
-включена в этот HEAD и локально прошла 7/7. Целевые unit `legacy_queue` и
-`legacy_migration` прошли 128/128.
-
-Read-only smoke branch preview подтвердил опубликованный runtime bundle SHA `e91c134`:
-`/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`,
-`/api/profile`, `/api/state` и
-`/api/push/status` вернули 401 без redirect и `Set-Cookie`. Google Client IDs
-пусты; OAuth, авторизованные действия, D1 и отдельная staging-база не подтверждены.
-
-В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
-Опубликованный code/test commit `cf9d20e` содержит `49a1ff6`, удаливший
-неиспользуемый перенос IDB ключей между account-префиксами, и `e5a6154`,
-удаливший отдельный localStorage scaffold outbox без runtime-потребителей.
-Старый ключ не очищается: общий backup сохраняет payload как opaque data,
-DurableOutbox его не импортирует. Проверки: account isolation 3/3, backup
-regression 10/10, полный unit suite 1364/1364, общий и storage-strict typecheck,
-production build и `git diff --check` прошли. CI #1591 для `cf9d20e` отменён
-при продвижении ветки; CI #1593 для документационного commit `125ae97` не
-содержит новый startup E2E. Регрессия проверяет, что старый
-ключ остаётся неизменным и не импортируется/не отправляется при запуске:
-targeted 7/7, вся `durable-backup-restore.spec.ts` — 21/21. Exact CI должен
-подтвердить этот acceptance на SHA, содержащем новую регрессию.
-
-Опубликованный [PR #93](https://github.com/Michael-edel/FitFocus/pull/93) остаётся
-draft с base `fix/state-generations`. [CI #1591](https://github.com/Michael-edel/FitFocus/actions/runs/39094609689)
-для `cf9d20e` отменён; запуск [CI #1593](https://github.com/Michael-edel/FitFocus/actions/runs/39094911718)
-создан для документационного commit `125ae97` и не включает новый startup E2E.
-Непосредственная причина более раннего
-[CI #1585](https://github.com/Michael-edel/FitFocus/actions/runs/39088517281)
-была в weekly-menu test mock без CORS-заголовков; trace подтвердил сохранение
-операции и того же `opId` через reload, а повтор получил 200. Исправление
-`b69935b` прошло локально 5/5 на iPhone PWA, вся спека — 56/56 на семи
-Playwright-проектах без retries.
-
-PR [#90](https://github.com/Michael-edel/FitFocus/pull/90) прошёл точный CI #971
-(audit, guards, unit, три typecheck, build и E2E), но ещё не влит: правило
-защищённой `main` требует одно одобрение reviewer с write-доступом. PR
-[#92](https://github.com/Michael-edel/FitFocus/pull/92) также прошёл точный CI;
-сам PR открыт. В плане остаются 33 пункта: 19 P0, 7 P1 и 7 следующих задач;
-staging, выпуск и интеграция feature-цепочки в защищённую `main` открыты.
-
-Последний read-only smoke branch preview подтвердил bundle SHA `faa1e71`:
-`/`, `/api/env` и анонимный `/api/me` вернули 200;
-`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
-redirect и `Set-Cookie`. Google Client IDs не настроены, поэтому авторизованные
-сценарии/OAuth не запускались; D1, edge-конфигурация и staging этим smoke не
-подтверждены. Это read-only preview smoke, не staging-приёмка.
-commit `a0721b0` переводит профильные callbacks Settings на durable commit до
-подтверждения интерфейса, сохраняет draft при отказе и применяет account/session
-guard в локальной записи. Профильный набор прошёл 19/19 на Chromium, две новые
-регрессии — 14/14 по семи desktop/mobile/PWA проектам; unit suite — 1359/1359,
-три typecheck, build и diff check прошли локально. Cloudflare Pages развернул
-branch preview `bb94957`; read-only GET и Chromium smoke подтвердили тот же
-preview origin.
-
-Точный [PR CI #1575](https://github.com/Michael-edel/FitFocus/actions/runs/39061905817)
-для `a9d2e33` завершился ошибкой в одном E2E: 988 browser passed, 299 skipped,
-1 failed. Исправление и точный follow-up CI описаны для `87ba8b9` выше.
-
-Более ранний CI #1573 на `bb94957` завершился двумя E2E сбоями; Firefox
-shopping-list и Android PWA access-pause сценарии прошли локальные повторы 5/5.
-Предыдущая правка `6bcbdd2` сохраняет fallback AI-план только после guarded
-durable commit; её desktop Chromium/Firefox и WebKit проверки прошли локально.
-В плане остаются 33 незакрытых пункта: 19 P0, 7 P1 и 7 следующих задач; ни один
-P0 полностью не закрыт. Staging, выпуск и интеграция в защищённую `main`
-остаются открытыми.
-
-Read-only smoke deployed preview: landing и `/api/env`/`/api/me` ответили 200;
-анонимные `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status`
-ответили 401 без redirect и `Set-Cookie`. В свежем Chromium `title=FitFocus`,
-page/console errors отсутствовали, запросы оставались на branch-preview origin
-и были только GET. `/api/env` показывает пустые Google Client IDs и
-`requireInvite=false`; D1, `APP_URL` и OAuth callback этим не подтверждены.
-
-Если fence handshake не отвечал с первого раза, sender оставлял outbox на
-безопасной паузе, но polling не повторял верификацию. Теперь проверка ждёт
-активации текущего Service Worker и повторяется с ограниченным backoff. Unit suite
-1352/1352, все три typecheck и production build прошли; offline E2E: Android
-Chrome 20/20 повторов и полная матрица 7/7, везде без retries. Подробности и
-ограничения — в [журнале стабилизации](stabilization-progress.md).
-
-Коммит `b6591e6` сериализует personal и family shopping-check PATCH для одной
-позиции по account/family/week/canonical ingredient, сохраняя порядок пользовательских
-намерений при быстрых кликах. Также cleanup writer-fence не вызывает отсутствующий
-`removeEventListener` у контроллера Service Worker. Новый unit-регресс, полный unit
-suite **1353/1353**, typecheck, production build и `family-callback-account-switch.spec.ts`
-**84/84** на Chromium/Firefox/WebKit прошли без retries; прежняя Firefox/WebKit page
-error в этом наборе не повторилась. Изменения не входят в CI #1567.
-Staging, полный P0.8/P0.9, release acceptance и интеграция в защищённую `main`
-остаются открытыми.
+Ниже сохранены результаты отдельных компонентов и прошлых ревизий. Они
+относятся только к явно указанным SHA и не заменяют статус текущего HEAD.
 
 ## P0.8 — действия урока подтверждаются после durable commit, `77ca05f`, 17.10.2026
 
