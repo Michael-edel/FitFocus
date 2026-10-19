@@ -9,6 +9,8 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 проверенный code HEAD `544f3f5` прошёл [CI #1696](https://github.com/Michael-edel/FitFocus/actions/runs/39199188429):
 audit, guards, 1454 unit tests / 216 файлов, 1110 browser passed / 311 skipped,
 три typecheck, build, rollback/CAS и сохранение артефактов успешны.
+Документационный HEAD `9ba464b` повторно прошёл точный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
+с теми же успешными browser, rollback/CAS и release-артефактами.
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
@@ -27,7 +29,7 @@ CAS, legacy migration и обновление PWA реализованы в PR #
 Chrome. Playwright в CI по-прежнему отключает BFCache (`BackForwardCacheDisabledForDelegate`);
 проверка не закрывает остальные callbacks, устройства, OAuth или staging.
 
-В плане 32 незакрытых чекбокса: 18 в P0, 7 в P1, ещё 7 в подготовительных и
+В плане 31 незакрытый чекбокс: 18 в P0, 7 в P1, ещё 6 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
 lifecycle callbacks, полная матрица, UI разрешения конфликтов, staging/OAuth/D1,
 release rollback и интеграция в защищённую `main`. Branch preview не равен
@@ -59,7 +61,7 @@ root, domain-strict и storage-strict typecheck, production build и `git diff -
 прошли локально. Точный CI #1622 для `b97307a` завершился с E2E-сбоями; причины
 и тестовый follow-up `7f76a8e` описаны ниже.
 
-В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
+В плане остаются 31 пункт: 18 P0, 7 P1 и 6 подготовительных задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -371,7 +373,7 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
 - [x] Проверить CI опубликованного исправления Save на точном `45315d9`:
   success, 846 unit-тестов, 152 browser passed / 9 skips, без flaky.
-- [ ] После исправлений пройти полную матрицу без retries и проверить CI
+- [x] После исправлений пройти полную матрицу без retries и проверить CI
   итогового HEAD. На `3550cc8`: 151 passed / 1 failed / 9 skips; падение —
   Safari page error на reload после успешного Save/409. Шесть диагностик
   с задержанными запросами и reload его не воспроизвели; общий фильтр ошибок
@@ -386,9 +388,15 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   trace поместил точный GET `/api/family/menu` через ~45 мс после начала reload.
   В E2E helper добавлен только этот маршрут в bounded WebKit-исключение;
   проблемный сценарий прошёл 5/5, вся family-menu спека desktop WebKit — 16/16
-  при `workers=1,retries=0`. Новый полный CI после локального исправления открыт.
+  при `workers=1,retries=0`; точный полный CI актуального HEAD зафиксирован ниже.
   В `playwright.config.ts` CI retries отключены, чтобы первый нестабильный
-  запуск завершался ошибкой. [Подробные свидетельства](docs/stabilization-progress.md).
+  запуск завершался ошибкой. На точном документационном HEAD `9ba464b` CI #1698
+  завершился success: 1454 unit / 216 файлов, 1110 browser passed / 311 skipped
+  за 47 минут, retries=0, все guards/typecheck/build и rollback/CAS успешны;
+  rollback и browser diagnostics артефакты сохранены. Это закрывает полную
+  матрицу для актуального HEAD. Исторический pageerror и его причина остаются
+  в предыдущем диагностическом пункте; staging не проверен.
+  [Подробные свидетельства](docs/stabilization-progress.md).
 
 ## Персональное недельное меню — реализация и открытая приёмка
 

@@ -13,35 +13,20 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
-и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code HEAD — `ba78ba047547ec89b77df8a8f12578ac17faa294`. Точный
-[CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
-завершился успешно: dependency audit, schema parity, privacy/auth/API guards,
-unit suite, три typecheck, production build, browser matrix, rollback/CAS и
-сохранение артефактов прошли. [Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12162202716)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12161628598)
-сохранены.
-Follow-up `8579486` исправляет частичную запись при malformed item в batch
-`PUT /api/state`; 39 связанных тестов, root typecheck, API invariants и
-`git diff --check` прошли локально. Предыдущий run #1684 для `5250190` отменён
-после обновления PR по concurrency policy.
+и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний проверенный
+code HEAD — `544f3f563fbb966ff0620adef436c0aede315282`; точный
+[CI #1696](https://github.com/Michael-edel/FitFocus/actions/runs/39199188429)
+успешен: audit, guards, 1454 unit / 216 файлов, 1110 browser passed / 311 skipped,
+три typecheck, production build, rollback/CAS и артефакты прошли. Документационный
+HEAD `9ba464b57a073bfea51136a04f627c8c4a41908e` повторно прошёл [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
+с теми же успешными результатами.
 
-Локальные follow-up уже опубликованы: Firefox PWA update прошёл 13/13 без
-retries, а test-only проверка удаления аккаунта покрывает все текущие
-account-scoped localStorage ключи. Полный unit suite прошёл **1427/1427** в 216
-файлах; root typecheck и `git diff --check` прошли. Эти тестовые изменения не
-меняли runtime; исторический Firefox timeout не воспроизвёлся, но его причина
-остаётся недоказанной.
-
-Read-only branch-preview smoke на точном опубликованном HEAD `1546073` прошёл
-7/7 GET-only проверок. `/`, `/api/env` и анонимный `/api/me` вернули 200;
-защищённые bootstrap/profile/state/push-status — 401 без redirect и cookie.
-`/assets/index-CmecaeC0.js` содержит полный SHA текущего HEAD. Это branch preview,
-не выделенный staging; OAuth, авторизованные действия, D1 и релиз не проверены.
-
-После follow-up `8579486` branch preview HEAD `ba78ba047547ec89b77df8a8f12578ac17faa294`
-повторно прошёл тот же GET-only smoke 7/7. Основной bundle
-`/assets/index-BA4kAu5c.js` содержит этот полный SHA. OAuth и D1 не затрагивались.
+Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
+страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
+push-status — 401 без redirect и cookie. Это preview, не выделенный staging;
+OAuth, авторизованные действия, фактическая D1-конфигурация и выпуск не проверены.
+Follow-up `8579486` также fail-closed отклоняет malformed batch `PUT /api/state`;
+39 связанных тестов, root typecheck, API invariants и diff check прошли локально.
 
 Открыты полная lifecycle-приёмка, часть callback/legacy-writer проверок,
 совместимость старых и новых bundles в целевом окружении, выделенный staging с
