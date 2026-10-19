@@ -11,6 +11,8 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 malformed элементы batch `PUT /api/state`; 39 целевых тестов, root typecheck,
 API invariants и diff check прошли локально. Точный CI [#1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
 на опубликованном HEAD `ba78ba0` сейчас выполняется.
+Branch preview этого HEAD прошёл read-only smoke 7/7; его основной bundle
+содержит полный SHA `ba78ba047547ec89b77df8a8f12578ac17faa294`. Это не staging.
 
 Основные durable outbox, account/session guards, серверные поколения, семейный
 CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9

@@ -1,5 +1,18 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
+
+`npm run test:e2e:staging` выполнен с временным origin
+`https://fix-durable-outbox.fitfocus.pages.dev/` и прошёл **7/7 GET-only** тестов:
+страница, `/api/env`, анонимный `/api/me` и четыре защищённых чтения. Redirects,
+`Set-Cookie`, запросы на другой origin и page errors не обнаружены. Основной
+bundle `/assets/index-BA4kAu5c.js` содержит полный SHA
+`ba78ba047547ec89b77df8a8f12578ac17faa294`.
+
+Это подтверждает только опубликованный PR branch preview; проверки авторизации,
+OAuth, D1/миграций и staging не выполнялись. `FITFOCUS_STAGING_ORIGIN` в
+persistent окружении не настроен.
+
 ## P0 — fail-closed проверка batch PUT /api/state, 19.10.2026
 
 Commit [`8579486`](https://github.com/Michael-edel/FitFocus/commit/8579486)

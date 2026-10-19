@@ -38,6 +38,10 @@ Read-only branch-preview smoke на точном опубликованном HE
 `/assets/index-CmecaeC0.js` содержит полный SHA текущего HEAD. Это branch preview,
 не выделенный staging; OAuth, авторизованные действия, D1 и релиз не проверены.
 
+После follow-up `8579486` branch preview HEAD `ba78ba047547ec89b77df8a8f12578ac17faa294`
+повторно прошёл тот же GET-only smoke 7/7. Основной bundle
+`/assets/index-BA4kAu5c.js` содержит этот полный SHA. OAuth и D1 не затрагивались.
+
 Открыты полная lifecycle-приёмка, часть callback/legacy-writer проверок,
 совместимость старых и новых bundles в целевом окружении, выделенный staging с
 OAuth и D1, rollback в целевом окружении, release checklist и интеграция через
