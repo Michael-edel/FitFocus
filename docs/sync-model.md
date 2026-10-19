@@ -140,6 +140,14 @@ Legacy-ключ — только источник импорта. Нормали
 | Старый и новый build на одном origin | Blocked/закрытие соединений проверены фактически |
 | Delete → recreate → stale update | Старая версия не проходит CAS |
 
+Строка двух вкладок с одним JSON-снимком проверена в
+[`owned-state.spec.ts`](../e2e/owned-state.spec.ts): без Web Locks первая
+settings-запись удерживается до ответа, а независимое редактирование во второй
+вкладке остаётся отдельной `local-revision-conflict`. После ответа первой
+записи её версия подтверждена, конфликт и его JSON payload остаются в IndexedDB,
+вторая запись не отправляется. Browser/PWA матрица прошла 7/7 без retries;
+используется mock API, это не проверка staging.
+
 Строка `Cloud hydration при pending` проверена browser acceptance в
 [`storage-durability.spec.ts`](../e2e/storage-durability.spec.ts): после загрузки
 серверной темы `dark` версии 7 локальная правка `light` получает 503 с

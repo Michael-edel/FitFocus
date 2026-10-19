@@ -1821,8 +1821,12 @@ all-client Service Worker fence, атомарные migration items и quarantin
     запись без доказанного владельца; при этом чётко scoped ключ другого аккаунта
     не считать evidence удаляемого пользователя. Регрессии в `4e8adff` сначала
     падали до исправления, затем прошли вместе с полным unit suite 1426/1426,
-    strict typechecks, privacy/API guards и production build. Exact CI #1673
-    проверяет предыдущий опубликованный SHA; новая ревизия ждёт его завершения.
+    strict typechecks, privacy/API guards и production build. Точный CI #1673
+    предыдущего HEAD завершился с одним Safari timeout: общий migration progress
+    временно оставался `importing` при закрытом send gate и сохранённых данных.
+    Финальный E2E wait обновлён до 30 секунд без ослабления terminal assertions;
+    локально 1/1 после трёх исходных успешных повторов. Точный CI #1675 для
+    `17b96fb` выполняется.
 - [ ] Завершить UI повтора/разрешения конфликтов и общий lifecycle.
   - [x] Показать для подтверждённого аккаунта число legacy-записей в карантине
     и агрегированные причины без отображения ключей/raw payload; неизвестные
@@ -1893,6 +1897,12 @@ legacy-ключ не используется для новой очереди �
 ### P0.9 — приёмка жизненного цикла
 
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
+  - [x] Проверить две вкладки с одним полным JSON-снимком без Web Locks:
+    первый PUT удерживается в полёте, независимое второе редактирование не
+    затирает первую запись, а сохраняется отдельным `local-revision-conflict`;
+    после ответа первой операции подтверждённая версия и конфликт остаются в
+    IndexedDB, второй PUT не отправляется. Browser acceptance прошёл 7/7
+    desktop/mobile/PWA профилей без retries; используется mock API.
   - [x] Browser acceptance cloud hydration при pending: server `dark` версии 7,
     локальная правка `light`, scoped 503 и reload сохраняют локальное значение,
     исходные `opId`/payload, baseVersion и retry deadline; до срока повторный PUT

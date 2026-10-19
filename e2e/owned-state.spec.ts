@@ -273,3 +273,158 @@ test('two same-origin tabs without Web Locks retain concurrent writes to differe
     }
   }
 });
+
+test('two same-origin tabs retain a losing full JSON snapshot while the first PUT is in flight', async ({ page, context }) => {
+  test.setTimeout(60_000);
+  const settingsKey = `fitfocus_data_${account}_settings`;
+  const initialSettings = { theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false };
+  const firstSettings = JSON.stringify({ ...initialSettings, theme: 'light' });
+  const secondSettings = JSON.stringify({ ...initialSettings, theme: 'premium' });
+  let releaseFirstPut!: () => void;
+  const firstPutMayFinish = new Promise<void>(resolve => { releaseFirstPut = resolve; });
+  let signalFirstPut!: () => void;
+  const firstSettingsPutStarted = new Promise<void>(resolve => { signalFirstPut = resolve; });
+  let firstPutCount = 0;
+  let firstSettingsPutItems: Array<{ key?: unknown; value?: unknown; baseVersion?: unknown }> = [];
+  let secondTabSettingsPutCount = 0;
+  const errorsA = await setup(page, false, undefined, true);
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
+  });
+  const observeSettingsRead = async (target: Page) => target.addInitScript(key => {
+    const originalGet = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (this: IDBObjectStore, ...args: Parameters<typeof originalGet>) {
+      const request = originalGet.apply(this, args);
+      if (this.name === 'values' && args[0] === key) {
+        request.addEventListener('success', () => {
+          (window as Window & { __fitfocusSettingsRead?: boolean }).__fitfocusSettingsRead = true;
+        }, { once: true });
+      }
+      return request;
+    };
+  }, settingsKey);
+  await observeSettingsRead(page);
+  const holdFirstSettingsPut = async (target: Page) => target.route('**/api/state', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; value?: unknown; baseVersion?: unknown }> } | null;
+    const items = Array.isArray(body?.items) ? body.items : [];
+    if (!items.some(item => item.key === settingsKey)) return route.fallback();
+
+    firstPutCount += 1;
+    if (firstPutCount === 1) firstSettingsPutItems = items;
+    signalFirstPut();
+    await firstPutMayFinish;
+    const headers = {
+      'X-FitFocus-State-Protocol': '2',
+      'X-FitFocus-State-Guard': '1',
+      'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'] ?? account,
+      'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+    };
+    return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify({ ok: true,
+      items: items.map(item => ({ key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true })) }) });
+  });
+
+  let second: Page | undefined;
+  try {
+    await openApp(page, '/#settings');
+    await expect(page.getByRole('button', { name: /Тёмная/ })).toHaveClass(/bg-indigo-500\/10/);
+
+    second = await context.newPage();
+    const errorsB = await setup(second, false, undefined, true);
+    await observeSettingsRead(second);
+    second.on('request', request => {
+      if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/state') return;
+      const body = request.postDataJSON() as { items?: Array<{ key?: unknown }> } | null;
+      if (body?.items?.some(item => item.key === settingsKey)) secondTabSettingsPutCount += 1;
+    });
+    await openApp(second, '/#settings');
+    await expect(second.getByRole('button', { name: /Тёмная/ })).toHaveClass(/bg-indigo-500\/10/);
+    await expect.poll(() => page.evaluate(() =>
+      (window as Window & { __fitfocusSettingsRead?: boolean }).__fitfocusSettingsRead === true,
+    )).toBe(true);
+    await expect.poll(() => second!.evaluate(() =>
+      (window as Window & { __fitfocusSettingsRead?: boolean }).__fitfocusSettingsRead === true,
+    )).toBe(true);
+    await page.evaluate(async ({ account, key, value }) => {
+      const opening = indexedDB.open('fitfocus-user-state-v1');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        opening.onsuccess = () => resolve(opening.result);
+        opening.onerror = () => reject(opening.error);
+      });
+      const tx = db.transaction(['values'], 'readwrite');
+      const complete = new Promise<void>((resolve, reject) => {
+        tx.addEventListener('complete', () => resolve(), { once: true });
+        tx.addEventListener('abort', () => reject(tx.error ?? new Error('SETTINGS_SEED_ABORTED')), { once: true });
+      });
+      tx.objectStore('values').put({ key, accountId: account, value, updatedAt: Date.now() });
+      await complete;
+      db.close();
+    }, { account, key: settingsKey, value: JSON.stringify(initialSettings) });
+    expect(await state(page, 'settings')).toMatchObject({ value: JSON.stringify(initialSettings), operations: [] });
+    expect(await state(second, 'settings')).toMatchObject({ value: JSON.stringify(initialSettings), operations: [] });
+    // Settings updates can reach the sibling tab first through same-origin
+    // coordination, so gate the request on both pages after their baseline is ready.
+    await holdFirstSettingsPut(page);
+    await holdFirstSettingsPut(second);
+
+    await page.getByRole('button', { name: /Светлая/ }).click();
+    await firstSettingsPutStarted;
+    expect(firstSettingsPutItems).toContainEqual({ key: settingsKey, value: firstSettings, baseVersion: 0 });
+    const sending = await state(page, 'settings');
+    expect(sending.value).toBe(firstSettings);
+    const firstOperation = sending.operations.find(operation => operation.type === 'put' && operation.status === 'sending'
+      && operation.value === firstSettings);
+    expect(firstOperation).toBeTruthy();
+
+    await second.getByRole('button', { name: /Premium/ }).click();
+    let duringConflict = await state(page, 'settings');
+    await expect.poll(async () => {
+      duringConflict = await state(page, 'settings');
+      return {
+        value: duringConflict.value,
+        firstStillSending: duringConflict.operations.some(operation => operation.status === 'sending' && operation.value === firstSettings),
+        secondConflicted: duringConflict.operations.some(operation => operation.status === 'conflicted'
+          && operation.reason === 'local-revision-conflict' && operation.value === secondSettings),
+      };
+    }).toEqual({ value: firstSettings, firstStillSending: true, secondConflicted: true });
+    const conflict = duringConflict.operations.find(operation => operation.type === 'put' && operation.status === 'conflicted'
+      && operation.reason === 'local-revision-conflict' && operation.value === secondSettings)!;
+    expect(JSON.parse(conflict.value!)).toEqual({ ...initialSettings, theme: 'premium' });
+    expect(firstPutCount).toBe(1);
+    expect(secondTabSettingsPutCount).toBe(0);
+
+    releaseFirstPut();
+    await expect.poll(async () => {
+      const current = await state(page, 'settings');
+      const retained = current.operations.find(operation => operation.opId === conflict.opId);
+      return {
+        value: current.value,
+        confirmedVersion: current.confirmedVersion,
+        operationCount: current.operations.length,
+        firstOperationRemoved: !current.operations.some(operation => operation.opId === firstOperation!.opId),
+        conflict: retained && { opId: retained.opId, status: retained.status, reason: retained.reason, value: retained.value },
+      };
+    }).toEqual({
+      value: firstSettings,
+      confirmedVersion: 1,
+      operationCount: 1,
+      firstOperationRemoved: true,
+      conflict: { opId: conflict.opId, status: 'conflicted', reason: 'local-revision-conflict', value: secondSettings },
+    });
+    expect(firstPutCount).toBe(1);
+    expect(secondTabSettingsPutCount).toBe(0);
+    expect(await page.evaluate(() => navigator.locks)).toBeUndefined();
+    expect(await second.evaluate(() => navigator.locks)).toBeUndefined();
+    expect(errorsA).toEqual([]);
+    expect(errorsB).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(second.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFirstPut();
+    if (second && !second.isClosed()) {
+      await second.goto('about:blank', { waitUntil: 'load', timeout: 10_000 }).catch(() => undefined);
+      await second.close();
+    }
+  }
+});
