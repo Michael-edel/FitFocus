@@ -1736,6 +1736,16 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     `wis_text` и подтверждают конкретный `plateau` request. Оба сценария прошли
     14/14 на семи desktop/mobile/PWA профилях; root typecheck и diff check прошли.
     Новый точный CI запускается после push; production-код не менялся.
+  - [x] Проверить поздний AI plateau-ответ при гидратации профиля: ответ A после
+    перехода на B и после повторного входа A с новым `serverSessionId` не меняет
+    profile/state/outbox, не вызывает profile/state writes или achievement и не
+    появляется в UI. Оба сценария прошли 7/7 на desktop Chromium/Firefox/WebKit,
+    Android Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Первичный
+    вариант теста требовал session notice до завершения гидратации; trace показал
+    штатный loading screen, поэтому проверка перенесена на поздний ответ. Убран
+    ручной close второй страницы, который давал локальный Vite proxy ECONNREFUSED;
+    повторный прогон прошёл без этой ошибки. Production-код не менялся. CI #1794
+    для `aee0a6c` не содержит эти follow-up тесты; точный CI новой ревизии нужен.
   - [x] Обрабатывать отказ profile commit для ручного замера, wearable text/file
     import и выбора/отключения источника: показывать ошибку, не считать отказ
     успешным и оставлять файл/ввод для повтора; отбрасывать callback после смены

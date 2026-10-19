@@ -18,6 +18,24 @@
 не менялся. Полный точный CI исправленного SHA ожидает push; общий P0.4/P0.6
 lifecycle и staging остаются открытыми.
 
+## P0.4/P0.5 — AI plateau при гидратации после смены сессии, 20.10.2026
+
+В `e2e/ai-callback-account-switch.spec.ts` добавлены два held-response сценария
+для вызова `plateau` из `sessionHydration`: ответ аккаунта A освобождается после
+входа B в соседней вкладке и после повторного входа A с новым
+`serverSessionId`. Проверяются активная сессия и epoch, profile/state/outbox
+снимки, отсутствие новых writes/achievement и отсутствие текста старого ответа
+в обеих вкладках. Оба теста прошли **7/7** на desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA и iPhone Safari/PWA, `workers=1,retries=0`.
+
+Первый вариант теста ожидал session notice до ответа, хотя исходная страница ещё
+показывала loading screen. После переноса assertion к проверке позднего ответа
+тест прошёл. В первом same-account прогоне ручной close страницы вызвал локальный
+Vite proxy `ECONNREFUSED`; он убран, а повторная семипрофильная матрица прошла
+без proxy ошибки. Production-код не менялся. Точный CI #1794 для `aee0a6c` ещё
+проверяет предыдущий SHA и не включает эти тесты; CI новой ревизии ожидает push.
+Реальные OAuth, BFCache и staging остаются отдельными открытыми gates.
+
 ## P0.6 — фото прогресса после повторного входа в ту же учётную запись, [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393), 19.10.2026
 
 Новый account/session E2E выбирает файл под account A и удерживает декодирование.

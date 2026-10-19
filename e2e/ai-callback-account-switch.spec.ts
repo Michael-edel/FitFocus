@@ -631,6 +631,164 @@ test('navigation aborts the plateau AI request during session hydration before t
   expect(errors).toEqual([]);
 });
 
+test('a held hydration plateau response from account A cannot update account B after another tab signs in', async ({ page, context }, info) => {
+  const diary = [{
+    id: 'hydration-plateau-food', name: 'Завтрак', calories: 320, protein: 23, fat: 21, carbs: 4,
+    timestamp: new Date().toISOString(),
+  }];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id, true),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify(diary), exists: true, version: 1,
+    }, {
+      accountId: accountA.id, key: `fitfocus_data_${accountA.id}_habits`, value: '[]', exists: true, version: 1,
+    }],
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  }]);
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  const profileABefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(beforeSwitch, accountA);
+  const operationsABefore = operationsFor(beforeSwitch, accountA);
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    const switched = await openAccountB(context, state);
+    await waitForAccountSwitch(page);
+    await waitForAccountOutboxIdle(switched.page, accountB);
+    const accountBBefore = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(accountBBefore, accountB);
+    const operationsBBefore = operationsFor(accountBBefore, accountB);
+    await expect(switched.page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const finalA = await readDurableSnapshot(page);
+    const finalB = await readDurableSnapshot(switched.page);
+    expect(rawValue(finalA, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(finalA, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(finalA, accountA)).toEqual(operationsABefore);
+    expect(rawValue(finalB, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(finalB, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(finalB, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+      feature: 'plateau', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('hydration-plateau-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('a held hydration plateau response cannot update a new session of the same account', async ({ page, context }, info) => {
+  const diary = [{
+    id: 'hydration-reauth-plateau-food', name: 'Завтрак', calories: 320, protein: 23, fat: 21, carbs: 4,
+    timestamp: new Date().toISOString(),
+  }];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id, true),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify(diary), exists: true, version: 1,
+    }, {
+      accountId: accountA.id, key: `fitfocus_data_${accountA.id}_habits`, value: '[]', exists: true, version: 1,
+    }],
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  }]);
+
+  const nextSession: Account = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = nextSession;
+  state.profile = profileFor(accountA.id, true);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureNextSession = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, nextSession);
+    const beforeLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(beforeLateResponse.activeSession?.accountId).toBe(accountA.id);
+    expect(beforeLateResponse.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    const profileBefore = rawValue(beforeLateResponse, profileKey(accountA.id));
+    const valuesBefore = valuesFor(beforeLateResponse, accountA);
+    const operationsBefore = operationsFor(beforeLateResponse, accountA);
+    expect(fixtureNextSession.counts.aiRequests.filter(request => request.feature === 'plateau')
+      .every(request => request.session === nextSession.sid)).toBe(true);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(nextSession.sid);
+    const afterLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterLateResponse, profileKey(accountA.id))).toBe(profileBefore);
+    expect(valuesFor(afterLateResponse, accountA)).toEqual(valuesBefore);
+    expect(operationsFor(afterLateResponse, accountA)).toEqual(operationsBefore);
+    expect(fixtureA.counts.profileWrites).toEqual([]);
+    expect(fixtureA.counts.stateWrites).toEqual([]);
+    expect(fixtureA.counts.achievementChecks).toBe(0);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+      feature: 'plateau', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await reauthenticatedPage.screenshot({ path: info.outputPath('hydration-plateau-late-response-reauth.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
 test('held coach retry cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const profileA = profileFor(accountA.id);

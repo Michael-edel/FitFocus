@@ -372,7 +372,7 @@ SHA `4630689` выполнялся и не включает тест; точны
 profile/managed state/outbox снимки и отсутствие фото в UI. Новый сценарий прошёл
 7/7, а A → B после общего helper — повторно 7/7 на desktop Chromium/Firefox/
 WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
-Вместе матрица составляет 70 сценариев и 280 мобильных запусков. Root typecheck
+Вместе матрица составляет 72 сценария и 288 мобильных запусков. Root typecheck
 и `git diff --check` прошли. Используется mock API и SVG file fixture; физическая
 камера и staging не проверялись. Полный P0.4/P0.6 lifecycle остаётся открытым.
 
@@ -383,6 +383,15 @@ WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
 ждёт начальный AI handshake, подтверждает `plateau` request A и использует
 разные ответы аккаунтов. Оба сценария прошли локально 14/14 на семи профилях;
 root typecheck и `git diff --check` прошли. Точный CI follow-up ожидает push.
+
+Поздний AI plateau-ответ, запущенный во время session hydration, дополнительно
+проверен после входа B и после повторного входа A с новым `serverSessionId`.
+Profile/state/outbox, writes, achievement и UI не изменились; каждый сценарий
+прошёл 7/7 на всех desktop/mobile/PWA профилях без retries. Локальный
+`ECONNREFUSED` при раннем закрытии вкладки устранён передачей очистки общей
+Playwright fixture; повторная матрица прошла без proxy ошибки. Production-код
+не менялся. CI #1794 для `aee0a6c` не содержит этих тестов; точный CI нового
+SHA требуется после push.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

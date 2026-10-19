@@ -88,7 +88,7 @@ SHA `4630689` выполнялся и не включает этот тест; �
 новым `serverSessionId`: `sessionEpoch` обновляется, а позднее декодирование не
 меняет профиль, state, outbox, API writes или UI. Она прошла 7/7; исходная A → B
 проверка после выделения общего gate повторно прошла 7/7. Матрица теперь —
-70 сценариев и 280 мобильных запусков. Root typecheck и diff check прошли;
+72 сценария и 288 мобильных запусков. Root typecheck и diff check прошли;
 реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
@@ -98,6 +98,14 @@ SHA `4630689` выполнялся и не включает этот тест; �
 начального AI-session handshake; оба сценария прошли 14/14 на семи
 desktop/mobile/PWA профилях. Root typecheck и diff check прошли. Точный CI
 исправленного SHA ожидает публикации; production-код не менялся.
+
+Дополнительно покрыта поздняя гидратация AI-задачи плато: ответ старого вызова A
+освобождается после входа B и после повторного входа A с новым
+`serverSessionId`. Проверки profile/state/outbox, сетевых writes, achievement
+и UI прошли 7/7 в каждом сценарии на семи desktop/mobile/PWA профилях
+(`workers=1,retries=0`). Исправлена только тестовая предпосылка и teardown;
+production-код не менялся. Точный CI #1794 для `aee0a6c` ещё выполняется и не
+включает новые тесты; CI follow-up запускается после push.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
