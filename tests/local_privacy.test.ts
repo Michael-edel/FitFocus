@@ -109,6 +109,54 @@ describe('clearLocalUserData', () => {
     expect(storage.getItem('fitfocus_usage_counters_v1:account%3Aother')).toBe('{"recipes":8}');
   });
 
+  it('clears every account-scoped local UI key without matching another account', async () => {
+    const storage = new MemoryStorage();
+    const accountId = 'privacy:owner/1';
+    const siblingAccountId = `${accountId}0`;
+    const accountKeys = [
+      `fitfocus.nutrition.selected-day.v1:${accountId}`,
+      `fitfocus.nutrition.camera-facing.v1:${accountId}`,
+      `fitfocus.dashboard.new-weight.v1:${accountId}`,
+      `fitfocus.dashboard.pdf-include-meal-log.v1:${accountId}`,
+      `fitfocus.dashboard.mobile-more-open.v1:${accountId}`,
+      `fitfocus.course.ui.v1:${accountId}`,
+      `fitfocus.plan.ui.v1:${accountId}`,
+      `fitfocus.plan.active-day.v1:${accountId}`,
+      `fitfocus.progress.ui.v1:${accountId}`,
+      `fitfocus.progress-archive.sections.v1:${accountId}`,
+      `fitfocus.settings.ui.v1:${accountId}`,
+      `fitfocus.nutrition.search.v1:${accountId}`,
+      `fitfocus.analytics.sent.v1:${accountId}`,
+      `fitfocus.achievements.counters.v1:${accountId}`,
+      `fitfocus_usage_counters_v1:${encodeURIComponent(accountId)}`,
+      `ff_last_weekly_ai_attempt_${accountId}`,
+      `ff_weekly_ai_inflight_${accountId}`,
+      `ff_dev_plan_override_scope_${accountId}`,
+      `fitfocus_data_${accountId}_profile`,
+    ];
+    const siblingKeys = accountKeys.map((key) => key.startsWith('fitfocus_usage_counters_v1:')
+      ? `fitfocus_usage_counters_v1:${encodeURIComponent(siblingAccountId)}`
+      : key.replaceAll(accountId, siblingAccountId));
+
+    for (const key of accountKeys) storage.setItem(key, 'private account data');
+    for (const key of siblingKeys) storage.setItem(key, 'sibling account data');
+    const versionedKey = `fitfocus.nutrition.selected-day.v1:${accountId}__ffv`;
+    storage.setItem(versionedKey, '3');
+    vi.stubGlobal('localStorage', storage);
+
+    const result = await clearLocalUserData(accountId);
+
+    expect(result).toMatchObject({
+      complete: true,
+      localStorageCleared: true,
+      indexedDbCleared: true,
+      legacyEvidenceRetained: false,
+    });
+    for (const key of accountKeys) expect(storage.getItem(key), key).toBeNull();
+    for (const key of siblingKeys) expect(storage.getItem(key), key).toBe('sibling account data');
+    expect(storage.getItem(versionedKey)).toBeNull();
+  });
+
   it('does nothing for an empty user id', async () => {
     const storage = new MemoryStorage();
     storage.setItem('fitfocus_data_user-1_diary', 'keep');
