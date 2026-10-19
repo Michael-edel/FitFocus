@@ -72,6 +72,17 @@ Android/iPhone browser/PWA профилях; исходный gallery input по
 общей проверки — 7/7. Накопленная матрица — 68 сценариев и 272 мобильных
 запуска; точный CI нового HEAD ожидается.
 
+Коммит [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3)
+добавил P0.4 account-switch acceptance отложенного декодирования фото прогресса:
+после перехода A → B тест отпускает удержанный `Image.src` и проверяет, что
+профиль, managed state, outbox и сетевые writes не меняются, а изображение не
+появляется ни в одной вкладке. Все семь desktop/Android/iPhone/PWA профилей
+прошли без retries; матрица выросла до 69 сценариев и 276 мобильных запусков.
+Root typecheck и diff check прошли. Используются mock API и Playwright file
+fixture; системная камера и staging не проверялись. CI #1791 на родительском
+SHA `4630689` выполнялся и не включает этот тест; точный CI новой ревизии
+проверяется после push. P0.4 остаётся открытым для остальных callbacks/cache.
+
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Полный точный

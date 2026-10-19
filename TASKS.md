@@ -1055,6 +1055,17 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     скрыт. Exact CI опубликованного HEAD ещё не завершён; остальные callbacks/cache
     и общий P0.4 lifecycle остаются открытыми.
 
+  - [x] Проверить отложенное декодирование фото прогресса при смене аккаунта:
+    удержанный `Image.src` после выбора файла отпускается только после перехода
+    A → B; старый callback не меняет профиль, managed state, outbox или сетевые
+    writes аккаунта A/B и не показывает фото. E2E прошёл 7/7 desktop/Android/
+    iPhone/PWA профилей без retries; root typecheck и diff check прошли в
+    [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3).
+    Это mock API и Playwright file fixture, не физическая камера/staging. CI
+    родительского SHA `4630689` ещё выполнялся и тест не включает; точный CI
+    этой ревизии проверяется после push. Остальные callbacks/cache и P0.4 lifecycle
+    остаются открытыми.
+
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
 Для существующего profile guarded refresh и восстановление локального

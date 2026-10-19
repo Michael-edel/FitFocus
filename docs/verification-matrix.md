@@ -354,6 +354,17 @@ gallery path — 7/7. Всего 11 passed и 3 ожидаемых desktop skips
 Матрица — 68 сценариев и 272 мобильных запуска.
 Полный P0.4/P0.5 lifecycle и точный CI нового HEAD остаются открытыми.
 
+Коммит [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3)
+проверяет held progress-photo decode после account switch A → B. После
+освобождения `Image.src` profile, managed state, outbox и API write counters
+остаются неизменны; фото отсутствует в обеих вкладках. E2E — 7/7 на desktop
+Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA
+(`workers=1`, `retries=0`); root typecheck и `git diff --check` прошли. Это
+mock API и Playwright file fixture, без физической камеры или staging.
+Матрица выросла до 69 сценариев и 276 мобильных запусков. CI #1791 на родительском
+SHA `4630689` выполнялся и не включает тест; точный CI этой ревизии ожидается
+после push. Полный P0.4/P0.5 lifecycle остаётся открытым.
+
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
 `serverSnapshot` после 409/reload; явное принятие записывает серверный снимок,
