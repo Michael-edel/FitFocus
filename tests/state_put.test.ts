@@ -310,6 +310,21 @@ describe('/api/state PUT', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
   });
 
+  it('rejects malformed batch items before writing any valid neighbor', async () => {
+    const db = makeDb();
+    const response = await putState(db, {
+      items: [
+        { key: 'fitfocus_data_user-1_food:1', value: '{"valid":true}', baseVersion: 1 },
+        null,
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+  });
+
   it('rejects object values instead of coercing them into [object Object]', async () => {
     const db = makeDb();
     const response = await putState(db, {
