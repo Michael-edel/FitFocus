@@ -7628,7 +7628,7 @@ iPhone Safari/PWA; вместе с ранее пройденными desktop Chr
 Точный CI follow-up ожидает push; CI предыдущего опубликованного HEAD
 продолжает выполняться.
 
-## P0.4 — мобильная приёмка WIS-share callback, 19.10.2026
+## P0.4 — мобильная приёмка WIS-share callback, [`971844d`](https://github.com/Michael-edel/FitFocus/commit/971844d80819ee41add9a5a979a2aa35ad65e43f), 19.10.2026
 
 Снят desktop-only skip с проверки завершения системного share после отзыва и
 повторной активации аккаунта A. Удержанный share promise старой вкладки после

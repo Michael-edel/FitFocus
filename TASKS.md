@@ -956,7 +956,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     фикса поздний callback после перехода A → B → A показывал успех старой
     операции в активном экране. Desktop-часть прошла 3/3; follow-up расширил
     приёмку до 7/7 на Android/iPhone/PWA, включая 4 мобильных запуска
-    (`workers=1,retries=0`). Unit 1309/1309 в 210 файлах, общий и оба strict
+    (`workers=1,retries=0`) в коммите
+    [`971844d`](https://github.com/Michael-edel/FitFocus/commit/971844d80819ee41add9a5a979a2aa35ad65e43f).
+    Unit 1309/1309 в 210 файлах, общий и оба strict
     typecheck, production build и `git diff --check` прошли в исходной ревизии.
     Точный CI нового тестового SHA запускается после push. Остальной P0.4 audit,
     staging и полный lifecycle открыты.
