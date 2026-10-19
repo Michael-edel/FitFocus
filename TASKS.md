@@ -1523,6 +1523,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     не появляется в старой или новой вкладке. E2E прошёл 3/3 на desktop Chromium,
     Firefox и WebKit (`workers=1,retries=0`); typecheck и diff check прошли.
     Точный CI этой ревизии будет проверен на опубликованном SHA.
+  - [x] Расширить мобильную account/session матрицу пошаговой генерации рецепта:
+    поздние ответы после входа B и новой server session того же аккаунта прошли
+    14/14 на семи профилях, включая 8 Android/iPhone/PWA запусков
+    (`workers=1,retries=0`). Дневник, профиль, outbox и usage другой/новой сессии
+    остаются неизменными; точный CI follow-up проверяется после push.
   - [x] Удержать повтор Coach retry и Plateau retry после повторного входа того же
     аккаунта с новой server session. Старые ответы не меняют coach state, профиль,
     outbox, achievements или action/status metadata; результат не появляется в
