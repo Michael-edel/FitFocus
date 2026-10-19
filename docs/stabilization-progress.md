@@ -1,5 +1,16 @@
 # Стабилизация: проверяемые изменения
 
+## P0 — fail-closed проверка batch PUT /api/state, 19.10.2026
+
+Commit [`8579486`](https://github.com/Michael-edel/FitFocus/commit/8579486)
+исправляет нормализацию batch: null/примитивные элементы, объекты без строкового
+`key` и значения `key` нестрокового типа теперь отклоняют весь пакет с
+`BAD_ITEM` до записи в D1. Явно пустой строковый ключ по существующему контракту
+по-прежнему пропускается. Добавлены unit- и route-level регрессии, а
+`API_CONTRACTS.md` описывает 400-ответ. Локально прошли 39 целевых тестов,
+root typecheck, API invariants и `git diff --check`. Это изменение ожидает
+публикации и отдельного полного CI.
+
 ## P0.9 — read-only branch-preview smoke точного HEAD `1546073`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен на
@@ -22,8 +33,8 @@ runtime `5250190`; follow-up после него меняли тесты и до
 с `workers=1,retries=0` (13/13 суммарно, 6.3 минуты). Исторический timeout в
 `saved(page)` не воспроизвёлся; эта выборка не доказывает первопричину и не
 закрывает P0 пункт. Точный [CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
-проверяет текущий HEAD: статические проверки, unit, typechecks и build прошли;
-browser matrix ещё выполняется. Предыдущий #1684 для `5250190` отменён по
+для HEAD `1546073` завершился успешно, включая browser matrix, rollback/CAS
+checks и сохранение артефактов. Предыдущий #1684 для `5250190` отменён по
 concurrency policy после обновления PR.
 
 ## Удаление всех account-scoped localStorage ключей, 19.10.2026
