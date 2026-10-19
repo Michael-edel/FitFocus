@@ -5,14 +5,14 @@
 Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
-[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code HEAD `ba78ba0` прошёл [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739):
-audit, guards, unit suite, три typecheck, build, browser matrix, rollback/CAS и
-сохранение артефактов успешны. Follow-up `8579486` fail-closed отклоняет
-malformed элементы batch `PUT /api/state`; 39 целевых тестов, root typecheck,
-API invariants и diff check также прошли локально.
-Branch preview этого HEAD прошёл read-only smoke 7/7; его основной bundle
-содержит полный SHA `ba78ba047547ec89b77df8a8f12578ac17faa294`. Это не staging.
+[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний опубликованный
+HEAD `6f18903` прошёл точный [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952):
+audit, schema/privacy/auth/API guards, unit tests, три typecheck, build,
+browser tests, rollback/CAS и сохранение артефактов успешны.
+Документационный HEAD `9ba464b` повторно прошёл точный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
+с теми же успешными browser, rollback/CAS и release-артефактами.
+Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
+выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
 Основные durable outbox, account/session guards, серверные поколения, семейный
 CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
@@ -29,7 +29,7 @@ CAS, legacy migration и обновление PWA реализованы в PR #
 Chrome. Playwright в CI по-прежнему отключает BFCache (`BackForwardCacheDisabledForDelegate`);
 проверка не закрывает остальные callbacks, устройства, OAuth или staging.
 
-В плане 32 незакрытых чекбокса: 18 в P0, 7 в P1, ещё 7 в подготовительных и
+В плане 29 незакрытых чекбоксов: 16 в P0, 7 в P1, ещё 6 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
 lifecycle callbacks, полная матрица, UI разрешения конфликтов, staging/OAuth/D1,
 release rollback и интеграция в защищённую `main`. Branch preview не равен
@@ -61,7 +61,7 @@ root, domain-strict и storage-strict typecheck, production build и `git diff -
 прошли локально. Точный CI #1622 для `b97307a` завершился с E2E-сбоями; причины
 и тестовый follow-up `7f76a8e` описаны ниже.
 
-В плане остаются 32 пункта: 18 P0, 7 P1 и 7 следующих задач; ни один P0 не
+В плане остаются 31 пункт: 18 P0, 7 P1 и 6 подготовительных задач; ни один P0 не
 закрыт целиком. Staging, выпуск и интеграция в защищённую `main` открыты.
 Опубликованный HEAD [`dbca5e3`](https://github.com/Michael-edel/FitFocus/commit/dbca5e3)
 проверялся точным [PR CI #1571](https://github.com/Michael-edel/FitFocus/actions/runs/39048988632),
@@ -373,7 +373,7 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.
 - [x] Проверить CI опубликованного исправления Save на точном `45315d9`:
   success, 846 unit-тестов, 152 browser passed / 9 skips, без flaky.
-- [ ] После исправлений пройти полную матрицу без retries и проверить CI
+- [x] После исправлений пройти полную матрицу без retries и проверить CI
   итогового HEAD. На `3550cc8`: 151 passed / 1 failed / 9 skips; падение —
   Safari page error на reload после успешного Save/409. Шесть диагностик
   с задержанными запросами и reload его не воспроизвели; общий фильтр ошибок
@@ -388,9 +388,15 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   trace поместил точный GET `/api/family/menu` через ~45 мс после начала reload.
   В E2E helper добавлен только этот маршрут в bounded WebKit-исключение;
   проблемный сценарий прошёл 5/5, вся family-menu спека desktop WebKit — 16/16
-  при `workers=1,retries=0`. Новый полный CI после локального исправления открыт.
+  при `workers=1,retries=0`; точный полный CI актуального HEAD зафиксирован ниже.
   В `playwright.config.ts` CI retries отключены, чтобы первый нестабильный
-  запуск завершался ошибкой. [Подробные свидетельства](docs/stabilization-progress.md).
+  запуск завершался ошибкой. На точном документационном HEAD `9ba464b` CI #1698
+  завершился success: 1454 unit / 216 файлов, 1110 browser passed / 311 skipped
+  за 47 минут, retries=0, все guards/typecheck/build и rollback/CAS успешны;
+  rollback и browser diagnostics артефакты сохранены. Это закрывает полную
+  матрицу для актуального HEAD. Исторический pageerror и его причина остаются
+  в предыдущем диагностическом пункте; staging не проверен.
+  [Подробные свидетельства](docs/stabilization-progress.md).
 
 ## Персональное недельное меню — реализация и открытая приёмка
 
@@ -560,9 +566,11 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   устанавливает причину исторического timeout. На текущем коде `5250190`
   сценарий прошёл ещё 3/3, затем 10/10 (`desktop-firefox`, `workers=1,retries=0`,
   суммарно 6.3 минуты); timeout не воспроизвёлся, первопричина остаётся
-  недоказанной. Точный CI #1684
-  для `5250190` сейчас выполняет полную browser-матрицу; результат этого P0 пункта
-  нужно сверить по завершённому run. Staging и устройства остаются открыты.
+  недоказанной. Точный CI [#1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
+  для runtime HEAD `1546073` завершился success, включая полную browser-матрицу,
+  rollback/CAS и артефакты; это подтверждает текущий код, но не объясняет исходный
+  timeout. Предыдущий #1684 для `5250190` отменён concurrency policy при обновлении
+  PR. Staging и устройства остаются открыты.
 
 - [x] Разобрать исторический native WebKit pageerror по trace CI `5b90249`:
   ошибка привязана к отмене семейного PUT при reload после `controllerchange`,
@@ -581,10 +589,12 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   7/7 browser/PWA проектов, storage 6/6 на WebKit/iPhone Safari/iPhone PWA,
   preview-origin 3/3 на WebKit. Отдельный family stale-read Safari тест прошёл
   локально и учитывает ограниченный WebKit abort message.
-- [ ] Подтвердить точный CI исправленных тестов и PWA lifecycle:
-  run #1418 для `e4ced68` поставлен в очередь; тест ждёт первый `503`, задерживает следующую
-  попытку и активирует обновление при `sending`. Установка на устройстве и
-  staging не проверялись.
+- [x] Подтвердить CI исправленных тестов и PWA lifecycle: run #1418 для
+  `e4ced68` был отменён при обновлении PR. Более поздний точный полный CI
+  [#1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991) на HEAD
+  `9ba464b` прошёл: 1454 unit / 216 файлов, 1110 browser passed / 311 skipped,
+  retries=0; rollback/CAS checks успешны. Установка на устройстве и staging
+  не проверялись и остаются открытыми.
 - [x] Реализовать локальный прототип упаковки полного client/SW/Pages Worker из точного Git SHA,
   manifest SHA-256, проверки целостности и настоящий локальный HTTP/D1 smoke
   распакованного `.tar`. База `574de76`, кандидат `d3a9496`, 23 HTTP прошли;
@@ -685,6 +695,26 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
+  - [ ] Привязать содержимое root overlays и черновик регистрации к владельцу:
+    фоторазбор, редактор блюда, камера, scanning status, меню, paywall,
+    profile-sync/adaptation notices и медицинские данные формы регистрации не
+    должны попадать в UI другого аккаунта. Root overlays и notices используют
+    account/session scope; черновик регистрации — Google identity scope. Код:
+    [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea),
+    [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) и
+    [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373); root typecheck, 12 целевых
+    unit-тестов и diff check прошли. Существующий E2E фоторазбора/редактора после
+    account switch прошёл 3/3 на desktop Chromium/Firefox/WebKit; mobile/PWA
+    проекты пропускают сценарий двух вкладок. Точный CI [#39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+    для code/test HEAD `71910ae` завершился success, включая browser tests,
+    rollback/CAS и сохранение артефактов. Другие root surfaces и полный browser
+    acceptance остаются открытыми.
+  - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
+    восстановление настройки «Детально: лог еды» после reload, её скрытие для B
+    и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
+  - [x] В browser acceptance проверить, что поисковый запрос дневника A
+    восстанавливается после reload, но скрыт в B, а исходный ключ A сохраняется.
+    E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
   - [x] Расширить account-switch acceptance дневника: после анализа еды в аккаунте A
     запись A сохраняется в его IndexedDB, остаётся скрытой в старой вкладке, не
     появляется в аккаунте B и не создаёт для B diary value. Сценарий прошёл 3/3
@@ -1251,8 +1281,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   завершился success в [run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769);
   новый plateau-retry сценарий добавлен после этого SHA и ожидает точного CI.
   Подробности: [журнал](docs/stabilization-progress.md).
-- [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
-  серверный guard сам по себе недостаточен.
+- [x] Завершить семейные callbacks и AI/state writers: серверный guard дополнен
+  клиентской проверкой исходной сессии, lifecycle cancellation и late-response
+  acceptance для перечисленных ниже путей. Полный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
+  на кодовом HEAD `544f3f5` прошёл без retries. Общая приёмка оставшихся network
+  writers и staging остаётся отдельной открытой задачей P0.5.
   - [x] Запретить незащищённый `/api/ai` из `callAiProxy`: помощник требует
     `AiSession`, а отсутствующий proof отклоняется до сети. Проверены 24 теста
     AI transport, полный unit suite (1188), typecheck, auth-scope и production
@@ -2044,9 +2077,11 @@ legacy-ключ не используется для новой очереди �
   и legacy `/api/weekly_menu/items`: повреждённые элементы и пакеты свыше 500
   отклоняются целиком до D1 batch/delete; пустые отметки сохраняют no-op, а
   явный пустой weekly `items: []` остаётся командой очистки.
-  Три целевых test-файла прошли 31/31, root typecheck, API/auth guards и
-  `git diff --check` прошли локально; точный CI новой ревизии проверяется после
-  публикации.
+  Четыре целевых test-файла прошли 35/35, полный unit suite — 1454/1454 в 216
+  файлах; CI #1696 на точном `544f3f5` завершился success: 1110 browser passed /
+  311 skipped, guards, три typecheck, build и rollback/CAS прошли, артефакт
+  сохранён. Branch preview задеплоен с тем же SHA; GET-only staging-config smoke
+  прошёл 7/7. Это не отдельная staging-база и не проверка OAuth/D1.
 - [x] Разделить unit, браузерную матрицу с синтетическим API и реальные
   staging-проверки. Unit и mock browser запускаются отдельными командами;
   CI использует только локальную mock-матрицу. `test:e2e:staging` требует

@@ -1678,6 +1678,7 @@ test('held food photo analysis cannot write for account A after another tab sign
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Анализирую фото...', { exact: true })).toBeVisible();
 
   const beforeSwitch = await readDurableSnapshot(page);
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
@@ -1693,6 +1694,9 @@ test('held food photo analysis cannot write for account A after another tab sign
   try {
     const switched = await openAccountB(context, state);
     const snapshotB = await readDurableSnapshot(switched.page);
+    await waitForAccountSwitch(page);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
     const profileBBefore = rawValue(snapshotB, profileKey(accountB.id));
     const valuesBBefore = valuesFor(snapshotB, accountB);
     const operationsBBefore = operationsFor(snapshotB, accountB);
@@ -2259,8 +2263,14 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
 
   const weightDraft = page.getByLabel('Вес сегодня');
+  const includeMealLog = page.getByRole('checkbox', { name: 'Детально: лог еды' });
   await weightDraft.fill('98.765');
   const weightDraftKeyA = `fitfocus.dashboard.new-weight.v1:${accountA.id}`;
+  const includeMealLogKeyA = `fitfocus.dashboard.pdf-include-meal-log.v1:${accountA.id}`;
+  const includeMealLogKeyB = `fitfocus.dashboard.pdf-include-meal-log.v1:${accountB.id}`;
+  await expect(includeMealLog).not.toBeChecked();
+  await includeMealLog.check();
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), includeMealLogKeyA)).toBe('1');
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
   mark('draft-cached-before-reload');
   if (initialAchievements) {
@@ -2307,13 +2317,19 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
     expect(delayedHydrationReads).toBe(1);
     expect(hydrationResponseStatus).toBe(200);
   }
+  await expect(page.getByRole('checkbox', { name: 'Детально: лог еды' })).toBeChecked();
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
   await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
   await expect(weightDraft).toHaveCount(0);
+  await expect(includeMealLog).toHaveCount(0);
   expect(await page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+  expect(await page.evaluate(key => localStorage.getItem(key), includeMealLogKeyA)).toBe('1');
   await expect(switched.page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
+  const includeMealLogForB = switched.page.getByRole('checkbox', { name: 'Детально: лог еды' });
+  await expect(includeMealLogForB).not.toBeChecked();
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), includeMealLogKeyB)).not.toBe('1');
   expect(fixtureA.counts.profileWrites).toEqual([]);
   expect(switched.errors).toEqual([]);
   expect(errorsA).toEqual([]);
@@ -2333,6 +2349,42 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
   }
 });
 }
+
+test('a nutrition search cached for account A stays private after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace search-cache account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+
+  const search = page.getByPlaceholder('Поиск блюда в истории...');
+  const queryA = 'аллергены и ограничения аккаунта A';
+  const searchKeyA = `fitfocus.nutrition.search.v1:${accountA.id}`;
+  const searchKeyB = `fitfocus.nutrition.search.v1:${accountB.id}`;
+  await search.fill(queryA);
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), searchKeyA))
+    .toBe(JSON.stringify({ query: queryA, open: true }));
+
+  await page.reload();
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect(page.getByPlaceholder('Поиск блюда в истории...')).toHaveValue(queryA, { timeout: 30_000 });
+
+  const switched = await openAccountB(context, state, true, '/#nutrition');
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(search).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), searchKeyA))
+    .toBe(JSON.stringify({ query: queryA, open: true }));
+  const searchForB = switched.page.getByPlaceholder('Поиск блюда в истории...');
+  await expect.poll(() => switched.page.evaluate(key => localStorage.getItem(key), searchKeyB))
+    .toBe(JSON.stringify({ query: '', open: false }));
+  await expect(searchForB).toHaveValue('');
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), searchKeyB)).not.toContain(queryA);
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(switched.errors).toEqual([]);
+});
 
 test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
@@ -2506,6 +2558,81 @@ test('an open food insight from account A is hidden after another tab activates 
   await expect(switched.page.getByText('Тестовый омлет', { exact: true })).toHaveCount(0);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('an open camera dialog from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Camera account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Снять', exact: true }).click();
+  await expect(page.getByText('Камера', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#nutrition');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Камера', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Камера', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('camera-dialog-hidden-after-account-switch.png') });
+});
+
+test('an open paywall from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Paywall account-switch acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Выбрать тарифный план', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#pro');
+  await waitForAccountSwitch(page);
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  await expect(switched.page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('paywall-hidden-after-account-switch.png') });
+});
+
+test('an open mobile navigation menu from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-'), 'Mobile navigation account-switch acceptance runs in iPhone browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  await expect(page.getByText('Ещё разделы', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#dashboard');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('mobile-more-menu-hidden-after-account-switch.png') });
 });
 
 test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {

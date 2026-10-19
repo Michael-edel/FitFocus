@@ -50,6 +50,66 @@ describe('account-scoped UI state visibility', () => {
     expect(newSessionA).toEqual({ scopeKey: 'account-a:session-2', value: 'new draft' });
   });
 
+  it('does not revive a private root overlay after logout or a different login session', () => {
+    const accountAInsight = {
+      id: 'food-a',
+      photo: 'data:image/jpeg;base64,account-a',
+      name: 'Блюдо аккаунта A',
+    };
+    const state = { scopeKey: 'account-a:session-1', value: accountAInsight };
+
+    expect(getAccountScopedUiStateValue(state, null, null)).toBeNull();
+    expect(getAccountScopedUiStateValue(state, 'account-b:session-1', null)).toBeNull();
+    expect(getAccountScopedUiStateValue(state, 'account-a:session-2', null)).toBeNull();
+
+    const signedOut = updateAccountScopedUiState(state, null, null, null);
+    expect(signedOut).toBe(state);
+    expect(state.value).toBe(accountAInsight);
+  });
+
+  it('hides profile-sync and adaptation notes outside their owning login session', () => {
+    const state = {
+      scopeKey: 'account-a:session-1',
+      value: {
+        profileSync: 'Профиль аккаунта A обновлён из облака.',
+        adaptation: 'С учётом динамики веса аккаунта A рекомендуется изменить план питания.',
+      },
+    };
+
+    expect(getAccountScopedUiStateValue(state, null, { profileSync: null, adaptation: '' }))
+      .toEqual({ profileSync: null, adaptation: '' });
+    expect(getAccountScopedUiStateValue(
+      state,
+      'account-b:session-1',
+      { profileSync: null, adaptation: '' },
+    )).toEqual({ profileSync: null, adaptation: '' });
+    expect(getAccountScopedUiStateValue(
+      state,
+      'account-a:session-2',
+      { profileSync: null, adaptation: '' },
+    )).toEqual({ profileSync: null, adaptation: '' });
+  });
+
+  it('does not show a health registration draft to a different Google identity', () => {
+    const defaults = {
+      weight: 70,
+      medicalRestrictions: '',
+      bloodGlucoseMmolL: 0,
+    };
+    const state = {
+      scopeKey: 'registration:google-account-a',
+      value: {
+        weight: 98.5,
+        medicalRestrictions: 'персональные данные аккаунта A',
+        bloodGlucoseMmolL: 6.2,
+      },
+    };
+
+    expect(getAccountScopedUiStateValue(state, null, defaults)).toEqual(defaults);
+    expect(getAccountScopedUiStateValue(state, 'registration:google-account-b', defaults))
+      .toEqual(defaults);
+  });
+
   it('does not accept transient UI updates while no account session is active', () => {
     const previous = { scopeKey: 'account-a:session-1', value: 'private draft' };
     expect(getAccountScopedUiStateValue(previous, null, '')).toBe('');

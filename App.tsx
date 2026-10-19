@@ -54,7 +54,7 @@ import { listenForPageExit } from './storage/sessionTransport';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, TariffPlan, AIPlan, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, AIPlan, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -128,7 +128,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
-import { accountSessionRenderKey, getAccountScopedUiValue } from './features/state/accountScopedUi';
+import { accountSessionRenderKey, getAccountScopedUiValue, useAccountScopedUiState } from './features/state/accountScopedUi';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
@@ -216,6 +216,31 @@ const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
 ];
 
+const INITIAL_REGISTRATION_DATA: RegistrationData = {
+  name: '',
+  gender: Gender.MALE,
+  weight: 70,
+  height: 170,
+  age: 25,
+  activityLevel: ActivityLevel.MODERATELY_ACTIVE,
+  goal: Goal.LOSS,
+  targetWeight: 65,
+  dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' },
+  medicalRestrictions: '',
+  bloodPressureSystolic: 0,
+  bloodPressureDiastolic: 0,
+  restingPulse: 0,
+  bloodGlucoseMmolL: 0,
+  waistCm: 0,
+  chestCm: 0,
+  hipsCm: 0,
+  plan: 'free',
+  lossDeficit: DEFAULT_DEFICIT,
+  gainSurplus: DEFAULT_SURPLUS,
+  riskAckLoss: false,
+  riskAckGain: false,
+};
+
 
 
 
@@ -273,7 +298,6 @@ const App: React.FC = () => {
   const uiAccountId = allowCachedUiStateRestore ? currentUser?.id ?? null : null;
   const { inviteCode, setInviteCode } = useInviteCodeState(uiAccountId);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
   const [planScopeState, setPlanScopeState] = useState<{ ownerId: string | null; value: 'personal' | 'family' }>({
     ownerId: null,
@@ -297,6 +321,14 @@ const App: React.FC = () => {
   const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
   const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
   const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);
+  const rootAccountSessionScope = allowCachedUiStateRestore && currentUser?.id
+    ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+    : null;
+  const { value: profileSyncNote, setValue: setProfileSyncNote } = useAccountScopedUiState<string | null>(
+    rootAccountSessionScope,
+    null,
+  );
+  const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
   const registrationAttemptRef = useRef(0);
@@ -431,11 +463,16 @@ const App: React.FC = () => {
     resolvedDiaryDayKey,
     selectedDiaryStats,
   } = useDiaryDaySelection(currentUser?.id, foodDiary, allowCachedUiStateRestore);
-  const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
-  const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
+  const { value: insightModal, setValue: setInsightModal } = useAccountScopedUiState<
+    null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }
+  >(rootAccountSessionScope, null);
+  const { value: editFoodModal, setValue: setEditFoodModal } = useAccountScopedUiState<FoodCorrectionDraft | null>(
+    rootAccountSessionScope,
+    null,
+  );
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const { activeTab, setActiveTab } = useHashTabNavigation('dashboard');
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const { value: mobileMoreOpen, setValue: setMobileMoreOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
   const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
@@ -459,8 +496,8 @@ const App: React.FC = () => {
     }
   }, [planScope, cloudFamily?.id, loadFamilyShopping]);
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(false);
+  const { value: isScanning, setValue: setIsScanning } = useAccountScopedUiState(rootAccountSessionScope, false);
+  const { value: cameraOpen, setValue: setCameraOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
   const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id, allowCachedUiStateRestore);
   const {
     newWeight,
@@ -487,7 +524,7 @@ const App: React.FC = () => {
 
   // Metabolic Adaptation States
   const [adaptLoading, setAdaptLoading] = useState(false);
-  const [adaptNote, setAdaptNote] = useState<string>('');
+  const { value: adaptNote, setValue: setAdaptNote } = useAccountScopedUiState(rootAccountSessionScope, '');
   const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
   const {
@@ -506,6 +543,7 @@ const App: React.FC = () => {
     setCameraFacing('environment');
     setIsScanning(false);
     setCameraOpen(false);
+    paywall.closePaywall();
     setCurrentLesson(null);
     setIsLessonViewOpen(false);
     setIsQuizActive(false);
@@ -522,7 +560,8 @@ const App: React.FC = () => {
     setShowSearchResults(false);
     setInsightModal(null);
     setEditFoodModal(null);
-  }, [currentUser?.id, setPlanScope, setFamilyMenuPrefsOpen]);
+  }, [currentUser?.id, paywall.closePaywall, setCameraOpen, setEditFoodModal, setFamilyMenuPrefsOpen,
+    setInsightModal, setIsScanning, setMobileMoreOpen, setPlanScope]);
 
   // Weekly Reports History
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
@@ -553,7 +592,6 @@ const App: React.FC = () => {
     isCurrentSession: isCurrentProfileSession,
   });
 
-  const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
   const modeBadge = useMemo(() => {
     if (requireInvite || isTestModeEnabled()) {
       return {
@@ -599,30 +637,11 @@ const App: React.FC = () => {
     if (!allowCachedUiStateRestore) return;
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
-  const [regData, setRegData] = useState<RegistrationData>({
-    name: '',
-    gender: Gender.MALE,
-    weight: 70,
-    height: 170,
-    age: 25,
-    activityLevel: ActivityLevel.MODERATELY_ACTIVE,
-    goal: Goal.LOSS,
-    targetWeight: 65,
-    dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
-    medicalRestrictions: '',
-    bloodPressureSystolic: 0,
-    bloodPressureDiastolic: 0,
-    restingPulse: 0,
-    bloodGlucoseMmolL: 0,
-    waistCm: 0,
-    chestCm: 0,
-    hipsCm: 0,
-    plan: 'free' as TariffPlan,
-    lossDeficit: DEFAULT_DEFICIT,
-    gainSurplus: DEFAULT_SURPLUS,
-    riskAckLoss: false,
-    riskAckGain: false
-  });
+  const registrationScope = googleMe?.sub ? `registration:${googleMe.sub}` : null;
+  const { value: regData, setValue: setRegData } = useAccountScopedUiState(
+    registrationScope,
+    INITIAL_REGISTRATION_DATA,
+  );
 
   useEffect(() => {
     if (authState !== 'register') return;

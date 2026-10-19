@@ -14,34 +14,28 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code HEAD — `ba78ba047547ec89b77df8a8f12578ac17faa294`. Точный
-[CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
-завершился успешно: dependency audit, schema parity, privacy/auth/API guards,
-unit suite, три typecheck, production build, browser matrix, rollback/CAS и
-сохранение артефактов прошли. [Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12162202716)
-и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12161628598)
-сохранены.
-Follow-up `8579486` исправляет частичную запись при malformed item в batch
-`PUT /api/state`; 39 связанных тестов, root typecheck, API invariants и
-`git diff --check` прошли локально. Предыдущий run #1684 для `5250190` отменён
-после обновления PR по concurrency policy.
+проверенный code/test HEAD — `6f189038a52f05826d83a427130c1c49903edfd5`; точный
+[CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952)
+успешен: audit, schema/privacy/auth/API guards, unit, три typecheck, production
+build, browser tests, rollback/CAS и сохранение артефактов прошли. Документационный
+follow-up [`02b3d79`](https://github.com/Michael-edel/FitFocus/commit/02b3d79cb8dba1596b0f150f60de1e56d1be1f36)
+обновил журнал. После этого root-overlay fix [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea)
+follow-ups [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) и
+[`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373) привязали paywall, root overlays,
+заметки синхронизации профиля/adaptation и медицинский черновик регистрации к
+владельцу (login session или Google identity). Root typecheck и целевые unit
+12/12 прошли локально. E2E скрытия фоторазбора/редактора account A после
+активации B прошёл 3/3 на desktop Chromium/Firefox/WebKit; это не проверяет
+каждый root surface. Точный полный [CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+для code/test HEAD `71910ae` завершился success: audit, guards, unit, typecheck,
+build, browser tests, rollback/CAS и сохранение артефактов прошли.
 
-Локальные follow-up уже опубликованы: Firefox PWA update прошёл 13/13 без
-retries, а test-only проверка удаления аккаунта покрывает все текущие
-account-scoped localStorage ключи. Полный unit suite прошёл **1427/1427** в 216
-файлах; root typecheck и `git diff --check` прошли. Эти тестовые изменения не
-меняли runtime; исторический Firefox timeout не воспроизвёлся, но его причина
-остаётся недоказанной.
-
-Read-only branch-preview smoke на точном опубликованном HEAD `1546073` прошёл
-7/7 GET-only проверок. `/`, `/api/env` и анонимный `/api/me` вернули 200;
-защищённые bootstrap/profile/state/push-status — 401 без redirect и cookie.
-`/assets/index-CmecaeC0.js` содержит полный SHA текущего HEAD. Это branch preview,
-не выделенный staging; OAuth, авторизованные действия, D1 и релиз не проверены.
-
-После follow-up `8579486` branch preview HEAD `ba78ba047547ec89b77df8a8f12578ac17faa294`
-повторно прошёл тот же GET-only smoke 7/7. Основной bundle
-`/assets/index-BA4kAu5c.js` содержит этот полный SHA. OAuth и D1 не затрагивались.
+Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
+страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
+push-status — 401 без redirect и cookie. Это preview, не выделенный staging;
+OAuth, авторизованные действия, фактическая D1-конфигурация и выпуск не проверены.
+Follow-up `8579486` также fail-closed отклоняет malformed batch `PUT /api/state`;
+39 связанных тестов, root typecheck, API invariants и diff check прошли локально.
 
 Открыты полная lifecycle-приёмка, часть callback/legacy-writer проверок,
 совместимость старых и новых bundles в целевом окружении, выделенный staging с

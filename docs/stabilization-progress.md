@@ -1,5 +1,34 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4 — root UI и черновик регистрации привязаны к владельцу, `b405761`, 19.10.2026
+
+Продолжая аудит root state, нашёл ещё два сообщения без владельца: заметка
+синхронизации профиля и результат AI-адаптации веса оставались в памяти App после
+logout. Старое adaptation сообщение могло содержать персональную рекомендацию.
+Оба значения используют `accountSessionRenderKey` вместе с paywall и другими
+root overlays; при выходе, смене аккаунта или новой login-сессии UI показывает
+пустое значение, а setters старого scope не принимают обновление.
+
+Проверка всех root state выявила ещё черновик регистрации с весом, ростом,
+медицинскими ограничениями, давлением, глюкозой и замерами. Он сохранялся в
+App после выхода. Теперь черновик принадлежит `googleMe.sub`: при смене Google
+identity открывается чистая форма с безопасными начальными значениями, старый
+setter также ограничен своим scope.
+
+На code HEAD [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373) целевые unit-тесты
+`tests/account_scoped_ui.test.ts` прошли **12/12**; `npm run typecheck` (включая
+admin guards) и `git diff --check` прошли. Unit проверяет скрытие profile-sync/
+adaptation сообщений при logout, смене аккаунта и повторном входе в новую
+сессию, а также сброс registration draft между Google identities. Существующий
+E2E `an open food insight from account A is hidden after another tab activates
+account B` прошёл локально **3/3** на desktop Chromium/Firefox/WebKit; четыре
+mobile/PWA проекта штатно skipped для двухвкладочного сценария. Это проверяет
+фоторазбор и редактор, но не notices/registration draft в browser UI. Точный
+[CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+для code/test HEAD `71910ae` завершился success, включая browser tests,
+rollback/CAS и сохранение артефактов. P0.4 остаётся открытым для остальных
+callbacks/cache и полного lifecycle.
+
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен с временным origin
@@ -7293,3 +7322,37 @@ Read-only smoke Cloudflare branch preview `fix-durable-outbox.fitfocus.pages.dev
 Точный CI #1679 для опубликованного `e469959` всё ещё выполняет browser tests;
 он не включает новый локальный E2E-сценарий. Отдельный HTTPS staging origin,
 полная callback-матрица, устройства и общий P0.5/P0.9 остаются открытыми.
+
+## P0.4 — account-switch для настроек PDF и поиска питания, `6f18903`, 19.10.2026
+
+Account-switch acceptance дополнен двумя UI cache-путями. Настройка PDF
+«Детально: лог еды» аккаунта A восстанавливается после reload, скрывается в
+устаревшей вкладке после активации B, а account-specific ключ A сохраняется;
+в B настройка остаётся выключенной. Поисковый запрос питания A также
+восстанавливается после reload, затем скрывается после смены владельца; кэш A
+не меняется, а B получает пустой поиск. Новые E2E-сценарии вошли в точный
+[CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952)
+на HEAD `6f18903`; полный workflow завершился success, включая guards, unit,
+typecheck, build, browser tests и rollback/CAS. Runtime-дефект в этих двух
+сценариях не воспроизведён. Это закрывает только две acceptance-проверки;
+общий аудит callbacks/cache и P0.4 остаются открытыми.
+
+## P0.4 — область login-сессии для root overlays, `24180d7`, 19.10.2026
+
+Проверка App выявила root UI-state, который переживал выход в памяти компонента:
+`insightModal` хранил фото и разбор еды, `editFoodModal` — поля блюда, а камера,
+индикатор анализа и paywall оставались обычными несвязанными `useState`. При
+возврате из auth choice с другим аккаунтом эти значения могли снова стать
+видимыми: текущий render gate скрывал их во время выхода, но не связывал с
+владельцем. Теперь эти overlays используют общий `accountSessionRenderKey`;
+при logout, закрытой durable-сессии, смене аккаунта или повторном входе они
+получают значения по умолчанию, а их setters отбрасывают обновление старого
+scope. Кнопка сброса UI также закрывает paywall.
+
+Добавлена unit-регрессия на скрытие частного payload root overlay после выхода,
+смены аккаунта и повторного входа в новую сессию. `npm run typecheck` прошёл,
+включая admin guards; `git diff --check` прошёл. Проверка runtime/browser и
+точный CI нового PR-head ещё не подтверждены. Кодовый коммит
+[`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea). Это устраняет
+владение конкретными transient overlays, но не закрывает аудит всех callbacks,
+кэшей или общий P0.4.
