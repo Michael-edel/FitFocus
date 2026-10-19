@@ -7604,7 +7604,7 @@ Chromium/Firefox/WebKit и Android Chrome/PWA, iPhone Safari/PWA
 204 запуска. Точный CI нового HEAD ещё не завершён; общий P0.6, callbacks,
 staging и полный lifecycle остаются открытыми.
 
-## P0.4/P0.5 — мобильная приёмка пошаговой генерации рецепта, 19.10.2026
+## P0.4/P0.5 — мобильная приёмка пошаговой генерации рецепта, [`46cfe39`](https://github.com/Michael-edel/FitFocus/commit/46cfe39dae002301638415266c5bfe01af9b1bcf), 19.10.2026
 
 Сняты desktop-only skips с двух delayed callback сценариев для пошаговой
 генерации рецепта из дневникового фото: поздний ответ после входа аккаунта B и
