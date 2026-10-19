@@ -220,9 +220,9 @@ bundle проверена на семи Playwright-проектах и прош�
     bundle `/assets/index-6747H75z.js` содержит полный SHA
     `5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`. Это не отдельный staging и не
     подтверждает OAuth, D1 или авторизованные действия.
-  - [x] Проверить текущий PR HEAD `9825e8d` на branch preview: staging suite
-    прошёл 7/7 GET-only проверок, asset `/assets/index-C_UPaACd.js` содержит
-    полный SHA `9825e8d9bd3053b6158d06fdd4b04f32324b25d6`. Это не отдельный
+  - [x] Проверить текущий PR HEAD `1546073` на branch preview: staging suite
+    прошёл 7/7 GET-only проверок, asset `/assets/index-CmecaeC0.js` содержит
+    полный SHA `1546073d72d8c81bb8628bf5dbedfab0c6430d12`. Это не отдельный
     staging и не подтверждает OAuth, D1 или авторизованные действия.
 
 База компонента — `aefc463`; [контракт и история прогонов](docs/staging-origin.md).
@@ -1458,9 +1458,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   ключами: UI-настройки, черновики, usage, achievement counters, telemetry и
   user-state. Проверено, что похожий ключ соседнего аккаунта и `__ffv` sidecar
   обрабатываются корректно. Test-only commit [`ef5d66a`](https://github.com/Michael-edel/FitFocus/commit/ef5d66a5e660236eeb957a9bdbdfc86531bbec73);
-  полный unit suite — 1427/1427, root typecheck и diff check прошли. Текущий
-  CI #1684 на remote SHA `5250190` не включает этот тест; точный CI follow-up
-  остаётся обязательным. Общий account lifecycle остаётся открытым.
+  полный unit suite — 1427/1427, root typecheck и diff check прошли. Тест включён в
+  точный CI #1686 на remote HEAD `1546073`; browser matrix ещё выполняется.
+  Общий account lifecycle остаётся открытым.
 - [x] Запретить угадывание владельца и перенос id/prefix при входе; читать
   профиль только с own IDB accountId/owner-meta. Invite redeem проверяет
   свежую session-привязку до расходования кода.

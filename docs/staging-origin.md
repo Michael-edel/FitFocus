@@ -17,6 +17,17 @@ redirect и `Set-Cookie`. Загруженный asset
 Это branch preview, а не отдельный staging origin; проверка не подтверждает
 авторизованные действия, OAuth, D1, миграции или релиз.
 
+### Read-only branch-preview smoke: current HEAD `1546073`, 19.10.2026
+
+`npm run test:e2e:staging` прошёл **7/7 GET-only** тестов на
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Корень страницы, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/push-status
+вернули 401 без redirect и `Set-Cookie`. В `/assets/index-CmecaeC0.js` найден
+полный SHA `1546073d72d8c81bb8628bf5dbedfab0c6430d12`.
+
+Это branch preview, не отдельный staging origin; OAuth, авторизованные действия,
+D1, миграции и выпуск этим smoke не подтверждены.
+
 ## Разделение проверок
 
 Unit-тесты запускаются отдельно: `npm run test:unit`. Локальная браузерная

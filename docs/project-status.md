@@ -14,26 +14,31 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Текущий удалённый
-HEAD — `5250190`. GitHub Actions
-[CI #1684](https://github.com/Michael-edel/FitFocus/actions/runs/39187581529)
-для этого SHA ещё выполняет browser matrix: dependency audit, guards, unit,
-три typecheck и production build завершились успешно; итог браузерных тестов
-пока не получен. Предыдущий CI #39183159791 на `4281ccb` выявил пять browser
-сбоев; их test follow-up опубликован в `ddba485` и включён в `5250190`.
+HEAD — `1546073d72d8c81bb8628bf5dbedfab0c6430d12`. Точный
+[CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
+на этом HEAD ещё выполняет browser matrix. Dependency audit, schema parity,
+privacy/auth/API guards, unit suite, три typecheck и production build завершились
+успешно; браузерный результат и последующие rollback/CAS/artifact gates ожидают
+завершения. Предыдущий run #1684 для `5250190` отменён после обновления PR по
+concurrency policy.
 
-Локальная ветка `durable-outbox` содержит `1b33fb8` с повторной проверкой
-Firefox PWA update (13/13, `retries=0`) и test-only commit `ef5d66a` с
-покрытием всех текущих account-scoped localStorage ключей при удалении аккаунта.
-Для тестового изменения полный unit suite прошёл **1427/1427**, root typecheck и
-`git diff --check` прошли. Эти два локальных commit ещё не опубликованы и не
-входят в текущий CI #1684; runtime-код локально совпадает с удалённым `5250190`.
-Firefox timeout не воспроизвёлся, но его первопричина остаётся недоказанной.
+Локальные follow-up уже опубликованы: Firefox PWA update прошёл 13/13 без
+retries, а test-only проверка удаления аккаунта покрывает все текущие
+account-scoped localStorage ключи. Полный unit suite прошёл **1427/1427** в 216
+файлах; root typecheck и `git diff --check` прошли. Эти тестовые изменения не
+меняли runtime; исторический Firefox timeout не воспроизвёлся, но его причина
+остаётся недоказанной.
 
-Открыты полная lifecycle-приёмка и оставшиеся callback/writer проверки,
-совместимость старых и новых bundles в реальном окружении, staging с OAuth и
-D1, проверка rollback в целевом окружении, прохождение release checklist и
-интеграция через защищённый `main`. Branch preview не считается staging.
-Зависимые PR не слиты; изменения PR #93 ещё не находятся в `main`.
+Read-only branch-preview smoke на точном опубликованном HEAD `1546073` прошёл
+7/7 GET-only проверок. `/`, `/api/env` и анонимный `/api/me` вернули 200;
+защищённые bootstrap/profile/state/push-status — 401 без redirect и cookie.
+`/assets/index-CmecaeC0.js` содержит полный SHA текущего HEAD. Это branch preview,
+не выделенный staging; OAuth, авторизованные действия, D1 и релиз не проверены.
+
+Открыты полная lifecycle-приёмка, часть callback/legacy-writer проверок,
+совместимость старых и новых bundles в целевом окружении, выделенный staging с
+OAuth и D1, rollback в целевом окружении, release checklist и интеграция через
+защищённый `main`. Изменения PR #93 ещё не находятся в `main`.
 
 Ниже сохранены результаты отдельных компонентов и прошлых ревизий. Они
 относятся только к явно указанным SHA и не заменяют статус текущего HEAD.

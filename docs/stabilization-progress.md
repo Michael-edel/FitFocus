@@ -1,13 +1,30 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — read-only branch-preview smoke точного HEAD `1546073`, 19.10.2026
+
+`npm run test:e2e:staging` выполнен на
+`https://fix-durable-outbox.fitfocus.pages.dev/` и прошёл **7/7 GET-only** тестов.
+`/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые bootstrap/profile/
+state/push-status — 401 без redirect и `Set-Cookie`. Загрузка JS bundle
+`/assets/index-CmecaeC0.js` подтвердила полный SHA
+`1546073d72d8c81bb8628bf5dbedfab0c6430d12`.
+
+Это опубликованный branch preview, не отдельный staging origin. Реальные OAuth,
+авторизованные операции, D1/миграции, устройства и release checklist остаются
+открытыми. Локальная переменная staging origin не настроена; проверка выполнена
+явным временным origin из контракта без изменения persistent окружения.
+
 ## Повторная проверка PWA update timeout в Firefox, 19.10.2026
 
-Плановый сценарий `pwa-update.spec.ts` на текущем коде `5250190` прошёл сначала
-3/3, затем 10/10 в `desktop-firefox` с `workers=1,retries=0` (13/13 суммарно,
-6.3 минуты). Исторический timeout в `saved(page)` не воспроизвёлся; эта выборка
-не доказывает первопричину и не закрывает P0 пункт. Общий точный
-[CI #1684](https://github.com/Michael-edel/FitFocus/actions/runs/39187581529)
-для этого SHA выполняет полную browser-матрицу; его итог нужно проверить отдельно.
+Код приложения в HEAD `1546073d72d8c81bb8628bf5dbedfab0c6430d12` совпадает с
+runtime `5250190`; follow-up после него меняли тесты и документацию. Плановый
+сценарий `pwa-update.spec.ts` прошёл сначала 3/3, затем 10/10 в `desktop-firefox`
+с `workers=1,retries=0` (13/13 суммарно, 6.3 минуты). Исторический timeout в
+`saved(page)` не воспроизвёлся; эта выборка не доказывает первопричину и не
+закрывает P0 пункт. Точный [CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
+проверяет текущий HEAD: статические проверки, unit, typechecks и build прошли;
+browser matrix ещё выполняется. Предыдущий #1684 для `5250190` отменён по
+concurrency policy после обновления PR.
 
 ## Удаление всех account-scoped localStorage ключей, 19.10.2026
 
@@ -20,9 +37,9 @@ URL-кодированный recipe usage key, очищение `__ffv` sidecar 
 для уже существующей очистки.
 
 Целевой privacy spec прошёл 8/8; полный unit suite — **1427/1427** в 216 файлах,
-root typecheck/admin guards и `git diff --check` прошли. Точный CI #1684 для
-опубликованного runtime HEAD `5250190` ещё выполняет browser tests и не содержит
-этот тестовый commit. Общая account deletion/lifecycle приёмка остаётся открытой.
+root typecheck/admin guards и `git diff --check` прошли. Test-only commit входит
+в точный CI #1686 для HEAD `1546073`; браузерная матрица ещё выполняется.
+Общая account deletion/lifecycle приёмка остаётся открытой.
 
 ## PR CI #39183159791 — пять ошибок browser acceptance, 19.10.2026
 
