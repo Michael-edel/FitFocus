@@ -49,7 +49,12 @@ input (`label` с `input[type=file][capture]`), поэтому модальна�
 расширил scoped auth-refusal проверку recipe photo на все профили: 7/7, включая
 4 мобильных запуска. Auth refusal не показывает обычную ошибку рецепта, browser alert
 или page error. Суммарная матрица выросла до 62 сценариев и 248 мобильных
-запусков. Точный CI текущего HEAD ещё не завершён.
+запусков. Затем [`c751260`](https://github.com/Michael-edel/FitFocus/commit/c751260ac7edbe328eea64a4220648ef570a9adb)
+расширил два held plateau-explanation callbacks на мобильные профили: вход B и
+новая server session того же аккаунта прошли 14/14 на семи профилях, включая 8
+мобильных запусков. Поздний результат не появляется и не меняет профиль/outbox
+другой или новой сессии. Матрица теперь — 64 сценария и 256 мобильных запусков.
+Точный CI текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

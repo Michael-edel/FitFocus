@@ -7693,3 +7693,14 @@ Firefox/WebKit прошли 3/3. Это несовпадение тестово�
 Safari/PWA (`workers=1,retries=0`), включая 4 мобильных запуска. Production-код
 не менялся; сценарий использует mock API. Общая mobile account/session матрица
 составляет 62 сценария и 248 запусков. Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка held plateau explanation, [`c751260`](https://github.com/Michael-edel/FitFocus/commit/c751260ac7edbe328eea64a4220648ef570a9adb), 19.10.2026
+
+Сняты desktop-only skips с двух удержанных недельных adaptation callbacks. Позднее
+объяснение аккаунта A отпускается после входа B либо после повторного входа A с
+новой server session; в обоих случаях оно не появляется в старой/новой вкладке,
+а профиль и outbox остаются прежними. Проверка прошла 14/14 на desktop
+Chromium/Firefox/WebKit и Android/iPhone Safari/PWA (`workers=1,retries=0`),
+включая 8 мобильных запусков. Production-код не менялся; это mock API acceptance.
+Накопленная mobile account/session матрица выросла до 64 сценариев и 256 запусков.
+Точный CI follow-up ожидает push.
