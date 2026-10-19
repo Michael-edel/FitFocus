@@ -814,7 +814,8 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Android Chrome/PWA и iPhone Safari/PWA прошли 4/4; вместе с desktop-частью
     матрица составляет 7/7 (`workers=1,retries=0`). Один scoped PUT
     подтверждается для bulk move и один для bulk-delete, выбор не переносится
-    в аккаунт B, данные B не меняются.
+    в аккаунт B, данные B не меняются в коммите
+    [`0c4ba6a`](https://github.com/Michael-edel/FitFocus/commit/0c4ba6a4c9391c0ac520632d417fc37dc8a796d8).
   Delayed durable family-menu state GET проверяет account switch без
   гидратации старых данных; задержка теперь управляется тем же mock API handler,
   без дополнительного route/fallback. Полный `family-menu-durable.spec.ts` после

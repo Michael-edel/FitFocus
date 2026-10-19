@@ -7616,7 +7616,7 @@ staging и полный lifecycle остаются открытыми.
 матрица выросла до 53 сценариев и 212 запусков. Точный CI follow-up ожидает
 push; точный CI предшествующего HEAD пока выполняется.
 
-## P0.4 — мобильная приёмка bulk move/delete дневника, 19.10.2026
+## P0.4 — мобильная приёмка bulk move/delete дневника, [`0c4ba6a`](https://github.com/Michael-edel/FitFocus/commit/0c4ba6a4c9391c0ac520632d417fc37dc8a796d8), 19.10.2026
 
 Снят desktop-only skip с account-switch приёмки массового перемещения и удаления
 выбранных блюд. Четыре мобильных/PWA запуска прошли на Android Chrome/PWA и
