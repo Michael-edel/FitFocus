@@ -23,7 +23,12 @@ Commit [`8579486`](https://github.com/Michael-edel/FitFocus/commit/8579486)
 `API_CONTRACTS.md` описывает 400-ответ. Локально прошли 39 целевых тестов,
 root typecheck, API invariants и `git diff --check`. Commit опубликован в draft
 PR #93; точный [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
-для HEAD `ba78ba0` выполняется.
+для code HEAD `ba78ba0` завершился success: все статические проверки и unit suite,
+browser matrix, rollback/CAS и artifact retention прошли.
+[Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12162202716)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12161628598)
+сохранены. Playwright retries в CI выключены (`retries=0`); staging и реальный
+OAuth/D1 остаются отдельным gate.
 
 ## P0.9 — read-only branch-preview smoke точного HEAD `1546073`, 19.10.2026
 

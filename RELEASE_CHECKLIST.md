@@ -187,8 +187,8 @@ Actions, наличие workflow в нужной ветке и состояни�
 - [ ] В целевой preview-сборке сохранён её origin; клиент и edge-правила
   не переводят тест в production. Клиентский redirect удалён и проверяется
   локально; [контракт origin и настройки APP_URL/D1](docs/staging-origin.md).
-  - [x] Текущий branch preview HEAD `ba78ba047547ec89b77df8a8f12578ac17faa294`
-    развернут и проверен read-only GET: 7/7, root/env/me — 200, защищённые GET —
+  - [x] Проверенный branch-preview code HEAD `ba78ba047547ec89b77df8a8f12578ac17faa294`
+    был развернут и прошёл read-only GET smoke: 7/7, root/env/me — 200, защищённые GET —
     401 без redirect/cookie; основной bundle содержит полный SHA. Это не
     подтверждает D1/APP_URL/OAuth и не закрывает staging gate.
 - [ ] Создана резервная копия затрагиваемых данных; восстановление проверено.

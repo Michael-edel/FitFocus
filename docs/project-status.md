@@ -14,16 +14,17 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный опубликованный HEAD — `1546073d72d8c81bb8628bf5dbedfab0c6430d12`. Точный
-[CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
-на этом HEAD завершился успешно: dependency audit, schema parity, privacy/auth/
-API guards, unit suite, три typecheck, production build, browser matrix,
-rollback/CAS-проверки и сохранение артефактов прошли. Follow-up commit
-`8579486` исправляет частичную запись при malformed item в batch `PUT /api/state`;
-39 связанных тестов, root typecheck, API invariants и `git diff --check` прошли
-локально. Новый [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
-на опубликованном HEAD `ba78ba0` сейчас выполняется. Предыдущий run #1684 для
-`5250190` отменён после обновления PR по concurrency policy.
+проверенный code HEAD — `ba78ba047547ec89b77df8a8f12578ac17faa294`. Точный
+[CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
+завершился успешно: dependency audit, schema parity, privacy/auth/API guards,
+unit suite, три typecheck, production build, browser matrix, rollback/CAS и
+сохранение артефактов прошли. [Browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12162202716)
+и [rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739/artifacts/12161628598)
+сохранены.
+Follow-up `8579486` исправляет частичную запись при malformed item в batch
+`PUT /api/state`; 39 связанных тестов, root typecheck, API invariants и
+`git diff --check` прошли локально. Предыдущий run #1684 для `5250190` отменён
+после обновления PR по concurrency policy.
 
 Локальные follow-up уже опубликованы: Firefox PWA update прошёл 13/13 без
 retries, а test-only проверка удаления аккаунта покрывает все текущие

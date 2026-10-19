@@ -6,11 +6,11 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный HEAD `1546073` прошёл [CI #1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688),
-включая browser matrix и rollback/CAS. Follow-up `8579486` fail-closed отклоняет
+проверенный code HEAD `ba78ba0` прошёл [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739):
+audit, guards, unit suite, три typecheck, build, browser matrix, rollback/CAS и
+сохранение артефактов успешны. Follow-up `8579486` fail-closed отклоняет
 malformed элементы batch `PUT /api/state`; 39 целевых тестов, root typecheck,
-API invariants и diff check прошли локально. Точный CI [#1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739)
-на опубликованном HEAD `ba78ba0` сейчас выполняется.
+API invariants и diff check также прошли локально.
 Branch preview этого HEAD прошёл read-only smoke 7/7; его основной bundle
 содержит полный SHA `ba78ba047547ec89b77df8a8f12578ac17faa294`. Это не staging.
 
@@ -1919,6 +1919,11 @@ legacy-ключ не используется для новой очереди �
 ### P0.9 — приёмка жизненного цикла
 
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
+  - [x] Подтвердить полный CI на code HEAD `ba78ba0`: audit, schema/privacy/auth/API
+    guards, unit, три typecheck, build, browser matrix (`retries=0`) и rollback/CAS
+    завершились success в [run #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739).
+    Browser diagnostics и rollback artifact сохранены. Это CI/mock acceptance;
+    staging, OAuth, D1 и устройство остаются открытыми.
   - [x] Проверить две вкладки с одним полным JSON-снимком без Web Locks:
     первый PUT удерживается в полёте, независимое второе редактирование не
     затирает первую запись, а сохраняется отдельным `local-revision-conflict`;
