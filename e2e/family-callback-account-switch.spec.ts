@@ -1871,7 +1871,6 @@ test('a delayed checkout URL from account A is not opened after account B signs 
 });
 
 test('a delayed family member update stays bound to its captured family after the same login loads another family', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-a-original', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,

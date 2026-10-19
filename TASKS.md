@@ -776,6 +776,10 @@ P0.1 остаётся открытым до интеграции в GitHub main;
       дал один WebKit timeout, который не повторился ни в изолированном тесте,
       ни в последовательной матрице. Root/storage typecheck, auth-scope guard,
       production build и diff check прошли. Точный CI зафиксировать после push.
+  - [x] Проверить задержанный update семейной цели после смены семьи в той же
+    сессии: ответ старой семьи не должен менять новую семью или показывать ложную
+    ошибку. Account-switch E2E прошёл 7/7 на desktop, Android, iPhone и PWA
+    профилях; точный CI расширенной матрицы ожидается после push.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
