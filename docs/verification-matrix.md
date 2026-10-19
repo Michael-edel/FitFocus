@@ -365,6 +365,17 @@ mock API и Playwright file fixture, без физической камеры и
 SHA `4630689` выполнялся и не включает тест; точный CI этой ревизии ожидается
 после push. Полный P0.4/P0.5 lifecycle остаётся открытым.
 
+Коммит [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393)
+добавил P0.6 account/session сценарий для фото прогресса: удержанный callback
+отпускается после повторного входа в аккаунт A с новым `serverSessionId`; тест
+проверяет смену `sessionEpoch`, отсутствие новых profile/state writes, прежние
+profile/managed state/outbox снимки и отсутствие фото в UI. Новый сценарий прошёл
+7/7, а A → B после общего helper — повторно 7/7 на desktop Chromium/Firefox/
+WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
+Вместе матрица составляет 70 сценариев и 280 мобильных запусков. Root typecheck
+и `git diff --check` прошли. Используется mock API и SVG file fixture; физическая
+камера и staging не проверялись. Полный P0.4/P0.6 lifecycle остаётся открытым.
+
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный
 `serverSnapshot` после 409/reload; явное принятие записывает серверный снимок,

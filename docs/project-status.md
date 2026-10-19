@@ -83,6 +83,14 @@ fixture; системная камера и staging не проверялись.
 SHA `4630689` выполнялся и не включает этот тест; точный CI новой ревизии
 проверяется после push. P0.4 остаётся открытым для остальных callbacks/cache.
 
+Коммит [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393)
+добавил P0.6-проверку того же фото-callback при повторном входе в account A с
+новым `serverSessionId`: `sessionEpoch` обновляется, а позднее декодирование не
+меняет профиль, state, outbox, API writes или UI. Она прошла 7/7; исходная A → B
+проверка после выделения общего gate повторно прошла 7/7. Матрица теперь —
+70 сценариев и 280 мобильных запусков. Root typecheck и diff check прошли;
+реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
+
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Полный точный

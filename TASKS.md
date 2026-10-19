@@ -1719,6 +1719,14 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     для повтора; инвалидировать фото-attempt при смене account/session scope.
     Регрессия прошла 3/3 desktop browsers; фото-изменение включено в последующую
     проверку полной `profile-durability.spec.ts`.
+  - [x] Проверить удержанное декодирование фото после повторного входа в тот же
+    аккаунт с новой server session: `sessionEpoch` меняется при прежнем
+    `accountId`, а поздний callback не меняет профиль, state, outbox, сетевые
+    writes или UI. Вместе с A → B проверкой E2E прошёл 14/14 на семи
+    desktop/Android/iPhone/PWA профилях без retries; root typecheck и diff check
+    прошли в [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393).
+    Это mock API и Playwright file fixture, не физическая камера/staging;
+    остальные callbacks, BFCache и lifecycle остаются открытыми.
   - [x] Обрабатывать отказ profile commit для ручного замера, wearable text/file
     import и выбора/отключения источника: показывать ошибку, не считать отказ
     успешным и оставлять файл/ввод для повтора; отбрасывать callback после смены

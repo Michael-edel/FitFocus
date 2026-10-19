@@ -1,5 +1,19 @@
 # Стабилизация: проверяемые изменения
 
+## P0.6 — фото прогресса после повторного входа в ту же учётную запись, [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393), 19.10.2026
+
+Новый account/session E2E выбирает файл под account A и удерживает декодирование.
+Во второй вкладке та же учётная запись входит с новым `serverSessionId`; проверка
+подтверждает увеличение `sessionEpoch`, затем освобождает старый callback. Профиль,
+managed state, outbox и API write counters остаются без изменений, фото и ошибки
+не появляются в UI. Сценарий прошёл 7/7 desktop, Android, iPhone и PWA профилей.
+После выделения общего decode gate исходный A → B сценарий повторно прошёл ещё
+7/7. Root typecheck и `git diff --check` прошли; production-код не менялся.
+
+Это mock API и SVG file fixture Playwright; физическая камера, OAuth, BFCache и
+staging не покрыты. Остальные profile/API callbacks и полный P0.6 lifecycle
+остаются открытыми; точный CI новой ревизии запускается после push.
+
 ## P0.4 — отложенный callback фото прогресса после смены аккаунта, [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3), 19.10.2026
 
 Новый E2E удерживает декодирование выбранного фото прогресса, активирует
