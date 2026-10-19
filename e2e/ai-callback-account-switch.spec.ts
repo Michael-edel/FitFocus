@@ -2242,21 +2242,33 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
 
   const weightDraft = page.getByLabel('Вес сегодня');
+  const includeMealLog = page.getByRole('checkbox', { name: 'Детально: лог еды' });
   await weightDraft.fill('98.765');
   const weightDraftKeyA = `fitfocus.dashboard.new-weight.v1:${accountA.id}`;
+  const includeMealLogKeyA = `fitfocus.dashboard.pdf-include-meal-log.v1:${accountA.id}`;
+  const includeMealLogKeyB = `fitfocus.dashboard.pdf-include-meal-log.v1:${accountB.id}`;
+  await expect(includeMealLog).not.toBeChecked();
+  await includeMealLog.check();
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), includeMealLogKeyA)).toBe('1');
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
 
   await page.reload();
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
   await expect(page.getByLabel('Вес сегодня')).toHaveValue('98.765', { timeout: 30_000 });
+  await expect(page.getByRole('checkbox', { name: 'Детально: лог еды' })).toBeChecked();
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
   await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
   await expect(weightDraft).toHaveCount(0);
+  await expect(includeMealLog).toHaveCount(0);
   expect(await page.evaluate(key => localStorage.getItem(key), weightDraftKeyA)).toBe('98.765');
+  expect(await page.evaluate(key => localStorage.getItem(key), includeMealLogKeyA)).toBe('1');
   await expect(switched.page.getByLabel('Вес сегодня')).not.toHaveValue('98.765');
+  const includeMealLogForB = switched.page.getByRole('checkbox', { name: 'Детально: лог еды' });
+  await expect(includeMealLogForB).not.toBeChecked();
+  expect(await switched.page.evaluate(key => localStorage.getItem(key), includeMealLogKeyB)).not.toBe('1');
   expect(fixtureA.counts.profileWrites).toEqual([]);
   expect(switched.errors).toEqual([]);
 });
