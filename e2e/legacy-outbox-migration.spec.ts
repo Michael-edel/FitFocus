@@ -82,6 +82,7 @@ async function migrationState(page: Page, valueKey = targetKey, traceIndexedDb =
       migrationItems,
       migrationUnknown,
       snapshots: metadata.filter((entry) => entry.id.startsWith('legacy-snapshot:v1:')),
+      controllerState: 'serviceWorker' in navigator ? navigator.serviceWorker.controller?.state ?? null : null,
       nowMs: Date.now(),
     };
   }, { sourceKey: legacySourceKey, valueKey, traceIndexedDb });
@@ -234,6 +235,8 @@ test('preserves legacy intent across a full storage clear without sending an unp
   const oldPage = await context.newPage();
   const currentPage = await context.newPage();
   const storageTrace: string[] = [];
+  const fenceHistory: Array<{ phase: 'initial' | 'settled'; atMs: number; runId: unknown; status: unknown;
+    writersStopped: unknown; sendAllowed: unknown; controllerState: string | null }> = [];
   await Promise.all([
     captureAppDatabase(oldPage, 'old', storageTrace),
     captureAppDatabase(currentPage, 'current', storageTrace),
@@ -457,7 +460,11 @@ test('preserves legacy intent across a full storage clear without sending an unp
     expect(buildIds[0]).toBeTruthy();
     expect(buildIds[0]).toBe(buildIds[1]);
     await expect.poll(async () => {
-      const progress = (await migrationState(currentPage)).progress;
+      const state = await migrationState(currentPage);
+      const progress = state.progress;
+      fenceHistory.push({ phase: 'initial', atMs: state.nowMs, runId: progress?.runId, status: progress?.status,
+        writersStopped: progress?.writersStopped, sendAllowed: progress?.sendAllowed,
+        controllerState: state.controllerState });
       return progress?.writersStopped === true && progress.sendAllowed === true;
     }, { timeout: 60_000 }).toBe(true);
     const beforeRecovery = await migrationState(currentPage);
@@ -473,6 +480,9 @@ test('preserves legacy intent across a full storage clear without sending an unp
     // Wait for that revalidation to settle while keeping the terminal state strict.
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
+      fenceHistory.push({ phase: 'settled', atMs: state.nowMs, runId: state.progress?.runId, status: state.progress?.status,
+        writersStopped: state.progress?.writersStopped, sendAllowed: state.progress?.sendAllowed,
+        controllerState: state.controllerState });
       const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
       const preserved = state.operations.find((entry) => entry.reason === 'legacy-writer-local-only');
       const operationPresent = state.operations.some((entry) => entry.opId === imported?.opId);
@@ -580,8 +590,41 @@ test('preserves legacy intent across a full storage clear without sending an unp
               scope: registration.scope, active: worker(registration.active),
               waiting: worker(registration.waiting), installing: worker(registration.installing),
             })) : [],
-          // Window cannot inspect ServiceWorkerGlobalScope.clients or a prior challenge reply.
-          writerFenceClientInventory: 'not exposed by the page API; no diagnostic challenge sent',
+          writerFenceCheck: await (async () => {
+            if (!('serviceWorker' in navigator)) return { outcome: 'unsupported' };
+            const controller = navigator.serviceWorker.controller;
+            const buildId = localStorage.getItem('fitfocus.build.id');
+            if (!controller || !buildId) return { outcome: 'no-controller-or-build', buildId };
+            const challengeId = crypto.randomUUID();
+            return new Promise<object>(resolve => {
+              const channel = new MessageChannel();
+              let settled = false;
+              const finish = (result: object) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                channel.port1.close();
+                channel.port2.close();
+                resolve(result);
+              };
+              // Diagnostic probe uses the same response budget as the runtime fence check.
+              const timer = setTimeout(() => finish({ outcome: 'timeout', buildId }), 2_500);
+              channel.port1.onmessage = event => {
+                const reply = event.data as { type?: unknown; challengeId?: unknown;
+                  workerBuildId?: unknown; complete?: unknown; clients?: unknown } | null;
+                const clients = Array.isArray(reply?.clients) ? reply.clients.map(client => ({
+                  id: typeof client?.id === 'string' ? client.id : null,
+                  buildId: typeof client?.buildId === 'string' ? client.buildId : null,
+                })) : null;
+                finish({ outcome: 'reply', buildId, type: reply?.type,
+                  challengeMatched: reply?.challengeId === challengeId,
+                  workerBuildId: reply?.workerBuildId, complete: reply?.complete, clients });
+              };
+              try {
+                controller.postMessage({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_CHECK', challengeId, buildId }, [channel.port2]);
+              } catch (error) { finish({ outcome: 'post-error', buildId, error: String(error) }); }
+            });
+          })(),
         };
       }).catch(diagnosticError => ({ diagnosticError: String(diagnosticError) })),
     })));
@@ -589,7 +632,10 @@ test('preserves legacy intent across a full storage clear without sending an unp
       .then(state => state.progress)
       .catch(diagnosticError => ({ diagnosticError: String(diagnosticError) }));
     const diagnostic = {
-      workerPages, migrationProgress,
+      workerPages, migrationProgress, fenceHistory: {
+        initial: fenceHistory.filter(entry => entry.phase === 'initial').slice(-40),
+        settled: fenceHistory.filter(entry => entry.phase === 'settled').slice(-100),
+      },
       counts: server.counts, stateWriteKeys: server.stateWriteKeys, unexpectedApi: server.unexpectedApi,
       source: await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey).catch(() => null),
       storageTrace: storageTrace.slice(-100),
