@@ -2003,7 +2003,6 @@ test('a scoped auth refusal during recipe photo analysis does not show an ordina
 });
 
 test('an unsaved recipe draft from account A is cleared when another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -2058,7 +2057,6 @@ test('an unsaved recipe draft from account A is cleared when another tab activat
 });
 
 test('an unsaved progress measurement draft is cleared when another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   const failedStateRequests: string[] = [];
@@ -2101,6 +2099,9 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await page.reload();
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  if (!info.project.name.startsWith('desktop-')) {
+    await page.getByRole('button', { name: 'Детали', exact: true }).click();
+  }
   await expect(page.getByRole('button', { name: 'Сахар', exact: true })).toHaveClass(/border-indigo-500/);
   await waitForAccountOutboxIdle(page, accountA);
 
@@ -2153,7 +2154,6 @@ test('an unsaved progress measurement draft is cleared when another tab activate
 });
 
 test('progress archive expansion cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab progress archive account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2207,7 +2207,6 @@ test('progress archive expansion cached for account A is not restored after anot
 });
 
 test('a profile draft cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#settings');
@@ -2282,7 +2281,6 @@ test('a profile draft stays hidden in a retired same-account session and restore
 });
 
 test('a dashboard weight draft cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#dashboard');
@@ -2322,7 +2320,6 @@ test('a dashboard weight draft cached for account A is hidden after another tab 
 });
 
 test('a nutrition search cached for account A stays private after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace search-cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -2358,7 +2355,6 @@ test('a nutrition search cached for account A stays private after another tab ac
 });
 
 test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const baseProfileA = profileFor(accountA.id);
   const state: FixtureState = {
     current: accountA,
@@ -2407,7 +2403,6 @@ test('a selected weekly-menu day cached for account A is hidden after another ta
 });
 
 test('a course lesson and quiz cached for account A stay hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -2466,7 +2461,6 @@ test('a course lesson and quiz cached for account A stay hidden after another ta
 });
 
 test('AI activity cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   await installAccountApi(page, state);
   const aiStatusKeyA = `fitfocus_data_${accountA.id}_ai_last_status_v1`;
@@ -2482,22 +2476,34 @@ test('AI activity cached for account A is hidden after another tab activates acc
     actionKey: aiActionKeyA,
     action: cachedActionA,
   });
+  const aiStatusKeyB = `fitfocus_data_${accountB.id}_ai_last_status_v1`;
+  const aiActionKeyB = `fitfocus_data_${accountB.id}_ai_last_action_v1`;
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
-  await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+  if (info.project.name.startsWith('desktop-')) {
+    await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+  }
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  const [statusAAfterSwitch, actionAAfterSwitch, statusBAfterSwitch, actionBAfterSwitch] = await switched.page.evaluate(
+    keys => keys.map(key => localStorage.getItem(key)),
+    [aiStatusKeyA, aiActionKeyA, aiStatusKeyB, aiActionKeyB],
+  );
+  expect(statusAAfterSwitch).not.toBeNull();
+  expect(JSON.parse(actionAAfterSwitch ?? 'null').userId).toBe(accountA.id);
+  expect([statusBAfterSwitch, actionBAfterSwitch]).toEqual([null, null]);
+  if (info.project.name.startsWith('desktop-')) {
+    await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  }
   expect(switched.errors).toEqual([]);
 });
 
 test('an open food insight from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace content account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   await installAccountApi(page, state);
   await openApp(page, '/#nutrition');

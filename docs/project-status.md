@@ -13,6 +13,13 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 
 Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль теперь записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Семейные goal/member сценарии прошли по 7/7 на семи профилях; ещё 25 ранее desktop-only account-switch и shopping-race сценариев расширены на мобильные профили и прошли 100/100. Точный CI объединённой матрицы проверяется после push; другие cloud callbacks/cache остаются открытыми.
 
+Следующее расширение добавило ещё 10 account-switch сценариев черновиков и
+кэшей в `ai-callback-account-switch.spec.ts`: мобильная/PWA-часть прошла 40/40,
+а два скорректированных сценария также прошли 6/6 на desktop Chromium,
+Firefox и WebKit. Вместе с предыдущими 25 сценариями мобильная матрица теперь
+составляет 35 сценариев и 140 запусков. Точный CI этих изменений ожидает push;
+P0.4 и остальные callbacks/cache остаются открытыми.
+
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Полный точный

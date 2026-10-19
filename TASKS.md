@@ -6,11 +6,10 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний опубликованный
-HEAD `6f18903` прошёл точный [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952):
-audit, schema/privacy/auth/API guards, unit tests, три typecheck, build,
-browser tests, rollback/CAS и сохранение артефактов успешны.
-Документационный HEAD `9ba464b` повторно прошёл точный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
-с теми же успешными browser, rollback/CAS и release-артефактами.
+Последний записанный полный зелёный прогон — [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+на предыдущем SHA `d23ceb9`; последующие изменения требуют собственной проверки
+точного HEAD. Текущая мобильная приёмка AI/cache описана ниже и локально прошла;
+её CI проверяется после push.
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
@@ -992,6 +991,14 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     прошли 3/3 каждый, полный unit — 1368/1368, typecheck, production build и
     diff check прошли. Остальные callbacks/cache, staging и полный P0.4 lifecycle
     остаются открытыми.
+  - [x] Расширить на четыре Android/iPhone/PWA-профиля десять account-switch
+    сценариев для черновиков и кэшей рецепта, прогресса, профиля, dashboard,
+    питания, недельного меню, курса, AI-статуса и фоторазбора. Мобильные прогоны
+    прошли 40/40; два скорректированных сценария также прошли 6/6 на desktop
+    Chromium, Firefox и WebKit. Мобильный тест замера раскрывает блок «Детали»,
+    а AI-проверка на телефонах сверяет account-scoped записи, поскольку sidebar
+    скрыт. Exact CI опубликованного HEAD ожидает push; остальные callbacks/cache
+    и общий P0.4 lifecycle остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована
 на `cfcc31b`; этап `31ec847` расширяет её до 15 ключей.
