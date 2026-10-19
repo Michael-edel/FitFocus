@@ -3110,7 +3110,6 @@ test('a held step-by-step recipe response cannot update after the same account s
 });
 
 test('step-by-step recipe generation and favorite saving commit to the active session', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop-chromium', 'The full step-by-step recipe success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
