@@ -734,7 +734,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Следующий локальный follow-up снял desktop-only skip с registration account-switch
     сценария: он прошёл 7/7 на всех desktop, Android и iPhone/PWA проектах. Эта
     мобильная приёмка пока не опубликована; CI #1732 не содержит её. Остальные
-    root callbacks и P0.4 остаются открытыми.
+    root callbacks и P0.4 остаются открытыми. Ещё один локальный E2E проверил
+    повторный вход того же владельца с новым server session: старая вкладка
+    скрывает форму Settings, новая восстанавливает черновик account cache без
+    profile PUT или изменения durable profile. Прошёл 3/3 на desktop
+    Chromium/Firefox/WebKit; typecheck, production build и diff check прошли.
+    Точный CI ожидает публикации. Другие callbacks/cache остаются открытыми.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

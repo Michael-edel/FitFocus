@@ -83,6 +83,15 @@ account-scoped unit **12/12** и `git diff --check` проходят. Измен
 iPhone PWA. Это добавление не входит в опубликованный HEAD `2563dc8` или CI #1732;
 после публикации потребуется новый exact-head CI.
 
+Локальный follow-up `e2e/ai-callback-account-switch.spec.ts` проверяет черновик
+Settings при повторном входе того же Google-аккаунта с новой серверной сессией:
+старая вкладка скрывает форму, новая восстанавливает account-scoped черновик,
+а durable profile и список profile PUT остаются неизменными. Сценарий прошёл
+**3/3** на desktop Chromium, Firefox и WebKit без retries (workers=1).
+`npm run typecheck`, `npm run build` и `git diff --check` прошли; точный CI ещё
+не запущен. Это проверка владения UI/cache; runtime-дефект не выявлен, остальные
+callbacks и P0.4 остаются открыты.
+
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен с временным origin

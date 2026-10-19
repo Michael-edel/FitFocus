@@ -2237,6 +2237,49 @@ test('a profile draft cached for account A is not restored after another tab act
   expect(fixtureA.counts.profileWrites).toEqual([]);
 });
 
+test('a profile draft stays hidden in a retired same-account session and restores after reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace same-account draft acceptance runs in desktop browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const nameDraft = page.getByPlaceholder('Как к вам обращаться');
+  await expect(nameDraft).toHaveValue('Профиль A');
+  await nameDraft.fill('Черновик после повторного входа A');
+  const settingsKeyA = `fitfocus.settings.ui.v1:${accountA.id}`;
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), settingsKeyA))
+    .toContain('Черновик после повторного входа A');
+  const snapshotBeforeReauthentication = await readDurableSnapshot(page);
+  const profileBeforeReauthentication = rawValue(snapshotBeforeReauthentication, profileKey(accountA.id));
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(reauthenticated.sid);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), settingsKeyA))
+    .toContain('Черновик после повторного входа A');
+
+  await reauthenticatedPage.goto('/#settings');
+  await expect(reauthenticatedPage.getByPlaceholder('Как к вам обращаться'))
+    .toHaveValue('Черновик после повторного входа A');
+  const snapshotAfterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(rawValue(snapshotAfterReauthentication, profileKey(accountA.id))).toBe(profileBeforeReauthentication);
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(fixtureReauthenticated.counts.profileWrites).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-settings-draft-restored.png') });
+});
+
 test('a dashboard weight draft cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
