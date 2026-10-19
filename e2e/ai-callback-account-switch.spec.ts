@@ -2634,6 +2634,105 @@ test('a profile sync notice from account A is hidden after another tab activates
   await switched.page.screenshot({ path: info.outputPath('profile-sync-notice-hidden-after-account-switch.png') });
 });
 
+test('a progress photo decode released after account switch cannot update account B profile', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+
+  await page.addInitScript(() => {
+    const scopedWindow = window as Window & {
+      __fitfocusHoldProgressPhoto?: boolean;
+      __fitfocusProgressPhotoDecodeHeld?: boolean;
+      __fitfocusProgressPhotoDecodeLoaded?: boolean;
+      __fitfocusProgressPhotoDecodeError?: string;
+      __fitfocusReleaseProgressPhoto?: () => void;
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!descriptor?.set) throw new Error('HTML_IMAGE_SRC_SETTER_NOT_AVAILABLE');
+    let pending: { image: HTMLImageElement; url: string } | null = null;
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: descriptor.configurable,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get ? function(this: HTMLImageElement) { return descriptor.get?.call(this); } : undefined,
+      set: function(this: HTMLImageElement, value: string) {
+        if (scopedWindow.__fitfocusHoldProgressPhoto && value.startsWith('blob:')) {
+          pending = { image: this, url: value };
+          scopedWindow.__fitfocusProgressPhotoDecodeHeld = true;
+          return;
+        }
+        descriptor.set?.call(this, value);
+      },
+    });
+    scopedWindow.__fitfocusReleaseProgressPhoto = () => {
+      const held = pending;
+      if (!held) throw new Error('PROGRESS_PHOTO_DECODE_NOT_HELD');
+      pending = null;
+      scopedWindow.__fitfocusHoldProgressPhoto = false;
+      held.image.addEventListener('load', () => { scopedWindow.__fitfocusProgressPhotoDecodeLoaded = true; }, { once: true });
+      held.image.addEventListener('error', () => { scopedWindow.__fitfocusProgressPhotoDecodeError = 'IMAGE_DECODE_FAILED'; }, { once: true });
+      descriptor.set?.call(held.image, held.url);
+    };
+  });
+
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const profileABefore = rawValue(before, profileKey(accountA.id));
+  const valuesBefore = valuesFor(before, accountA);
+  const operationsBefore = operationsFor(before, accountA);
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusHoldProgressPhoto?: boolean }).__fitfocusHoldProgressPhoto = true;
+  });
+  await page.getByPlaceholder('Подпись к фото: например, месяц 1').fill('Черновик фото аккаунта A');
+  const photoInput = page.locator('input[type="file"][accept="image/*"][capture]');
+  await expect(photoInput).toHaveCount(1);
+  await photoInput.setInputFiles({
+    name: 'progress.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeHeld?: boolean }).__fitfocusProgressPhotoDecodeHeld === true,
+  )).toBe(true);
+
+  const switched = await openAccountB(context, state, true, '/#settings');
+  const snapshotB = await readDurableSnapshot(switched.page);
+  const profileBBeforeRelease = rawValue(snapshotB, profileKey(accountB.id));
+  await waitForAccountSwitch(page);
+  const profileWritesBeforeRelease = [...fixtureA.counts.profileWrites];
+  const stateWritesBeforeRelease = [...fixtureA.counts.stateWrites];
+  await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+  await expect(page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
+
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusReleaseProgressPhoto?: () => void }).__fitfocusReleaseProgressPhoto?.();
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeLoaded?: boolean }).__fitfocusProgressPhotoDecodeLoaded === true,
+  )).toBe(true);
+  await waitForAccountOutboxIdle(page, accountA);
+  const after = await readDurableSnapshot(page);
+  expect(after.activeSession?.accountId).toBe(accountB.id);
+  expect(rawValue(after, profileKey(accountA.id))).toBe(profileABefore);
+  expect(rawValue(after, profileKey(accountB.id))).toBe(profileBBeforeRelease);
+  expect(valuesFor(after, accountA)).toEqual(valuesBefore);
+  expect(operationsFor(after, accountA)).toEqual(operationsBefore);
+  expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeRelease);
+  expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeRelease);
+  expect(await page.evaluate(() => (window as Window & { __fitfocusProgressPhotoDecodeError?: string }).__fitfocusProgressPhotoDecodeError ?? null)).toBeNull();
+  await expect(page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  await expect(switched.page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
 test('an adaptation notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
