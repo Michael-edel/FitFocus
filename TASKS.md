@@ -6,13 +6,11 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code HEAD `ba78ba0` прошёл [CI #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739):
-audit, guards, unit suite, три typecheck, build, browser matrix, rollback/CAS и
-сохранение артефактов успешны. Follow-up `8579486` fail-closed отклоняет
-malformed элементы batch `PUT /api/state`; 39 целевых тестов, root typecheck,
-API invariants и diff check также прошли локально.
-Branch preview этого HEAD прошёл read-only smoke 7/7; его основной bundle
-содержит полный SHA `ba78ba047547ec89b77df8a8f12578ac17faa294`. Это не staging.
+проверенный code HEAD `544f3f5` прошёл [CI #1696](https://github.com/Michael-edel/FitFocus/actions/runs/39199188429):
+audit, guards, 1454 unit tests / 216 файлов, 1110 browser passed / 311 skipped,
+три typecheck, build, rollback/CAS и сохранение артефактов успешны.
+Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
+выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
 Основные durable outbox, account/session guards, серверные поколения, семейный
 CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
@@ -2044,9 +2042,11 @@ legacy-ключ не используется для новой очереди �
   и legacy `/api/weekly_menu/items`: повреждённые элементы и пакеты свыше 500
   отклоняются целиком до D1 batch/delete; пустые отметки сохраняют no-op, а
   явный пустой weekly `items: []` остаётся командой очистки.
-  Три целевых test-файла прошли 31/31, root typecheck, API/auth guards и
-  `git diff --check` прошли локально; точный CI новой ревизии проверяется после
-  публикации.
+  Четыре целевых test-файла прошли 35/35, полный unit suite — 1454/1454 в 216
+  файлах; CI #1696 на точном `544f3f5` завершился success: 1110 browser passed /
+  311 skipped, guards, три typecheck, build и rollback/CAS прошли, артефакт
+  сохранён. Branch preview задеплоен с тем же SHA; GET-only staging-config smoke
+  прошёл 7/7. Это не отдельная staging-база и не проверка OAuth/D1.
 - [x] Разделить unit, браузерную матрицу с синтетическим API и реальные
   staging-проверки. Unit и mock browser запускаются отдельными командами;
   CI использует только локальную mock-матрицу. `test:e2e:staging` требует
