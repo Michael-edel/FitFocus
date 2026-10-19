@@ -288,7 +288,7 @@ token/push/billing и write-race сценариев прошли 40/40 на те
 подтверждают, что AI retry/status остаются в account-scoped ключах при смене
 владельца; те же два сценария прошли 6/6 на desktop Chromium, Firefox и WebKit.
 Вместе с предыдущими 25 сценариями это 35 сценариев и 140 мобильных запусков.
-Точный CI нового HEAD ожидает push; общая проверка callbacks/cache не закрыта.
+Точный CI опубликованного HEAD ещё не завершён; общая проверка callbacks/cache не закрыта.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

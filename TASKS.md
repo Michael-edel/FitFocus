@@ -9,7 +9,7 @@ Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 Последний записанный полный зелёный прогон — [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
 на предыдущем SHA `d23ceb9`; последующие изменения требуют собственной проверки
 точного HEAD. Текущая мобильная приёмка AI/cache описана ниже и локально прошла;
-её CI проверяется после push.
+её точный CI ещё не завершён.
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
@@ -997,7 +997,7 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     прошли 40/40; два скорректированных сценария также прошли 6/6 на desktop
     Chromium, Firefox и WebKit. Мобильный тест замера раскрывает блок «Детали»,
     а AI-проверка на телефонах сверяет account-scoped записи, поскольку sidebar
-    скрыт. Exact CI опубликованного HEAD ожидает push; остальные callbacks/cache
+    скрыт. Exact CI опубликованного HEAD ещё не завершён; остальные callbacks/cache
     и общий P0.4 lifecycle остаются открытыми.
 
 Для шести ключей repository транзакционная managed hydration реализована

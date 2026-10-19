@@ -17,7 +17,7 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 кэшей в `ai-callback-account-switch.spec.ts`: мобильная/PWA-часть прошла 40/40,
 а два скорректированных сценария также прошли 6/6 на desktop Chromium,
 Firefox и WebKit. Вместе с предыдущими 25 сценариями мобильная матрица теперь
-составляет 35 сценариев и 140 запусков. Точный CI этих изменений ожидает push;
+составляет 35 сценариев и 140 запусков. Точный CI опубликованного HEAD ещё не завершён;
 P0.4 и остальные callbacks/cache остаются открытыми.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
