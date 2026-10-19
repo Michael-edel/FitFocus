@@ -236,6 +236,13 @@ Production-код не менялся, runtime-дефект не найден; �
   Новый сценарий прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries;
   общий typecheck прошёл. Это mock API; точный CI и staging остаются открыты.
 
+  Для семейного списка A → B baseline теперь снимается после фиксации B в общей
+  IndexedDB-сессии. Это учитывает запросы A, которые стартовали, пока вход B ещё
+  распространялся по вкладкам, и продолжает проверять, что поздний ответ A не
+  запускает новые запросы и не появляется в интерфейсе. Исправленный acceptance
+  прошёл локально в desktop Chromium; сценарии owned-state и migration follow-up
+  также прошли в затронутых Firefox, WebKit и iPhone-профилях.
+
 ## Следующие обязательные этапы
 
 - Расширить поздний-response account-switch acceptance на остальные family

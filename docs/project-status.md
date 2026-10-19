@@ -8,17 +8,24 @@
 Проект находится в P0 стабилизации сохранности данных и приёмки lifecycle; P0
 ещё не закрыт. Draft PR [#93](https://github.com/Michael-edel/FitFocus/pull/93)
 открыт против `fix/state-generations` и зависит от PR #94 и #90. Точный HEAD PR —
-`4281ccb`; последний runtime-код — `4e8adff`. В `4281ccb` добавлена проверка
-задержанного `GET /api/family/menu` при переключении A → B; она прошла 3/3 на
-desktop Chromium, Firefox и WebKit, общий typecheck и `git diff --check` прошли.
+`4281ccb`; последний runtime-код — `4e8adff`. Точный
+[CI #39183159791](https://github.com/Michael-edel/FitFocus/actions/runs/39183159791)
+для `4281ccb` завершился **1105 passed / 311 skipped / 5 failed**. Audit,
+schema/privacy/auth/API guards, unit suite, три typecheck и production build
+прошли; оставшиеся падения были в трёх browser-сценариях.
 
-Точный [CI #39183159791](https://github.com/Michael-edel/FitFocus/actions/runs/39183159791)
-для `4281ccb` выполняется на браузерных тестах. Audit, schema/privacy/auth/API
-guards, unit suite, три typecheck и production build уже прошли. Предыдущий CI
-на `e469959` остановлен при отправке follow-up, пока шёл browser job; он не
-подменяет проверку нового SHA. Read-only branch-preview smoke для опубликованного
-`e469959` подтвердил полный SHA в JS bundle, ожидаемые 200 для публичных и 401
-для защищённых анонимных GET; preview не является staging.
+В локальном follow-up [`ddba485`](https://github.com/Michael-edel/FitFocus/commit/ddba485)
+исправлены два тестовых race: A-запросы сравниваются после фиксации сессии B, а
+sender-tab больше не используется как замена payload-проверке. Для миграционного
+сценария ожидание окончательной межвкладочной проверки увеличено с 30 до 60
+секунд; запись остаётся fail-closed до полного Service Worker fence. Все пять
+затронутых browser-проектов прошли локально, также прошли typecheck, production
+build и `git diff --check`. В CI не было подтверждённых записей неподтверждённых
+legacy-операций; теперь нужен полный прогон после публикации follow-up.
+
+Предыдущий read-only branch-preview smoke для `e469959` подтвердил полный SHA в
+JS bundle, ожидаемые 200 для публичных и 401 для защищённых анонимных GET; preview
+не является staging.
 
 `8b7fb2c` очищает account-scoped счётчик генерации рецептов при удалении
 аккаунта; `5d3d5b1` связывает writer и cleanup общим storage key. В `4e8adff`

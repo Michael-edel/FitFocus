@@ -2,19 +2,14 @@
 
 Обновлено: 19.10.2026. Локальная ветка `durable-outbox`, Draft PR
 [`#93`](https://github.com/Michael-edel/FitFocus/pull/93), удалённая ветка
-`fix/durable-outbox`, base `fix/state-generations`. Последний опубликованный
-HEAD — `8ffa9e4`; локальный code fix — `8b7fb2c`, с последующим refactor ключа
-`5d3d5b1`. Полный unit suite
-прошёл **1423/1423**, root/domain/storage-strict typecheck, privacy guard и
-production build прошли локально. Точный CI #1673 для опубликованного `8ffa9e4`
-ещё выполняет browser tests; новая ревизия ожидает его завершения. В CI #1665
-был один desktop WebKit сбой: проверка achievement count стояла после
-перезапуска приложения. Тест исправлен в `ee2fc50` и прошёл 3/3 локально.
-Новая browser acceptance покрывает cloud
-hydration с pending edit: серверное `dark` версии 7 не затирает локальное `light`
-после reload; исходные operation/retry данные сохранены. Сценарий прошёл 7/7
-browser/PWA профилей без retries, typecheck прошёл. Точный CI этого follow-up
-запускается после push.
+`fix/durable-outbox`, base `fix/state-generations`. Точный опубликованный
+`4281ccb` прошёл audit, guards, unit, typechecks и production build, но browser
+матрица завершилась **1105 passed / 311 skipped / 5 failed** в трёх сценариях.
+Локальный follow-up `ddba485` уточняет account-switch и losing-snapshot assertions
+и даёт до 60 секунд на строгую повторную проверку миграционного fence. Все пять
+затронутых browser-проектов, typecheck, build и `git diff --check` прошли
+локально. P0/P0.8/P0.9 остаются открытыми до полного CI, lifecycle-матрицы,
+staging, проверки OAuth/D1 и интеграции в защищённую `main`.
 
 Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
 чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
