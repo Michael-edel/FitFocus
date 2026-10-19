@@ -29,7 +29,7 @@ CAS, legacy migration и обновление PWA реализованы в PR #
 Chrome. Playwright в CI по-прежнему отключает BFCache (`BackForwardCacheDisabledForDelegate`);
 проверка не закрывает остальные callbacks, устройства, OAuth или staging.
 
-В плане 30 незакрытых чекбоксов: 17 в P0, 7 в P1, ещё 6 в подготовительных и
+В плане 29 незакрытых чекбоксов: 16 в P0, 7 в P1, ещё 6 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
 lifecycle callbacks, полная матрица, UI разрешения конфликтов, staging/OAuth/D1,
 release rollback и интеграция в защищённую `main`. Branch preview не равен
@@ -1261,8 +1261,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   завершился success в [run 38550243769](https://github.com/Michael-edel/FitFocus/actions/runs/38550243769);
   новый plateau-retry сценарий добавлен после этого SHA и ожидает точного CI.
   Подробности: [журнал](docs/stabilization-progress.md).
-- [ ] Завершить family callbacks и другие AI/state writers; для всего приложения
-  серверный guard сам по себе недостаточен.
+- [x] Завершить семейные callbacks и AI/state writers: серверный guard дополнен
+  клиентской проверкой исходной сессии, lifecycle cancellation и late-response
+  acceptance для перечисленных ниже путей. Полный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
+  на кодовом HEAD `544f3f5` прошёл без retries. Общая приёмка оставшихся network
+  writers и staging остаётся отдельной открытой задачей P0.5.
   - [x] Запретить незащищённый `/api/ai` из `callAiProxy`: помощник требует
     `AiSession`, а отсутствующий proof отклоняется до сети. Проверены 24 теста
     AI transport, полный unit suite (1188), typecheck, auth-scope и production
