@@ -13,22 +13,24 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
-и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code/test HEAD — `6f189038a52f05826d83a427130c1c49903edfd5`; точный
-[CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952)
-успешен: audit, schema/privacy/auth/API guards, unit, три typecheck, production
-build, browser tests, rollback/CAS и сохранение артефактов прошли. Документационный
-follow-up [`02b3d79`](https://github.com/Michael-edel/FitFocus/commit/02b3d79cb8dba1596b0f150f60de1e56d1be1f36)
-обновил журнал. После этого root-overlay fix [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea)
-follow-ups [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) и
-[`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373) привязали paywall, root overlays,
-заметки синхронизации профиля/adaptation и медицинский черновик регистрации к
-владельцу (login session или Google identity). Root typecheck и целевые unit
-12/12 прошли локально. E2E скрытия фоторазбора/редактора account A после
-активации B прошёл 3/3 на desktop Chromium/Firefox/WebKit; это не проверяет
-каждый root surface. Точный полный [CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
-для code/test HEAD `71910ae` завершился success: audit, guards, unit, typecheck,
-build, browser tests, rollback/CAS и сохранение артефактов прошли.
+и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Полный точный
+[CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+на `d23ceb9` завершился success: 1457 unit, 1119 browser passed / 323 skipped,
+audit/guards, три typecheck, build, rollback/CAS на 23 HTTP requests и сохранение
+артефактов прошли. На `d23ceb9` account-switch browser acceptance проверила
+scanning status, фоторазбор/редактор, камеру и paywall — 12/12 на desktop
+Chromium, Firefox и WebKit (`workers=1`, `retries=0`). Последующий коммит
+[`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
+добавил мобильное меню «Ещё»: оно закрылось в обеих вкладках после активации B,
+2/2 на iPhone Safari и iPhone PWA. Root typecheck и diff check прошли локально.
+Точный [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+проверяет текущий HEAD и ожидает завершения. Late adaptation response уже покрыт
+E2E. Локальный follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+исправил callback, который терял profile-sync notice после reload из облака, и
+добавил browser acceptance profile-sync и adaptation notices — 6/6 на desktop
+Chromium, Firefox и WebKit; typecheck прошёл. Он пока не опубликован и не входит
+в CI #1725. Browser acceptance registration draft и Android Chrome/PWA остаются
+открытыми.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/

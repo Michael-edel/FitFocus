@@ -703,12 +703,23 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea),
     [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) и
     [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373); root typecheck, 12 целевых
-    unit-тестов и diff check прошли. Существующий E2E фоторазбора/редактора после
-    account switch прошёл 3/3 на desktop Chromium/Firefox/WebKit; mobile/PWA
-    проекты пропускают сценарий двух вкладок. Точный CI [#39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
-    для code/test HEAD `71910ae` завершился success, включая browser tests,
-    rollback/CAS и сохранение артефактов. Другие root surfaces и полный browser
-    acceptance остаются открытыми.
+    unit-тестов и diff check прошли. Follow-up [`d23ceb9`](https://github.com/Michael-edel/FitFocus/commit/d23ceb96f17149f8cdee137d3f8fb1ddd921245e)
+    расширяет browser acceptance на scanning status, фоторазбор/редактор, камеру
+    и paywall при переключении A → B: 12/12 на desktop Chromium/Firefox/WebKit
+    без retries. Его точный [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+    завершился success: 1457 unit, 1119 browser passed / 323 skipped, typechecks,
+    build, rollback/CAS (23 HTTP requests); rollback и browser artifacts сохранены.
+    Следующий follow-up [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
+    проверяет меню «Ещё» после account switch: 2/2 на iPhone Safari и iPhone PWA;
+    root typecheck и diff check прошли. Точный CI
+    [#1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+    для `cf81aab` ожидает завершения. Android Chrome/PWA acceptance для меню
+    остаётся открытой. Локальный follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+    исправляет stale setter заметки profile sync и добавляет UI acceptance обеих
+    notices: 6/6 на desktop Chromium/Firefox/WebKit, typecheck и diff check прошли.
+    Его точный CI ещё не запускался, так как `cf81aab` проходит полный CI. Browser
+    acceptance medical registration draft, Android Chrome/PWA и других root
+    surfaces остаётся открытой; P0.4 не завершён.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

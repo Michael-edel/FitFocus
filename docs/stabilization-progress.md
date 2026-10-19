@@ -19,15 +19,46 @@ setter также ограничен своим scope.
 `tests/account_scoped_ui.test.ts` прошли **12/12**; `npm run typecheck` (включая
 admin guards) и `git diff --check` прошли. Unit проверяет скрытие profile-sync/
 adaptation сообщений при logout, смене аккаунта и повторном входе в новую
-сессию, а также сброс registration draft между Google identities. Существующий
-E2E `an open food insight from account A is hidden after another tab activates
-account B` прошёл локально **3/3** на desktop Chromium/Firefox/WebKit; четыре
-mobile/PWA проекта штатно skipped для двухвкладочного сценария. Это проверяет
-фоторазбор и редактор, но не notices/registration draft в browser UI. Точный
-[CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
-для code/test HEAD `71910ae` завершился success, включая browser tests,
-rollback/CAS и сохранение артефактов. P0.4 остаётся открытым для остальных
-callbacks/cache и полного lifecycle.
+сессию, а также сброс registration draft между Google identities.
+
+Follow-up [`d23ceb9`](https://github.com/Michael-edel/FitFocus/commit/d23ceb96f17149f8cdee137d3f8fb1ddd921245e)
+добавил browser acceptance для scanning status, открытого диалога камеры и
+paywall. В удержанном food-photo запросе индикатор виден до account switch и
+скрыт в обеих вкладках после активации B; открытый разбор и редактор A также
+скрываются. Все четыре сценария прошли **12/12** на desktop Chromium, Firefox и
+WebKit (`workers=1`, `retries=0`). Снимки подтверждают, что диалог камеры и
+тарифов закрыты. `npm run typecheck`, targeted unit **12/12** и `git diff --check`
+прошли. Это mock API и desktop two-tab acceptance. Поздний ответ adaptation уже
+проверяется E2E на том же SHA; browser acceptance notices и registration draft
+пока не проверена.
+
+Точный [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+для `d23ceb9` завершился success: **1457 unit**, **1119 browser passed / 323
+skipped**, dependency audit нашёл 0 уязвимостей; schema/privacy/auth/API guards,
+три typecheck, build, rollback/CAS (23 HTTP requests) и retention обоих
+артефактов прошли. Browser suite выполнялась 34.9 минуты. [Rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936/artifacts/12177192422)
+сохранён до 17.01.2027; [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936/artifacts/12177052520)
+— до 02.11.2026.
+
+Коммит [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
+проверяет мобильное меню «Ещё»: после открытия меню A другая вкладка активирует
+B, и содержимое меню исчезает в обеих вкладках. E2E прошёл **2/2** в `iphone-safari`
+и `iphone-pwa`; root typecheck и `git diff --check` прошли. Android Chrome/PWA
+для этого сценария остаются отдельным пропуском. Точный
+[CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+на опубликованном HEAD `cf81aab` ещё выполняется; его результат будет записан
+после завершения.
+
+Локальный кодовый follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+исправляет устаревшее замыкание `applyRemoteProfile`: callback захватывал setter
+profile-sync notice до появления login scope, поэтому данные профиля обновлялись,
+а сообщение терялось. Setter теперь входит в зависимости callback. Новые E2E
+проверяют reload облачного профиля A, показ «Профиль обновлён из облака.» и
+скрытие после переключения на B; отдельный сценарий проверяет adaptation notice.
+Оба сценария прошли **6/6** на desktop Chromium, Firefox и WebKit, typecheck и
+`git diff --check` прошли локально. Commit пока не опубликован и GitHub CI для него
+не запускался. Browser acceptance registration draft, Android Chrome/PWA и других
+root surfaces остаётся открытой; P0.4 не закрыт.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
