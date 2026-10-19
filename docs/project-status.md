@@ -20,6 +20,13 @@ Firefox и WebKit. Вместе с предыдущими 25 сценариям�
 составляет 35 сценариев и 140 запусков. Точный CI опубликованного HEAD ещё не завершён;
 P0.4 и остальные callbacks/cache остаются открытыми.
 
+В P0.5 сняты desktop-only skips ещё с трёх AI Council сценариев. Поздний ответ
+отбрасывается после входа B и после новой server session того же аккаунта;
+временный вопрос из старой сессии не появляется в новой вкладке. Матрица
+прошла 21/21 на всех семи профилях, включая 12 мобильных/PWA и 9 desktop
+запусков, без retries. В сумме расширены 38 account/session сценариев и
+выполнены 152 мобильных запуска; точный CI текущего HEAD ещё не завершён.
+
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
 и [#90](https://github.com/Michael-edel/FitFocus/pull/90). Полный точный

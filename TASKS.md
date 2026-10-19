@@ -1243,8 +1243,10 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
 - [x] Удержать ответ AI Совета при повторном входе того же account с новым
   `serverSessionId`: старый ответ не добавляется в историю и не создаёт durable
   write в новой сессии. Вместе с A → B delayed-answer acceptance прошёл 6/6 на
-  desktop Chromium/Firefox/WebKit без retries. Production-код не менялся;
-  точный CI follow-up ожидает push.
+  desktop Chromium/Firefox/WebKit без retries. Follow-up снял desktop-only skips
+  с трёх AI Council account/session сценариев; они прошли 21/21 на desktop,
+  Android, iPhone и PWA профилях (`workers=1,retries=0`). Production-код не
+  менялся; exact-head CI ещё не завершён.
 - [x] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
   read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135

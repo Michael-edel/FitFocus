@@ -725,7 +725,6 @@ test('held coach retry cannot write after the same account starts a new server s
 });
 
 test('AI Council uses account A proof and discards its held answer after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab AI Council account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -770,7 +769,6 @@ test('AI Council uses account A proof and discards its held answer after account
 });
 
 test('AI Council discards its held answer after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account AI Council callback acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -837,7 +835,6 @@ test('AI Council discards its held answer after the same account starts a new se
 });
 
 test('AI Council hides its transient draft after the same account starts a new session in another tab', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account new-session UI acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
