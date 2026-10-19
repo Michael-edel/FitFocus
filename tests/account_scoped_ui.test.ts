@@ -90,6 +90,26 @@ describe('account-scoped UI state visibility', () => {
     )).toEqual({ profileSync: null, adaptation: '' });
   });
 
+  it('does not show a health registration draft to a different Google identity', () => {
+    const defaults = {
+      weight: 70,
+      medicalRestrictions: '',
+      bloodGlucoseMmolL: 0,
+    };
+    const state = {
+      scopeKey: 'registration:google-account-a',
+      value: {
+        weight: 98.5,
+        medicalRestrictions: 'персональные данные аккаунта A',
+        bloodGlucoseMmolL: 6.2,
+      },
+    };
+
+    expect(getAccountScopedUiStateValue(state, null, defaults)).toEqual(defaults);
+    expect(getAccountScopedUiStateValue(state, 'registration:google-account-b', defaults))
+      .toEqual(defaults);
+  });
+
   it('does not accept transient UI updates while no account session is active', () => {
     const previous = { scopeKey: 'account-a:session-1', value: 'private draft' };
     expect(getAccountScopedUiStateValue(previous, null, '')).toBe('');

@@ -54,7 +54,7 @@ import { listenForPageExit } from './storage/sessionTransport';
 import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
 import { classifyWisShareFailure } from './services/frontendErrors';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, TariffPlan, AIPlan, FamilyWeeklyMenu } from './types';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, AIPlan, FamilyWeeklyMenu } from './types';
 import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
@@ -215,6 +215,31 @@ const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_veg', title: 'Здоровый завтрак', goal: 1, current: 0, unit: 'порц.', streak: 0, lastCompletedDate: null },
   { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
 ];
+
+const INITIAL_REGISTRATION_DATA: RegistrationData = {
+  name: '',
+  gender: Gender.MALE,
+  weight: 70,
+  height: 170,
+  age: 25,
+  activityLevel: ActivityLevel.MODERATELY_ACTIVE,
+  goal: Goal.LOSS,
+  targetWeight: 65,
+  dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' },
+  medicalRestrictions: '',
+  bloodPressureSystolic: 0,
+  bloodPressureDiastolic: 0,
+  restingPulse: 0,
+  bloodGlucoseMmolL: 0,
+  waistCm: 0,
+  chestCm: 0,
+  hipsCm: 0,
+  plan: 'free',
+  lossDeficit: DEFAULT_DEFICIT,
+  gainSurplus: DEFAULT_SURPLUS,
+  riskAckLoss: false,
+  riskAckGain: false,
+};
 
 
 
@@ -612,30 +637,11 @@ const App: React.FC = () => {
     if (!allowCachedUiStateRestore) return;
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
-  const [regData, setRegData] = useState<RegistrationData>({
-    name: '',
-    gender: Gender.MALE,
-    weight: 70,
-    height: 170,
-    age: 25,
-    activityLevel: ActivityLevel.MODERATELY_ACTIVE,
-    goal: Goal.LOSS,
-    targetWeight: 65,
-    dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
-    medicalRestrictions: '',
-    bloodPressureSystolic: 0,
-    bloodPressureDiastolic: 0,
-    restingPulse: 0,
-    bloodGlucoseMmolL: 0,
-    waistCm: 0,
-    chestCm: 0,
-    hipsCm: 0,
-    plan: 'free' as TariffPlan,
-    lossDeficit: DEFAULT_DEFICIT,
-    gainSurplus: DEFAULT_SURPLUS,
-    riskAckLoss: false,
-    riskAckGain: false
-  });
+  const registrationScope = googleMe?.sub ? `registration:${googleMe.sub}` : null;
+  const { value: regData, setValue: setRegData } = useAccountScopedUiState(
+    registrationScope,
+    INITIAL_REGISTRATION_DATA,
+  );
 
   useEffect(() => {
     if (authState !== 'register') return;
