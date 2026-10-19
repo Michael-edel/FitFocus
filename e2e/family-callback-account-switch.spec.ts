@@ -1972,7 +1972,6 @@ test('a delayed family member update from the previous same-account session is d
 });
 
 test('a delayed family member update from account A cannot affect account B after sign-in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family member account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
