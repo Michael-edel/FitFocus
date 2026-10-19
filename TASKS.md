@@ -810,6 +810,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     штатно пропущены, так как проверка использует две вкладки. Typecheck и diff
     check прошли в [`8279976`](https://github.com/Michael-edel/FitFocus/commit/8279976fb140cd58aa2c00853b4f5eea2b30e02b).
     Это одна UI/cache acceptance; остальные callbacks и P0.4 остаются открыты.
+  - [x] Расширить bulk move/delete account-switch acceptance дневника на телефоны:
+    Android Chrome/PWA и iPhone Safari/PWA прошли 4/4; вместе с desktop-частью
+    матрица составляет 7/7 (`workers=1,retries=0`). Один scoped PUT
+    подтверждается для bulk move и один для bulk-delete, выбор не переносится
+    в аккаунт B, данные B не меняются.
   Delayed durable family-menu state GET проверяет account switch без
   гидратации старых данных; задержка теперь управляется тем же mock API handler,
   без дополнительного route/fallback. Полный `family-menu-durable.spec.ts` после
@@ -890,8 +895,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
   persistence выполняется один раз после вычисления нового списка. Массовое
   удаление нескольких записей тоже пишет один новый снимок. Полный unit прошёл
   1326/1326, три typecheck и production build прошли; расширенный bulk/account
-  E2E для двух записей прошёл 3/3 desktop engines, 4 мобильных профиля skipped,
-  `workers=1,retries=0`. Первый WebKit запуск превысил 45-секундный лимит на
+  E2E для двух записей прошёл 3/3 desktop engines; follow-up расширил матрицу
+  до 7/7 с Android/iPhone/PWA (`workers=1,retries=0`). Первый WebKit запуск
+  превысил 45-секундный лимит на
   завершающих действиях; после упрощения необязательных ожиданий контрольный
   прогон прошёл без изменения timeout.
   Изменение опубликовано в `7ff579d`; точный CI #1501 завершился success:

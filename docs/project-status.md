@@ -30,8 +30,10 @@ P0.4 и остальные callbacks/cache остаются открытыми.
 lifecycle сценария (смена аккаунта, reload и logout/login) прошли 21/21 на семи
 профилях, включая 12 мобильных/PWA и 9 desktop запусков. Два held callback
 пошагового рецепта после входа B и reauthentication прошли 14/14, включая 8
-мобильных/PWA запусков. В сумме расширено 53 account/session сценария и
-выполнено 212 мобильных запусков; точный CI текущего HEAD ещё не завершён.
+мобильных/PWA запусков. Bulk move/delete дневника прошёл 7/7 на desktop и
+мобильных/PWA профилях, четыре мобильных запуска входят в матрицу. В сумме
+расширено 54 account/session сценария и выполнено 216 мобильных запусков;
+точный CI текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

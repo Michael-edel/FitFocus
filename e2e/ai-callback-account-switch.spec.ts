@@ -2655,8 +2655,7 @@ test('an open mobile navigation menu from account A is hidden after another tab 
   await switched.page.screenshot({ path: info.outputPath('mobile-more-menu-hidden-after-account-switch.png') });
 });
 
-test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab food selection acceptance runs in desktop browser profiles.');
+test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }) => {
   const sharedEntryIdA = 'shared-food-entry-a';
   const sharedEntryIdB = 'shared-food-entry-b';
   const timestamp = new Date();
