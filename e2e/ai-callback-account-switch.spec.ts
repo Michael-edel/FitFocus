@@ -1188,7 +1188,6 @@ test('held plateau retry cannot appear after the same account starts a new serve
 });
 
 test('held plateau explanation cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
   const profileA = profileFor(accountA.id, true);
   const state: FixtureState = { current: accountA, profile: profileA };
   const errorsA: string[] = [];
@@ -1250,7 +1249,6 @@ test('held plateau explanation cannot appear after another tab signs in as accou
 });
 
 test('held plateau explanation cannot appear after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
