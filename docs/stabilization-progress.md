@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4 — root notices привязаны к login-сессии, `236453b`, 19.10.2026
+
+Продолжая аудит root state, нашёл ещё два сообщения без владельца: заметка
+синхронизации профиля и результат AI-адаптации веса оставались в памяти App после
+logout. Старое adaptation сообщение могло содержать персональную рекомендацию.
+Оба значения теперь используют `accountSessionRenderKey` вместе с paywall и
+другими root overlays; при выходе, смене аккаунта или новой login-сессии UI
+показывает пустое значение, а setters старого scope не принимают обновление.
+
+На code HEAD [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) прошли целевые unit-тесты
+`tests/account_scoped_ui.test.ts` — **11/11**, `npm run typecheck` (включая admin
+guards) и `git diff --check`. Тест проверяет скрытие profile-sync/adaptation
+сообщений при logout, смене аккаунта и повторном входе в новую сессию. Полный
+browser account-switch acceptance не запускался; точный CI опубликованного HEAD
+ещё не подтверждён. P0.4 остаётся открытым для остальных callbacks/cache и
+полного lifecycle.
+
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен с временным origin

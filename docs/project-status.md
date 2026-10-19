@@ -19,8 +19,11 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 успешен: audit, schema/privacy/auth/API guards, unit, три typecheck, production
 build, browser tests, rollback/CAS и сохранение артефактов прошли. Документационный
 follow-up [`02b3d79`](https://github.com/Michael-edel/FitFocus/commit/02b3d79cb8dba1596b0f150f60de1e56d1be1f36)
-обновил журнал. Новый root-overlay follow-up [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea)
-прошёл root typecheck, точный полный CI для него ещё не подтверждён.
+обновил журнал. После этого root-overlay fix [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea)
+и follow-up [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) привязали paywall, root
+overlays, заметку синхронизации профиля и персональную adaptation note к
+login-session scope. Root typecheck и целевые unit 11/11 прошли локально;
+browser acceptance и точный полный CI для этих follow-ups пока не подтверждены.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
