@@ -40,15 +40,16 @@ Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 отменён следующим push. [CI #1732](https://github.com/Michael-edel/FitFocus/actions/runs/39239523175)
 проверяет предыдущий HEAD `2563dc8`; новая мобильная приёмка в него не входит.
 Другие root surfaces остаются открытыми.
-Локальный follow-up снял desktop-only skip с registration account-switch E2E;
+Коммит [`083cef0`](https://github.com/Michael-edel/FitFocus/commit/083cef0c1531874db1fae06648a19fc0537e2774)
+снял desktop-only skip с registration account-switch E2E;
 сценарий прошёл **7/7** на семи desktop/Android/iPhone и PWA профилях. Эта
-расширенная приёмка пока не опубликована; CI #1732 проверяет предыдущий HEAD
-`2563dc8` и не включает новые мобильные случаи. Точный CI нового SHA проверю
-после публикации. Дополнительный локальный сценарий повторного входа того же
+приёмка опубликована в PR #93. Дополнительный сценарий повторного входа того же
 аккаунта с новой server session прошёл **3/3** на desktop Chromium/Firefox/WebKit:
 старая вкладка скрывает профильный черновик, новая сессия того же владельца
-восстанавливает его из локального cache без записи профиля. Точный CI этой
-проверки пока не запускался.
+восстанавливает его из локального cache без записи профиля. Сценарий расширен
+на семь desktop/Android/iPhone и PWA профилей; прошёл **7/7**. Результат
+опубликован в [`e91e0b0`](https://github.com/Michael-edel/FitFocus/commit/e91e0b03ecebc908baf6126f9f5cfcac87fd49d1)
+в PR #93; точный CI проверяется для актуального PR HEAD.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/

@@ -731,15 +731,17 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     отменён при следующем push. [CI #1732](https://github.com/Michael-edel/FitFocus/actions/runs/39239523175)
     относится к предыдущему HEAD `2563dc8` и не включает мобильное расширение;
     точный CI новой ревизии проверяется после push.
-    Следующий локальный follow-up снял desktop-only skip с registration account-switch
+    Follow-up снял desktop-only skip с registration account-switch
     сценария: он прошёл 7/7 на всех desktop, Android и iPhone/PWA проектах. Эта
-    мобильная приёмка пока не опубликована; CI #1732 не содержит её. Остальные
-    root callbacks и P0.4 остаются открытыми. Ещё один локальный E2E проверил
+    приёмка опубликована в [`083cef0`](https://github.com/Michael-edel/FitFocus/commit/083cef0c1531874db1fae06648a19fc0537e2774).
+    Остальные root callbacks и P0.4 остаются открытыми. Ещё один E2E проверил
     повторный вход того же владельца с новым server session: старая вкладка
     скрывает форму Settings, новая восстанавливает черновик account cache без
-    profile PUT или изменения durable profile. Прошёл 3/3 на desktop
-    Chromium/Firefox/WebKit; typecheck, production build и diff check прошли.
-    Точный CI ожидает публикации. Другие callbacks/cache остаются открытыми.
+    profile PUT или изменения durable profile. Прошёл 7/7 на desktop,
+    Android и iPhone/PWA профилях; typecheck, production build и diff check прошли.
+    Опубликовано в [`e91e0b0`](https://github.com/Michael-edel/FitFocus/commit/e91e0b03ecebc908baf6126f9f5cfcac87fd49d1)
+    в PR #93; точный CI проверяется для актуального PR HEAD. Другие callbacks/cache
+    остаются открытыми.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

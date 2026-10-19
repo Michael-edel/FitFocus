@@ -80,17 +80,19 @@ account-scoped unit **12/12** и `git diff --check` проходят. Измен
 Следующий локальный E2E follow-up удалил ограничение только desktop-проектами для
 `registration-account-switch.spec.ts`. Межвкладочная IndexedDB-проверка прошла
 **7/7** на трёх desktop engines, Android Chrome/PWA Chrome, iPhone Safari и
-iPhone PWA. Это добавление не входит в опубликованный HEAD `2563dc8` или CI #1732;
-после публикации потребуется новый exact-head CI.
+iPhone PWA. Проверка опубликована в PR #93 коммитом
+[`083cef0`](https://github.com/Michael-edel/FitFocus/commit/083cef0c1531874db1fae06648a19fc0537e2774).
 
-Локальный follow-up `e2e/ai-callback-account-switch.spec.ts` проверяет черновик
+Коммит [`e91e0b0`](https://github.com/Michael-edel/FitFocus/commit/e91e0b03ecebc908baf6126f9f5cfcac87fd49d1)
+добавляет в `e2e/ai-callback-account-switch.spec.ts` проверку черновика
 Settings при повторном входе того же Google-аккаунта с новой серверной сессией:
 старая вкладка скрывает форму, новая восстанавливает account-scoped черновик,
-а durable profile и список profile PUT остаются неизменными. Сценарий прошёл
-**3/3** на desktop Chromium, Firefox и WebKit без retries (workers=1).
-`npm run typecheck`, `npm run build` и `git diff --check` прошли; точный CI ещё
-не запущен. Это проверка владения UI/cache; runtime-дефект не выявлен, остальные
-callbacks и P0.4 остаются открыты.
+а сохранённый профиль и список profile PUT остаются неизменными. Сценарий прошёл
+**7/7** на desktop, Android и iPhone/PWA профилях без retries
+(workers=1). `npm run typecheck`, `npm run build` и `git diff --check` прошли.
+Коммит опубликован в PR #93; точный CI проверяется на актуальном PR HEAD. Это
+проверка владения UI/cache; runtime-дефект не выявлен, остальные callbacks и
+P0.4 остаются открыты.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 

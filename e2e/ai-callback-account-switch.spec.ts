@@ -2238,7 +2238,6 @@ test('a profile draft cached for account A is not restored after another tab act
 });
 
 test('a profile draft stays hidden in a retired same-account session and restores after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace same-account draft acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#settings');
