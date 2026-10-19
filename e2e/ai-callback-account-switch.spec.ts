@@ -1827,7 +1827,12 @@ test('held food photo analysis cannot commit after the same account starts a new
   }
 });
 
-test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+async function expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+  page: Page,
+  context: BrowserContext,
+  info: TestInfo,
+  uploadSelector: string,
+) {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1837,7 +1842,7 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   const fixtureA = await installAccountApi(page, state, 'foodphoto_enhanced');
   await openApp(page, '/#recipes');
   await expect(page).toHaveTitle(/FitFocus/);
-  const fileInput = page.locator('input[type="file"]').nth(1);
+  const fileInput = page.locator(uploadSelector).first();
   await expect(fileInput).toHaveCount(1);
   await fileInput.setInputFiles({
     name: 'recipe.svg',
@@ -1889,6 +1894,20 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   } finally {
     fixtureA.release();
   }
+}
+
+test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+  await expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+    page, context, info, 'input[type="file"][accept="image/*"]:not([capture])',
+  );
+});
+
+test('held native recipe camera capture cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'),
+    'The native camera capture input is available on phone browser profiles.');
+  await expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+    page, context, info, 'input[type="file"][accept="image/*"][capture]',
+  );
 });
 
 test('held recipe photo analysis cannot create a draft after the same account starts a new server session', async ({ page, context }, info) => {
