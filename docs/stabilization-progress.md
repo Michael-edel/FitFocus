@@ -7741,3 +7741,18 @@ browser/PWA профилях. Root typecheck, legacy queue/migration unit — 12
 Накопленная mobile account/session матрица — 67 сценариев и 268 запусков.
 Точный CI этого коммита ожидает публикации; полный P0.4/P0.5 lifecycle,
 staging и реальная camera/OAuth-приёмка остаются открытыми.
+
+## P0.4/P0.5 — mobile recipe capture account switch, [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d), 19.10.2026
+
+Расширен held `foodphoto_enhanced` account-switch сценарий отдельным
+`RecipesScreen` native `input[type=file][capture]`. После выбора фото аккаунтом A
+ответ удерживается; вход аккаунта B во второй вкладке и последующее освобождение
+ответа не создают stale recipe draft и не меняют профиль, дневник, историю, outbox
+или side effects владельцев. Native capture прошёл 4/4 на Android Chrome/PWA и
+iPhone Safari/PWA; прежний gallery path после выделения общей проверки прошёл
+7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone browser/PWA профилях.
+Общий targeted прогон: 11 passed, 3 ожидаемых desktop skips,
+`workers=1,retries=0`; root typecheck и `git diff --check` прошли. Playwright
+подаёт synthetic file в capture input и не запускает системную камеру.
+Mobile account/session matrix составляет 68 сценариев и 272 запуска. Точный CI
+этого коммита ожидает push; staging и физическое устройство не проверялись.

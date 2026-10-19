@@ -757,6 +757,14 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Изображение подаётся в capture input фикстурой Playwright; запуск системной
     камеры на физическом устройстве не проверен. Матрица теперь — 67 сценариев
     и 268 мобильных запусков; точный CI этого follow-up ожидает публикации.
+    Следующий follow-up [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d)
+    повторил эту приёмку для отдельного native camera input страницы рецептов:
+    поздний `foodphoto_enhanced` ответ не создаёт черновик после входа B.
+    Native capture E2E прошёл 4/4 Android/iPhone browser/PWA профилей, исходный
+    gallery input — 7/7; всего 11 passed и 3 ожидаемых desktop skips при
+    `workers=1,retries=0`. Root typecheck прошёл. Проверяется file-input обработчик,
+    физическая камера остаётся вне этой приёмки. Матрица — 68 сценариев и 272
+    мобильных запуска; точный CI follow-up ожидает публикации.
     Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
     закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity

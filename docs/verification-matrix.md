@@ -346,6 +346,12 @@ session не меняет UI, профиль и outbox. Затем [`ebddd21`](h
 4/4 Android/iPhone browser/PWA прогона; исходный gallery-upload сценарий прошёл
 7/7 после выделения общего assert helper. Это Playwright file-input fixture,
 не запуск камеры ОС. Матрица составляет 67 сценариев и 268 мобильных запусков.
+Затем [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d)
+проверил тот же поздний `foodphoto_enhanced` callback через отдельный native
+capture input страницы рецептов: 4/4 Android/iPhone browser/PWA прогона; исходный
+gallery path — 7/7. Всего 11 passed и 3 ожидаемых desktop skips, без retries.
+Это file-input acceptance; системная камера и физическое устройство не проверены.
+Матрица — 68 сценариев и 272 мобильных запуска.
 Полный P0.4/P0.5 lifecycle и точный CI нового HEAD остаются открытыми.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:

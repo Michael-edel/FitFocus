@@ -65,6 +65,12 @@ input (`label` с `input[type=file][capture]`), поэтому модальна�
 4/4, а исходная gallery-upload проверка после выделения общей проверки — 7/7 на
 всех профилях. Матрица составляет 67 сценариев и 268 мобильных запусков. Точный
 CI нового HEAD нужно подтвердить; системная камера и staging не проверялись.
+Следующий [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d)
+добавил такой же held-response account-switch тест для native capture input
+страницы рецептов: поздний ответ не создаёт черновик. Он прошёл 4/4 на
+Android/iPhone browser/PWA профилях; исходный gallery input после выделения
+общей проверки — 7/7. Накопленная матрица — 68 сценариев и 272 мобильных
+запуска; точный CI нового HEAD ожидается.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
