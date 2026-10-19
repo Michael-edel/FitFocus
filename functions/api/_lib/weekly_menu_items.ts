@@ -6,7 +6,8 @@ import { requireFamilyPlan } from './plans';
 import { familyMenuStateReady } from './family_menu_state';
 
 type WeeklyMenuItemInput = { name: string; grams: number; key: string };
-type WeeklyMenuItemsValidationError = 'BAD_JSON' | 'BAD_WEEK';
+type WeeklyMenuItemsValidationError = 'BAD_JSON' | 'BAD_WEEK' | 'BAD_ITEMS' | 'BAD_ITEM' | 'TOO_MANY_ITEMS';
+const MAX_WEEKLY_MENU_ITEMS = 500;
 
 export type WeeklyMenuItemsSaveResult =
   | { kind: 'invalid'; error: WeeklyMenuItemsValidationError }
@@ -16,6 +17,33 @@ export type WeeklyMenuItemsSaveResult =
 
 function isIsoDay(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeWeeklyMenuItems(value: unknown):
+  | { ok: true; items: WeeklyMenuItemInput[] }
+  | { ok: false; error: Exclude<WeeklyMenuItemsValidationError, 'BAD_JSON' | 'BAD_WEEK'> } {
+  if (!Array.isArray(value)) return { ok: false, error: 'BAD_ITEMS' };
+  if (value.length > MAX_WEEKLY_MENU_ITEMS) return { ok: false, error: 'TOO_MANY_ITEMS' };
+
+  const normalized: WeeklyMenuItemInput[] = [];
+  for (const rawItem of value) {
+    if (!isJsonObject(rawItem)
+      || typeof rawItem.name !== 'string'
+      || !rawItem.name.trim()
+      || rawItem.name.trim().length > 256
+      || typeof rawItem.grams !== 'number'
+      || !Number.isFinite(rawItem.grams)
+      || rawItem.grams <= 0
+      || rawItem.grams > 1_000_000_000) {
+      return { ok: false, error: 'BAD_ITEM' };
+    }
+
+    const item = normalizeShoppingIngredient(rawItem.name, rawItem.grams);
+    if (!item.name || item.grams <= 0) return { ok: false, error: 'BAD_ITEM' };
+    normalized.push(item);
+  }
+
+  return { ok: true, items: normalized };
 }
 
 /** Replaces one user's normalized weekly items inside their personal or family scope. */
@@ -31,7 +59,6 @@ export async function saveWeeklyMenuItems({
   if (!isJsonObject(body)) return { kind: 'invalid', error: 'BAD_JSON' };
   const weekStart = asString(body.week_start).slice(0, 10);
   const familyId = body.family_id ? asString(body.family_id) : null;
-  const items = Array.isArray(body.items) ? body.items : [];
   if (!isIsoDay(weekStart)) return { kind: 'invalid', error: 'BAD_WEEK' };
   // A delayed old client must not replace the projection of a newer accepted profile.
   if (!familyId) return { kind: 'profile-required' };
@@ -42,11 +69,9 @@ export async function saveWeeklyMenuItems({
     if (await familyMenuStateReady(db)) return { kind: 'family-state-required' };
   }
 
-  const normalized: WeeklyMenuItemInput[] = items
-    .filter(isJsonObject)
-    .map((item) => normalizeShoppingIngredient(item.name, item.grams))
-    .filter((item) => item.name && item.grams > 0)
-    .slice(0, 500);
+  const validation = normalizeWeeklyMenuItems(body.items);
+  if (validation.ok === false) return { kind: 'invalid', error: validation.error };
+  const normalized = validation.items;
 
   const createdAt = nowMs();
   const statements = [

@@ -2040,11 +2040,13 @@ legacy-ключ не используется для новой очереди �
   suite — 1369/1369, три typecheck, production build, API invariants и
   `git diff --check` прошли локально. CI #1616 на `47bb7d9` завершился success,
   включая E2E и rollback/CAS gate.
-- [x] Отклонять повреждённый `/api/shopping/bulk` целиком вместо записи только
-  валидных соседей; больше 500 позиций возвращает `TOO_MANY_ITEMS`, а пустые
-  имена сохраняют прежнюю no-op семантику. Route/use-case регрессии прошли 20/20,
-  root typecheck, API invariants и `git diff --check`; точный CI нового SHA
-  проверяется после публикации.
+- [x] Предотвратить частичные/усечённые пакетные записи в `/api/shopping/bulk`
+  и legacy `/api/weekly_menu/items`: повреждённые элементы и пакеты свыше 500
+  отклоняются целиком до D1 batch/delete; пустые отметки сохраняют no-op, а
+  явный пустой weekly `items: []` остаётся командой очистки.
+  Три целевых test-файла прошли 31/31, root typecheck, API/auth guards и
+  `git diff --check` прошли локально; точный CI новой ревизии проверяется после
+  публикации.
 - [x] Разделить unit, браузерную матрицу с синтетическим API и реальные
   staging-проверки. Unit и mock browser запускаются отдельными командами;
   CI использует только локальную mock-матрицу. `test:e2e:staging` требует
