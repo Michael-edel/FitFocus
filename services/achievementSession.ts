@@ -40,7 +40,10 @@ export async function requestAchievementJson(session: AchievementSession, contex
   const onAbort = () => requestController.abort();
   session.controller.signal.addEventListener('abort', onAbort, { once: true });
   if (session.controller.signal.aborted) requestController.abort();
-  const onHide = () => session.controller.abort();
+  const onHide = () => {
+    requestController.abort();
+    session.controller.abort();
+  };
   const removePageExit = listenForPageExit(onHide);
   try {
     await assertAchievementSession(session);
