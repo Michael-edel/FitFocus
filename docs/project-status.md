@@ -46,10 +46,11 @@ Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 приёмка опубликована в PR #93. Дополнительный сценарий повторного входа того же
 аккаунта с новой server session прошёл **3/3** на desktop Chromium/Firefox/WebKit:
 старая вкладка скрывает профильный черновик, новая сессия того же владельца
-восстанавливает его из локального cache без записи профиля. Сценарий расширен
-на семь desktop/Android/iPhone и PWA профилей; прошёл **7/7**. Результат
-опубликован в [`e91e0b0`](https://github.com/Michael-edel/FitFocus/commit/e91e0b03ecebc908baf6126f9f5cfcac87fd49d1)
-в PR #93; точный CI проверяется для актуального PR HEAD.
+восстанавливает его из локального cache без записи профиля; базовая проверка
+прошла **3/3** на desktop. Следующий коммит
+[`8cf1cd9`](https://github.com/Michael-edel/FitFocus/commit/8cf1cd9c92a0ceaccf0916cdfbfd4bed22cb90e2)
+снял desktop-only skip, и сценарий прошёл **7/7** на desktop/Android/iPhone и
+PWA профилях. Точный CI проверяется для актуального PR HEAD #93.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/

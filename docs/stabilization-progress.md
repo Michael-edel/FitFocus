@@ -87,12 +87,14 @@ iPhone PWA. Проверка опубликована в PR #93 коммитом
 добавляет в `e2e/ai-callback-account-switch.spec.ts` проверку черновика
 Settings при повторном входе того же Google-аккаунта с новой серверной сессией:
 старая вкладка скрывает форму, новая восстанавливает account-scoped черновик,
-а сохранённый профиль и список profile PUT остаются неизменными. Сценарий прошёл
-**7/7** на desktop, Android и iPhone/PWA профилях без retries
-(workers=1). `npm run typecheck`, `npm run build` и `git diff --check` прошли.
-Коммит опубликован в PR #93; точный CI проверяется на актуальном PR HEAD. Это
-проверка владения UI/cache; runtime-дефект не выявлен, остальные callbacks и
-P0.4 остаются открыты.
+а сохранённый профиль и список profile PUT остаются неизменными. Базовый тест
+прошёл **3/3** на desktop Chromium, Firefox и WebKit. Follow-up
+[`8cf1cd9`](https://github.com/Michael-edel/FitFocus/commit/8cf1cd9c92a0ceaccf0916cdfbfd4bed22cb90e2)
+снял desktop-only skip; сценарий прошёл **7/7** на desktop, Android и iPhone/PWA
+профилях без retries (workers=1). `npm run typecheck`, production build и
+`git diff --check` прошли. Тест опубликован в PR #93; точный CI проверяется на
+актуальном PR HEAD. Это проверка владения UI/cache; runtime-дефект не выявлен,
+остальные callbacks и P0.4 остаются открыты.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
