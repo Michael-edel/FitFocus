@@ -1,21 +1,28 @@
 # Стабилизация: проверяемые изменения
 
-## P0.4 — root notices привязаны к login-сессии, `236453b`, 19.10.2026
+## P0.4 — root UI и черновик регистрации привязаны к владельцу, `b405761`, 19.10.2026
 
 Продолжая аудит root state, нашёл ещё два сообщения без владельца: заметка
 синхронизации профиля и результат AI-адаптации веса оставались в памяти App после
 logout. Старое adaptation сообщение могло содержать персональную рекомендацию.
-Оба значения теперь используют `accountSessionRenderKey` вместе с paywall и
-другими root overlays; при выходе, смене аккаунта или новой login-сессии UI
-показывает пустое значение, а setters старого scope не принимают обновление.
+Оба значения используют `accountSessionRenderKey` вместе с paywall и другими
+root overlays; при выходе, смене аккаунта или новой login-сессии UI показывает
+пустое значение, а setters старого scope не принимают обновление.
 
-На code HEAD [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) прошли целевые unit-тесты
-`tests/account_scoped_ui.test.ts` — **11/11**, `npm run typecheck` (включая admin
-guards) и `git diff --check`. Тест проверяет скрытие profile-sync/adaptation
-сообщений при logout, смене аккаунта и повторном входе в новую сессию. Полный
-browser account-switch acceptance не запускался; точный CI опубликованного HEAD
-ещё не подтверждён. P0.4 остаётся открытым для остальных callbacks/cache и
-полного lifecycle.
+Проверка всех root state выявила ещё черновик регистрации с весом, ростом,
+медицинскими ограничениями, давлением, глюкозой и замерами. Он сохранялся в
+App после выхода. Теперь черновик принадлежит `googleMe.sub`: при смене Google
+identity открывается чистая форма с безопасными начальными значениями, старый
+setter также ограничен своим scope.
+
+На code HEAD [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373) целевые unit-тесты
+`tests/account_scoped_ui.test.ts` прошли **12/12**; `npm run typecheck` (включая
+admin guards) и `git diff --check` прошли. Unit проверяет скрытие profile-sync/
+adaptation сообщений при logout, смене аккаунта и повторном входе в новую
+сессию, а также сброс registration draft между Google identities. Полный browser
+account-switch acceptance не запускался; точный CI опубликованного HEAD ещё не
+подтверждён. P0.4 остаётся открытым для остальных callbacks/cache и полного
+lifecycle.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
