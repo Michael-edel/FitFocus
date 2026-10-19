@@ -5,14 +5,12 @@ on:
     branches:
       - main
       - dev
-      - feature/**
-      - fix/**
   pull_request:
 
 permissions:
   contents: read
 
-# A push to an open pull request triggers both events. Keep one current run per branch.
+# Feature/fix branches are validated by pull_request; push runs are reserved for main/dev.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
