@@ -1,4 +1,4 @@
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
@@ -1650,7 +1650,12 @@ test('held weekly report cannot write after the same account starts a new server
   }
 });
 
-test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+async function expectHeldFoodPhotoCannotWriteAfterAccountSwitch(
+  page: Page,
+  context: BrowserContext,
+  info: TestInfo,
+  uploadSelector: string,
+) {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1661,7 +1666,7 @@ test('held food photo analysis cannot write for account A after another tab sign
   await openApp(page, '/#nutrition');
   await expect(page).toHaveTitle(/FitFocus/);
   await waitForAccountOutboxIdle(page, accountA);
-  const upload = page.locator('input[type="file"][multiple]').first();
+  const upload = page.locator(uploadSelector).first();
   await expect(upload).toHaveCount(1);
   await upload.setInputFiles({
     name: 'meal.svg',
@@ -1718,6 +1723,16 @@ test('held food photo analysis cannot write for account A after another tab sign
   } finally {
     fixtureA.release();
   }
+}
+
+test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  await expectHeldFoodPhotoCannotWriteAfterAccountSwitch(page, context, info, 'input[type="file"][multiple]');
+});
+
+test('held native camera capture cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'),
+    'The native camera capture input is available on phone browser profiles.');
+  await expectHeldFoodPhotoCannotWriteAfterAccountSwitch(page, context, info, 'input[type="file"][capture]');
 });
 
 test('held food photo analysis cannot commit after the same account starts a new server session', async ({ page, context }, info) => {
