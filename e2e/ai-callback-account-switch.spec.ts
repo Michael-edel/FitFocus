@@ -2537,6 +2537,31 @@ test('an open paywall from account A is hidden after another tab activates accou
   await switched.page.screenshot({ path: info.outputPath('paywall-hidden-after-account-switch.png') });
 });
 
+test('an open mobile navigation menu from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-'), 'Mobile navigation account-switch acceptance runs in iPhone browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  await expect(page.getByText('Ещё разделы', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#dashboard');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('mobile-more-menu-hidden-after-account-switch.png') });
+});
+
 test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab food selection acceptance runs in desktop browser profiles.');
   const sharedEntryIdA = 'shared-food-entry-a';
