@@ -1295,6 +1295,8 @@ test('held plateau explanation cannot appear after the same account starts a new
     await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
       .toBe(reauthenticated.sid);
     await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByRole('button', { name: 'AI думает...', exact: true })).toHaveCount(0);
     await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
 
     const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);

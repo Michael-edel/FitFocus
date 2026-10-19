@@ -605,7 +605,7 @@ const App: React.FC = () => {
   });
 
   // Metabolic Adaptation States
-  const [adaptLoading, setAdaptLoading] = useState(false);
+  const { value: adaptLoading, setValue: setAdaptLoading } = useAccountScopedUiState(rootAccountSessionScope, false);
   const { value: adaptNote, setValue: setAdaptNote } = useAccountScopedUiState(rootAccountSessionScope, '');
   const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 

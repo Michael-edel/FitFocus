@@ -90,6 +90,13 @@ describe('account-scoped UI state visibility', () => {
     )).toEqual({ profileSync: null, adaptation: '' });
   });
 
+  it('hides an in-flight adaptation indicator after the login session changes', () => {
+    const loadingA = { scopeKey: 'account-a:session-1', value: true };
+
+    expect(getAccountScopedUiStateValue(loadingA, 'account-a:session-2', false)).toBe(false);
+    expect(getAccountScopedUiStateValue(loadingA, 'account-b:session-1', false)).toBe(false);
+  });
+
   it('does not show a health registration draft to a different Google identity', () => {
     const defaults = {
       weight: 70,
