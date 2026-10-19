@@ -52,6 +52,12 @@ Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 снял desktop-only skip, и сценарий прошёл **7/7** на desktop/Android/iPhone и
 PWA профилях. Точный CI проверяется для актуального PR HEAD #93.
 
+В коммите [`d124d6c`](https://github.com/Michael-edel/FitFocus/commit/d124d6cde085220c4b0be662d23d193688d793a5)
+индикатор генерации объяснения плато переведён на account/session scope. Целевой
+unit прошёл 13/13, повторный вход с удержанным ответом — 3/3 desktop-браузера;
+typecheck и production build прошли. До изменения межаккаунтный сбой не
+воспроизвёлся; это профилактика stale UI-state. Коммит готовится к публикации.
+
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
 push-status — 401 без redirect и cookie. Это preview, не выделенный staging;

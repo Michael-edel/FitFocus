@@ -742,6 +742,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     снял desktop-only skip, после чего сценарий прошёл 7/7 на desktop, Android и
     iPhone/PWA профилях. Typecheck, production build и diff check прошли. Точный CI
     проверяется для актуального PR HEAD #93. Другие callbacks/cache остаются открытыми.
+    Follow-up [`d124d6c`](https://github.com/Michael-edel/FitFocus/commit/d124d6cde085220c4b0be662d23d193688d793a5)
+    привязал индикатор генерации объяснения плато к account/session scope вместе
+    с adaptation notice. Целевой unit — 13/13; удержанный plateau response при
+    повторном входе прошёл 3/3 desktop E2E; typecheck, production build и diff check
+    прошли. Межаккаунтный UI-сбой до изменения не воспроизведён; это защита
+    stale UI-state. Точный CI ожидает push.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

@@ -96,6 +96,15 @@ Settings при повторном входе того же Google-аккаун�
 актуальном PR HEAD. Это проверка владения UI/cache; runtime-дефект не выявлен,
 остальные callbacks и P0.4 остаются открыты.
 
+Follow-up [`d124d6c`](https://github.com/Michael-edel/FitFocus/commit/d124d6cde085220c4b0be662d23d193688d793a5)
+привязал индикатор генерации объяснения плато `adaptLoading` к тому же
+account/session scope, что и adaptation notice. Unit проверка scope прошла
+**13/13**, удержанный plateau response после повторного входа — **3/3** на desktop
+Chromium/Firefox/WebKit. `npm run typecheck`, `npm run build` и
+`git diff --check` прошли. Межаккаунтный UI-сбой до изменения не воспроизвёлся;
+изменение закрывает риск stale loading state. Остальной аудит callbacks/cache и
+P0.4 остаются открытыми.
+
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
 `npm run test:e2e:staging` выполнен с временным origin
