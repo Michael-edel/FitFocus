@@ -340,8 +340,13 @@ session не меняет UI, профиль и outbox. Затем [`ebddd21`](h
 профилей: 7/7, включая четыре мобильных запуска. Затем
 [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff)
 расширил прямой success path анализа фото еды до 7/7 на семи профилях, включая
-четыре мобильных запуска. Матрица составляет 66 сценариев и 264 мобильных
-запуска. Полный P0.4/P0.5 lifecycle и точный CI нового HEAD остаются открытыми.
+четыре мобильных запуска. Follow-up
+[`e6f73f2`](https://github.com/Michael-edel/FitFocus/commit/e6f73f27208055ce51bb48899327c0fafc68db67)
+покрыл held AI response после фото, выбранного через mobile `input[capture]`:
+4/4 Android/iPhone browser/PWA прогона; исходный gallery-upload сценарий прошёл
+7/7 после выделения общего assert helper. Это Playwright file-input fixture,
+не запуск камеры ОС. Матрица составляет 67 сценариев и 268 мобильных запусков.
+Полный P0.4/P0.5 lifecycle и точный CI нового HEAD остаются открытыми.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

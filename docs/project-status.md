@@ -59,9 +59,12 @@ input (`label` с `input[type=file][capture]`), поэтому модальна�
 Затем [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff)
 расширил прямой success path анализа фото еды: 7/7 на семи профилях, включая
 4 мобильных запуска; дневник, история и usage записаны для активного аккаунта.
-Накопленная матрица составляет 66 сценариев и 264 мобильных запуска. CI #1788
-проверяет предыдущий опубликованный HEAD; точный CI нового follow-up будет после
-push.
+Затем [`e6f73f2`](https://github.com/Michael-edel/FitFocus/commit/e6f73f27208055ce51bb48899327c0fafc68db67)
+добавил mobile acceptance отдельного `input[capture]`: удержанный AI-ответ после
+переключения A → B не меняет данные ни одного аккаунта. Phone/PWA сценарий прошёл
+4/4, а исходная gallery-upload проверка после выделения общей проверки — 7/7 на
+всех профилях. Матрица составляет 67 сценариев и 268 мобильных запусков. Точный
+CI нового HEAD нужно подтвердить; системная камера и staging не проверялись.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

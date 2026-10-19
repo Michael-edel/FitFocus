@@ -7725,3 +7725,19 @@ usage активного аккаунта и отсутствие оставши
 не менялся; используется mock API. Матрица выросла до 66 сценариев и 264
 мобильных запусков. CI #1788 проверяет предыдущий опубликованный HEAD; точный CI
 этого follow-up ожидает push.
+
+## P0.4/P0.5 — mobile capture input account switch, [`e6f73f2`](https://github.com/Michael-edel/FitFocus/commit/e6f73f27208055ce51bb48899327c0fafc68db67), 19.10.2026
+
+Добавлен отдельный phone-only сценарий через `NutritionScreen` native
+`input[type=file][capture]`. Когда ответ food-photo AI удержан, тест активирует
+аккаунт B во второй вкладке и отпускает ответ аккаунта A; профиль, дневник,
+история, outbox и side-effect requests обоих владельцев остаются прежними.
+Новый сценарий прошёл 4/4 на Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`. Существующий gallery-upload сценарий после выделения
+общей проверки прошёл 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone
+browser/PWA профилях. Root typecheck, legacy queue/migration unit — 128/128 и
+`git diff --check` прошли. Playwright устанавливает синтетическое изображение
+в capture input; системная камера и физическое устройство не проверялись.
+Накопленная mobile account/session матрица — 67 сценариев и 268 запусков.
+Точный CI этого коммита ожидает публикации; полный P0.4/P0.5 lifecycle,
+staging и реальная camera/OAuth-приёмка остаются открытыми.
