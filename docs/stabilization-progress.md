@@ -7293,3 +7293,17 @@ Read-only smoke Cloudflare branch preview `fix-durable-outbox.fitfocus.pages.dev
 Точный CI #1679 для опубликованного `e469959` всё ещё выполняет browser tests;
 он не включает новый локальный E2E-сценарий. Отдельный HTTPS staging origin,
 полная callback-матрица, устройства и общий P0.5/P0.9 остаются открытыми.
+
+## P0.4 — account-switch для настроек PDF и поиска питания, `6f18903`, 19.10.2026
+
+Account-switch acceptance дополнен двумя UI cache-путями. Настройка PDF
+«Детально: лог еды» аккаунта A восстанавливается после reload, скрывается в
+устаревшей вкладке после активации B, а account-specific ключ A сохраняется;
+в B настройка остаётся выключенной. Поисковый запрос питания A также
+восстанавливается после reload, затем скрывается после смены владельца; кэш A
+не меняется, а B получает пустой поиск. Новые E2E-сценарии вошли в точный
+[CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952)
+на HEAD `6f18903`; полный workflow завершился success, включая guards, unit,
+typecheck, build, browser tests и rollback/CAS. Runtime-дефект в этих двух
+сценариях не воспроизведён. Это закрывает только две acceptance-проверки;
+общий аудит callbacks/cache и P0.4 остаются открытыми.

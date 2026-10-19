@@ -5,10 +5,10 @@
 Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
 `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
-[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полностью
-проверенный code HEAD `544f3f5` прошёл [CI #1696](https://github.com/Michael-edel/FitFocus/actions/runs/39199188429):
-audit, guards, 1454 unit tests / 216 файлов, 1110 browser passed / 311 skipped,
-три typecheck, build, rollback/CAS и сохранение артефактов успешны.
+[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний опубликованный
+HEAD `6f18903` прошёл точный [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952):
+audit, schema/privacy/auth/API guards, unit tests, три typecheck, build,
+browser tests, rollback/CAS и сохранение артефактов успешны.
 Документационный HEAD `9ba464b` повторно прошёл точный [CI #1698](https://github.com/Michael-edel/FitFocus/actions/runs/39202941991)
 с теми же успешными browser, rollback/CAS и release-артефактами.
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
@@ -695,12 +695,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
-  - [ ] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
+  - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
-    и сохранность ключа A. E2E добавлен; точный CI ожидает публикации.
-  - [ ] В browser acceptance проверить, что поисковый запрос дневника A
+    и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
+  - [x] В browser acceptance проверить, что поисковый запрос дневника A
     восстанавливается после reload, но скрыт в B, а исходный ключ A сохраняется.
-    E2E добавлен локально; дождаться CI после публикации.
+    E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
   - [x] Расширить account-switch acceptance дневника: после анализа еды в аккаунте A
     запись A сохраняется в его IndexedDB, остаётся скрытой в старой вкладке, не
     появляется в аккаунте B и не создаёт для B diary value. Сценарий прошёл 3/3
