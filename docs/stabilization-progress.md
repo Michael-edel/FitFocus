@@ -43,24 +43,37 @@ skipped**, dependency audit нашёл 0 уязвимостей; schema/privacy/
 Коммит [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
 проверяет мобильное меню «Ещё»: после открытия меню A другая вкладка активирует
 B, и содержимое меню исчезает в обеих вкладках. E2E прошёл **2/2** в `iphone-safari`
-и `iphone-pwa`; root typecheck и `git diff --check` прошли. Следующий локальный
-follow-up [`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
+и `iphone-pwa`; root typecheck и `git diff --check` прошли. Следующий коммит
+[`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
 расширил тот же сценарий на Android: **2/2** в `android-chrome` и
-`android-pwa-chrome`. Этот commit пока не опубликован. Точный
-[CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
-на опубликованном HEAD `cf81aab` ещё выполняется; его результат будет записан
-после завершения.
+`android-pwa-chrome`.
 
-Локальный кодовый follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+Коммит [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e21024b2bfc47e9bc0d5fe121a2a6a3606d)
 исправляет устаревшее замыкание `applyRemoteProfile`: callback захватывал setter
 profile-sync notice до появления login scope, поэтому данные профиля обновлялись,
 а сообщение терялось. Setter теперь входит в зависимости callback. Новые E2E
 проверяют reload облачного профиля A, показ «Профиль обновлён из облака.» и
 скрытие после переключения на B; отдельный сценарий проверяет adaptation notice.
 Оба сценария прошли **6/6** на desktop Chromium, Firefox и WebKit, typecheck и
-`git diff --check` прошли локально. Commit пока не опубликован и GitHub CI для него
-не запускался. Browser acceptance registration draft и других root surfaces
-остаётся открытой; P0.4 не закрыт.
+`git diff --check` прошли. Оба коммита опубликованы в draft PR #93.
+
+Точный [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+для `cf81aab` отменён при push нового HEAD. [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
+проверяет `f3e5b3775a6fd59bee276da243713bc011b20b68`: guards и unit suite прошли,
+browser tests выполняются. Локально дополнительно прошли
+`npm run test:unit -- tests/account_scoped_ui.test.ts` (**12/12**),
+`npm run typecheck`, `npm run build` и `git diff --check`. Browser acceptance
+registration draft ещё не входила в опубликованный `f3e5b37`; новый локальный
+результат и остающиеся root callbacks описаны ниже. P0.4 не закрыт.
+
+Новый локальный follow-up добавляет browser guard для регистрации. Пока активная
+IndexedDB-сессия не подтверждена, поля черновика скрыты; при смене аккаунта или
+сессионного tuple во второй вкладке регистрация блокируется с сообщением обновить
+страницу. Новый E2E сначала воспроизвёл доступность полей после входа B, затем
+прошёл **3/3** на desktop Chromium, Firefox и WebKit. `npm run typecheck`,
+account-scoped unit **12/12** и `git diff --check` проходят. Это пока локальный
+follow-up без commit и GitHub CI; P0.4 остаётся открытым по остальным root
+callbacks.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 

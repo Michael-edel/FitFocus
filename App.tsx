@@ -140,7 +140,7 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
-import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox, type OutboxCommitGuard, type OutboxReadGuard, type OutboxWriteGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -340,6 +340,88 @@ const App: React.FC = () => {
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
+  const [registrationSessionState, setRegistrationSessionState] = useState<{
+    identity: string | null;
+    status: 'checking' | 'active' | 'unavailable' | 'changed';
+  }>({ identity: null, status: 'checking' });
+  const registrationSessionGuardRef = useRef<{
+    identity: string;
+    sessionKey: string | null;
+    invalid: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const identity = authState === 'register' ? googleMe?.sub : undefined;
+    registrationSessionGuardRef.current = null;
+    if (!identity) {
+      setRegistrationSessionState({ identity: null, status: 'checking' });
+      return;
+    }
+
+    let disposed = false;
+    let checking = false;
+    const setSessionStatus = (status: 'checking' | 'active' | 'unavailable' | 'changed') => {
+      setRegistrationSessionState(previous => previous.identity === identity && previous.status === status
+        ? previous
+        : { identity, status });
+    };
+    setSessionStatus('checking');
+    const outbox = new DurableOutbox();
+    const refreshSession = () => {
+      if (checking) return;
+      checking = true;
+      void outbox.sessionState()
+        .then(({ active }) => {
+          if (disposed) return;
+          let guard = registrationSessionGuardRef.current;
+          if (!guard || guard.identity !== identity) {
+            guard = { identity, sessionKey: null, invalid: false };
+            registrationSessionGuardRef.current = guard;
+          }
+          if (guard.invalid) {
+            setSessionStatus('changed');
+            return;
+          }
+
+          const sessionKey = active
+            ? JSON.stringify([active.accountId, active.serverSessionId ?? null, active.sessionEpoch])
+            : null;
+          if (!active || active.accountId !== identity || !sessionKey
+            || (guard.sessionKey !== null && guard.sessionKey !== sessionKey)) {
+            guard.invalid = true;
+            setSessionStatus('changed');
+            return;
+          }
+
+          guard.sessionKey = sessionKey;
+          setSessionStatus('active');
+        })
+        .catch(() => {
+          if (!disposed) setSessionStatus('unavailable');
+        })
+        .finally(() => { checking = false; });
+    };
+
+    refreshSession();
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    } catch {
+      // IndexedDB polling and focus listeners remain as fallbacks.
+    }
+    channel?.addEventListener('message', refreshSession);
+    const interval = window.setInterval(refreshSession, 2_000);
+    const refreshWhenVisible = () => { if (!document.hidden) refreshSession(); };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      channel?.removeEventListener('message', refreshSession);
+      channel?.close();
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [authState, googleMe?.sub]);
   const authIdentityRef = useRef(googleMe?.sub);
   authIdentityRef.current = googleMe?.sub;
   const isCurrentProfileSession = useMemo(() => {
@@ -1820,6 +1902,22 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       />
     </React.Suspense>
   );
+
+  if (authState === 'register' && registrationSessionState.identity === googleMe?.sub
+    && registrationSessionState.status !== 'active') {
+    const registrationSessionMessage = registrationSessionState.status === 'checking'
+      ? 'Проверяем активную сессию…'
+      : registrationSessionState.status === 'unavailable'
+        ? 'Не удалось подтвердить активную сессию. Данные регистрации скрыты; повторите вход.'
+        : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
+    return (
+      <div className="min-h-[100dvh] bg-slate-950 px-4 flex items-center justify-center text-slate-200">
+        <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
+          {registrationSessionMessage}
+        </div>
+      </div>
+    );
+  }
 
   if (authState === 'register') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>

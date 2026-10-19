@@ -23,18 +23,21 @@ Chromium, Firefox и WebKit (`workers=1`, `retries=0`). Последующий �
 [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
 добавил мобильное меню «Ещё»: оно закрылось в обеих вкладках после активации B,
 2/2 на iPhone Safari и iPhone PWA. Root typecheck и diff check прошли локально.
-Точный [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
-проверяет текущий HEAD и ожидает завершения. Late adaptation response уже покрыт
-E2E. Локальный follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+Старый [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+для `cf81aab` отменён при push нового HEAD. Точный [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
+проверяет опубликованный `f3e5b3775a6fd59bee276da243713bc011b20b68`; guards и
+unit suite прошли, browser tests ещё выполняются. Late adaptation response уже
+покрыт E2E. Коммит [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e21024b2bfc47e9bc0d5fe121a2a6a3606d)
 исправил callback, который терял profile-sync notice после reload из облака, и
 добавил browser acceptance profile-sync и adaptation notices — 6/6 на desktop
-Chromium, Firefox и WebKit; typecheck прошёл. Он пока не опубликован и не входит
-в CI #1725. Следующий локальный follow-up
+Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 [`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
 расширил mobile menu acceptance до Android; сценарий прошёл 2/2 на
-`android-chrome` и `android-pwa-chrome`. Оба локальных коммита ждут push и CI
-после завершения #1725. Browser acceptance registration draft и других root
-surfaces остаётся открытой.
+`android-chrome` и `android-pwa-chrome`. Новый локальный follow-up закрыл
+registration-draft browser acceptance: смена активной account session в другой
+вкладке скрывает медицинские поля, пока сессия не совпадёт с Google identity; 3/3
+на desktop Chromium/Firefox/WebKit. Follow-up ещё не опубликован. Другие root
+surfaces остаются открытыми.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
