@@ -2,16 +2,16 @@ import type { UserProfile } from '../types';
 import { isUserProfilePayload } from '../profileValidation';
 import { UserStateRepository } from './userStateRepository';
 import { reportStateSaveIssue } from './stateSaveStatus';
-import type { OutboxOperation, OutboxReadGuard } from './durableOutbox';
+import type { OutboxLocalCommitGuard, OutboxOperation, OutboxReadGuard } from './durableOutbox';
 
 /** Registration creates an intent with baseVersion 0; an existing local profile is never adopted as its base. */
-export async function createProfileIntent(profile: UserProfile, repository: UserStateRepository): Promise<OutboxOperation> {
+export async function createProfileIntent(profile: UserProfile, repository: UserStateRepository, guard: OutboxLocalCommitGuard): Promise<OutboxOperation> {
   if (!isUserProfilePayload(profile) || profile.id !== repository.accountId || profile.version !== 0) throw new Error('PROFILE_INVALID_CREATE');
   const snapshot = await repository.observe('profile');
   if (snapshot.value !== null || snapshot.revision !== 0 || snapshot.confirmedVersion !== 0 || await repository.hasPending('profile')) {
     throw new Error('PROFILE_ALREADY_EXISTS');
   }
-  const operation = await repository.writeJson('profile', profile);
+  const operation = await repository.writeLocalJson('profile', profile, guard);
   if (operation.status === 'conflicted') throw new Error('PROFILE_CREATE_CONFLICT');
   return operation;
 }

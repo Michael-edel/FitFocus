@@ -765,6 +765,17 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     на desktop, Android, iPhone и PWA профилях; root typecheck, production build
     и diff check прошли локально на рабочем дереве поверх `42683ae`. Точный CI
     этой ревизии нужно подтвердить перед слиянием.
+    - [x] Закрыть гонку между проверкой регистрации и первым profile commit:
+      перед записью перечитать активную IDB-сессию и передать её в
+      `OutboxLocalCommitGuard`, чтобы транзакция атомарно сверила accountId,
+      serverSessionId и sessionEpoch. При смене сессии профиль, outbox operation
+      и AI-запрос не создаются; обычная sender pause запись не блокирует.
+      Unit-регрессия проверяет переключение сессии после чтения guard — 22/22
+      registration unit. Две E2E спеки прошли 28/28 без retries на семи desktop,
+      Android и iPhone/PWA профилях при workers=1; отдельный параллельный прогон
+      дал один WebKit timeout, который не повторился ни в изолированном тесте,
+      ни в последовательной матрице. Root/storage typecheck, auth-scope guard,
+      production build и diff check прошли. Точный CI зафиксировать после push.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

@@ -141,7 +141,7 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
-import { ACTIVE_SESSION_CHANNEL, DurableOutbox, type OutboxCommitGuard, type OutboxReadGuard, type OutboxWriteGuard } from './storage/durableOutbox';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox, type OutboxCommitGuard, type OutboxLocalCommitGuard, type OutboxReadGuard, type OutboxWriteGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -1565,6 +1565,24 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         && isRegistrationSessionReady(accountId, registrationSessionStateRef.current)
         && sessionGuard?.identity === accountId && sessionGuard.sessionKey !== null && !sessionGuard.invalid;
     };
+    const getProfileWriteGuard = async (): Promise<OutboxLocalCommitGuard | null> => {
+      if (!accountId || !isCurrent()) return null;
+      const { active } = await new DurableOutbox().sessionState();
+      if (!isCurrent() || !active || active.accountId !== accountId
+        || typeof active.serverSessionId !== 'string' || !/^[a-f0-9]{64}$/.test(active.serverSessionId)
+        || !active.sessionEpoch) return null;
+      const sessionGuard = registrationSessionGuardRef.current;
+      const sessionKey = JSON.stringify([active.accountId, active.serverSessionId, active.sessionEpoch]);
+      if (sessionGuard?.identity !== accountId || sessionGuard.invalid || sessionGuard.sessionKey !== sessionKey) return null;
+      return {
+        localCommitGuard: {
+          accountId,
+          serverSessionId: active.serverSessionId,
+          sessionEpoch: active.sessionEpoch,
+        },
+        canCommit: isCurrent,
+      };
+    };
     try {
       await runRegistrationFlow({
         regData,
@@ -1580,6 +1598,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         loginAsUser: (user, readGuard) => loginAsUser(user, googleMe, isCurrent, readGuard),
         controller,
         isCurrentSession: isCurrent,
+        getProfileWriteGuard,
         setActiveTab,
         setPlanIntroOpen,
         fetchImpl: fetch,

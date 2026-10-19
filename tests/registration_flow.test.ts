@@ -8,9 +8,12 @@ import { DurableOutbox } from '../storage/durableOutbox';
 import { UserStateRepository } from '../storage/userStateRepository';
 import { userStateDatabase } from '../storage/stateDatabase';
 import { type AiSession, prepareAiSession } from '../services/aiSession';
+import type { OutboxLocalCommitGuard, OutboxReadGuard } from '../storage/durableOutbox';
 import { isRegistrationSessionReady } from '../features/auth/registrationSession';
 
 const account = 'registration-owner';
+const registrationSessionId = 'a'.repeat(64);
+let registrationReadGuard: OutboxReadGuard;
 
 describe('registration session gate', () => {
   it('fails closed until the exact identity has an active session', () => {
@@ -24,25 +27,30 @@ describe('registration session gate', () => {
 });
 
 function deps() {
-  const sid = 'a'.repeat(64);
   return { regData: { name: 'Test User', gender: Gender.FEMALE, weight: 72, height: 170, age: 32,
     activityLevel: ActivityLevel.MODERATELY_ACTIVE, goal: Goal.LOSS, targetWeight: 65, plan: 'free' as const },
     regNameValid: true, allUsersCount: 0, requireInvite: false, inviteCode: '',
     googleMe: { sub: account, email: 'test@example.test' }, isCurrentSession: () => true,
+    getProfileWriteGuard: vi.fn(async (): Promise<OutboxLocalCommitGuard> => ({
+      localCommitGuard: {
+        accountId: registrationReadGuard.accountId,
+        serverSessionId: registrationReadGuard.serverSessionId,
+        sessionEpoch: registrationReadGuard.sessionEpoch,
+      },
+      canCommit: () => true,
+    })),
     setPlanError: vi.fn(), setLastAiAction: vi.fn(), setDevPlanOverride: vi.fn(),
     generatePersonalPlan: vi.fn<(user: UserProfile, session: AiSession) => Promise<UserProfile['aiPlan']>>(async () => undefined), loginAsUser: vi.fn(async () => {}),
     prepareSession: async (_id: string, controller: AbortController, isCurrent: () => boolean, options: Parameters<typeof prepareAiSession>[3] = {}) => {
       expect(options.allowInitialSession).toBe(true);
       const outbox = new DurableOutbox();
-      const guard = await outbox.acceptReadSession(account, sid, 0);
-      if (!guard) throw new Error('test session setup failed');
-      return { guard, controller, isCurrentSession: isCurrent, outbox } as AiSession;
+      return { guard: registrationReadGuard, controller, isCurrentSession: isCurrent, outbox } as AiSession;
     },
     setAllUsers: vi.fn(), setCurrentUser: vi.fn(), setAuthState: vi.fn(),
     setActiveTab: vi.fn(), setPlanIntroOpen: vi.fn(),
     fetchImpl: vi.fn<typeof fetch>(async () => { throw new Error('offline'); }) };
 }
-beforeEach(() => {
+beforeEach(async () => {
   userStateDatabase.close(); vi.stubGlobal('indexedDB', new IDBFactory());
   for (const name of ['localStorage', 'sessionStorage']) {
     const values = new Map<string, string>();
@@ -50,6 +58,9 @@ beforeEach(() => {
       setItem: (k: string, v: string) => { values.set(k, v); }, removeItem: (k: string) => { values.delete(k); },
       get length() { return values.size; }, key: (i: number) => [...values.keys()][i] ?? null });
   }
+  const guard = await new DurableOutbox().acceptReadSession(account, registrationSessionId, 0);
+  if (!guard) throw new Error('test session setup failed');
+  registrationReadGuard = guard;
 });
 afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -86,6 +97,30 @@ describe('durable registration', () => {
     expect(d.generatePersonalPlan).not.toHaveBeenCalled(); expect(d.loginAsUser).not.toHaveBeenCalled();
     expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringMatching(/локальн|устройств/i));
     expect((await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value).toBeNull();
+  });
+  it('rejects the profile commit if IndexedDB changes sessions after the guard is captured', async () => {
+    const d = deps();
+    d.getProfileWriteGuard = vi.fn(async () => {
+      const outbox = new DurableOutbox();
+      const captured = await outbox.sessionState();
+      await outbox.acceptReadSession('other-account', 'b'.repeat(64), captured.fence);
+      return {
+        localCommitGuard: {
+          accountId: registrationReadGuard.accountId,
+          serverSessionId: registrationReadGuard.serverSessionId,
+          sessionEpoch: registrationReadGuard.sessionEpoch,
+        },
+        canCommit: () => true,
+      };
+    });
+
+    await runRegistrationFlow(d);
+
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(d.setPlanError).toHaveBeenLastCalledWith('Сессия изменилась. Повторите вход перед созданием профиля.');
+    expect(await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).toMatchObject({ value: null, revision: 0 });
+    expect(await new DurableOutbox().list(account)).toEqual([]);
   });
   it('keeps the first durable intent and ignores an AI result after logout', async () => {
     let current = true; const d = deps(); d.isCurrentSession = () => current;
