@@ -216,6 +216,33 @@ describe('bounded JSON body guards on family and shopping routes', () => {
     expect(db.batches).toHaveLength(0);
   });
 
+  it('rejects a malformed shopping bulk member instead of committing its valid neighbor', async () => {
+    const db = makeDb();
+    const context: ShoppingBulkContext = {
+      request: await authedJsonRequest(
+        'https://fitfocus.test/api/shopping/bulk',
+        'PATCH',
+        JSON.stringify({
+          week_start: '2026-06-22',
+          updates: [
+            { ingredient_name: 'Овсянка', checked: true },
+            null,
+          ],
+        }),
+      ),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+    };
+    const response = await patchShoppingBulk(context);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('rejects oversized shopping check bodies before writes', async () => {
     const db = makeDb();
     const context: ShoppingCheckContext = {
