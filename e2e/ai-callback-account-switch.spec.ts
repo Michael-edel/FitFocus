@@ -3403,8 +3403,7 @@ test('WIS share completion from a retired session cannot restore its notice afte
   }
 });
 
-test('health report PDF is not downloaded when the account changes during font loading', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The account-switch PDF download acceptance runs in desktop browser profiles.');
+test('health report PDF is not downloaded when the account changes during font loading', async ({ page, context }) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));

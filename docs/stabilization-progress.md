@@ -7639,3 +7639,15 @@ Chromium/Firefox/WebKit — 7/7 (`workers=1,retries=0`). Проверяется 
 account/session матрица составляет 55 сценариев и 220 запусков. Точный CI
 follow-up ожидает push; CI предыдущего опубликованного HEAD продолжает
 выполняться.
+
+## P0.4/P0.5 — мобильная приёмка позднего PDF download, 19.10.2026
+
+Снят desktop-only skip с account-switch теста health-report PDF: запрос шрифта
+удерживается после нажатия экспорта, в другой вкладке активируется аккаунт B,
+после чего старый обработчик отпускается. Ни desktop, ни mobile не инициируют
+скачивание отзываемой сессии. Мобильная часть прошла 4/4 на Android Chrome/PWA и
+iPhone Safari/PWA; вместе с предыдущими desktop Chromium/Firefox/WebKit
+полная матрица составляет 7/7 (`workers=1,retries=0`). Production-код не
+менялся; общий account/session прогон вырос до 56 сценариев и 224 мобильных
+запусков. Точный CI follow-up ожидает push; CI предыдущего опубликованного HEAD
+продолжает выполняться.

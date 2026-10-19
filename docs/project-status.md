@@ -33,8 +33,10 @@ lifecycle сценария (смена аккаунта, reload и logout/login)
 мобильных/PWA запусков. Bulk move/delete дневника прошёл 7/7 на desktop и
 мобильных/PWA профилях, включая четыре мобильных запуска. WIS-share callback
 после reactivation тоже прошёл 7/7, включая четыре мобильных запуска. В сумме
-расширено 55 account/session сценариев и выполнено 220 мобильных запусков;
-точный CI текущего HEAD ещё не завершён.
+расширено 55 account/session сценариев и выполнено 220 мобильных запусков.
+PDF account-switch acceptance прошёл 7/7, включая четыре мобильных/PWA запуска;
+теперь покрыто 56 сценариев и 224 мобильных запуска. Точный CI текущего HEAD
+ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)
