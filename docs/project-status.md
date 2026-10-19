@@ -104,8 +104,11 @@ desktop/mobile/PWA профилях. Root typecheck и diff check прошли. 
 `serverSessionId`. Проверки profile/state/outbox, сетевых writes, achievement
 и UI прошли 7/7 в каждом сценарии на семи desktop/mobile/PWA профилях
 (`workers=1,retries=0`). Исправлена только тестовая предпосылка и teardown;
-production-код не менялся. Точный CI #1794 для `aee0a6c` ещё выполняется и не
-включает новые тесты; CI follow-up запускается после push.
+production-код не менялся. CI #1794 на `aee0a6c` отменён при push follow-up.
+Точный [CI #1796](https://github.com/Michael-edel/FitFocus/actions/runs/39314354105)
+на `8f06da2` завершился success: 1462 unit tests / 216 файлов, 1459 browser
+passed / 60 skipped (1 час), audit/guards, три typecheck, build, 23 HTTP/D1
+rollback/CAS checks и оба артефакта прошли; оба новых сценария включены.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

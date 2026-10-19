@@ -390,8 +390,12 @@ Profile/state/outbox, writes, achievement и UI не изменились; ка�
 прошёл 7/7 на всех desktop/mobile/PWA профилях без retries. Локальный
 `ECONNREFUSED` при раннем закрытии вкладки устранён передачей очистки общей
 Playwright fixture; повторная матрица прошла без proxy ошибки. Production-код
-не менялся. CI #1794 для `aee0a6c` не содержит этих тестов; точный CI нового
-SHA требуется после push.
+не менялся. CI #1794 для `aee0a6c` отменён при публикации follow-up. Точный
+[CI #1796](https://github.com/Michael-edel/FitFocus/actions/runs/39314354105)
+на `8f06da2` прошёл: 1462 unit tests / 216 файлов, 1459 browser passed / 60
+skipped (1 час), audit/guards, три typecheck, build, 23 HTTP/D1 проверки
+rollback/CAS и сохранение browser diagnostics и rollback artifact. Оба новых
+сценария вошли в полный CI.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

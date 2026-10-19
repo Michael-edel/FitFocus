@@ -32,9 +32,13 @@ Android Chrome/PWA и iPhone Safari/PWA, `workers=1,retries=0`.
 показывала loading screen. После переноса assertion к проверке позднего ответа
 тест прошёл. В первом same-account прогоне ручной close страницы вызвал локальный
 Vite proxy `ECONNREFUSED`; он убран, а повторная семипрофильная матрица прошла
-без proxy ошибки. Production-код не менялся. Точный CI #1794 для `aee0a6c` ещё
-проверяет предыдущий SHA и не включает эти тесты; CI новой ревизии ожидает push.
-Реальные OAuth, BFCache и staging остаются отдельными открытыми gates.
+без proxy ошибки. Production-код не менялся. CI #1794 на `aee0a6c` отменён при
+push follow-up. Точный [CI #1796](https://github.com/Michael-edel/FitFocus/actions/runs/39314354105)
+на `8f06da2` завершился success: 1462 unit tests / 216 файлов, 1459 browser
+passed / 60 skipped (1 час), audit/guards, три typecheck, build, 23 HTTP/D1
+rollback/CAS проверки и сохранение browser diagnostics и rollback artifact.
+Оба новых сценария включены в этот запуск. Реальные OAuth, BFCache и staging
+остаются отдельными открытыми gates.
 
 ## P0.6 — фото прогресса после повторного входа в ту же учётную запись, [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393), 19.10.2026
 
