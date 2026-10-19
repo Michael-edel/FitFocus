@@ -754,7 +754,7 @@ const App: React.FC = () => {
   });
   const [versionInfoOpen, setVersionInfoOpen] = useState(false);
 
-  const [planError, setPlanError] = useState<string | null>(null);
+  const { value: planError, setValue: setPlanError } = useAccountScopedUiState<string | null>(registrationScope, null);
 
   // Cinematic AI activation steps
   const ACTIVATION_TOTAL_MS = 3200;
