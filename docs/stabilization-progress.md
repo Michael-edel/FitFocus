@@ -59,8 +59,7 @@ profile-sync notice до появления login scope, поэтому данн
 
 Точный [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
 для `cf81aab` отменён при push нового HEAD. [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
-проверяет `f3e5b3775a6fd59bee276da243713bc011b20b68`: guards и unit suite прошли,
-browser tests выполняются. Локально дополнительно прошли
+для `f3e5b37` также отменён при следующем push. Локально дополнительно прошли
 `npm run test:unit -- tests/account_scoped_ui.test.ts` (**12/12**),
 `npm run typecheck`, `npm run build` и `git diff --check`. Browser acceptance
 registration draft ещё не входила в опубликованный `f3e5b37`; новый локальный
@@ -74,8 +73,15 @@ IndexedDB-сессия не подтверждена, поля черновик�
 account-scoped unit **12/12** и `git diff --check` проходят. Изменение опубликовано
 в коммите [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
 в PR #93. Точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
-запущен и устанавливает Playwright-браузеры; CI #1727 для предыдущего `f3e5b37`
-ещё выполняет browser tests. P0.4 остаётся открытым по остальным root callbacks.
+отменён следующим push; [CI #1732](https://github.com/Michael-edel/FitFocus/actions/runs/39239523175)
+проверяет предыдущий HEAD `2563dc8`, без мобильного расширения. P0.4 остаётся
+открытым по остальным root callbacks.
+
+Следующий локальный E2E follow-up удалил ограничение только desktop-проектами для
+`registration-account-switch.spec.ts`. Межвкладочная IndexedDB-проверка прошла
+**7/7** на трёх desktop engines, Android Chrome/PWA Chrome, iPhone Safari и
+iPhone PWA. Это добавление не входит в опубликованный HEAD `2563dc8` или CI #1732;
+после публикации потребуется новый exact-head CI.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 

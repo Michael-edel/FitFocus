@@ -93,7 +93,6 @@ async function activeAccount(page: Page): Promise<string | null> {
 }
 
 test('a registration draft is hidden when another tab activates a different Google account', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Registration identity-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });

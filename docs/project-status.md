@@ -24,9 +24,8 @@ Chromium, Firefox и WebKit (`workers=1`, `retries=0`). Последующий �
 добавил мобильное меню «Ещё»: оно закрылось в обеих вкладках после активации B,
 2/2 на iPhone Safari и iPhone PWA. Root typecheck и diff check прошли локально.
 Старый [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
-для `cf81aab` отменён при push нового HEAD. Точный [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
-проверяет опубликованный `f3e5b3775a6fd59bee276da243713bc011b20b68`; guards и
-unit suite прошли, browser tests ещё выполняются. Late adaptation response уже
+для `cf81aab` отменён при push нового HEAD. [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
+для `f3e5b37` также отменён при следующем push. Late adaptation response уже
 покрыт E2E. Коммит [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e21024b2bfc47e9bc0d5fe121a2a6a3606d)
 исправил callback, который терял profile-sync notice после reload из облака, и
 добавил browser acceptance profile-sync и adaptation notices — 6/6 на desktop
@@ -38,7 +37,14 @@ Chromium, Firefox и WebKit; typecheck прошёл. Коммит
 добавил registration-draft account-switch guard: смена активной сессии в другой
 вкладке скрывает медицинские поля, пока сессия не совпадёт с Google identity; E2E
 прошёл 3/3 на desktop Chromium/Firefox/WebKit. Точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
-запущен; сейчас устанавливает Playwright-браузеры. Другие root surfaces остаются открытыми.
+отменён следующим push. [CI #1732](https://github.com/Michael-edel/FitFocus/actions/runs/39239523175)
+проверяет предыдущий HEAD `2563dc8`; новая мобильная приёмка в него не входит.
+Другие root surfaces остаются открытыми.
+Локальный follow-up снял desktop-only skip с registration account-switch E2E;
+сценарий прошёл **7/7** на семи desktop/Android/iPhone и PWA профилях. Эта
+расширенная приёмка пока не опубликована; CI #1732 проверяет предыдущий HEAD
+`2563dc8` и не включает новые мобильные случаи. Точный CI нового SHA проверю
+после публикации.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
