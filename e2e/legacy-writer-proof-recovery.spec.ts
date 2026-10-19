@@ -13,6 +13,7 @@ type ProbeWindow = Window & {
   __proofRecoveryDatabase?: IDBDatabase;
   __proofRecoveryNextProbe?: (probe: { challengeId: string; atMs: number }) => void;
   __proofRecoveryLastBlockedProbe?: { challengeId: string; atMs: number };
+  __proofRecoverySelectedProbe?: { challengeId: string; atMs: number };
 };
 
 async function preparePage(page: Page, blocked: boolean) {
@@ -34,6 +35,7 @@ async function preparePage(page: Page, blocked: boolean) {
         event.stopImmediatePropagation();
         const nextProbe = control.__proofRecoveryNextProbe;
         delete control.__proofRecoveryNextProbe;
+        if (nextProbe) control.__proofRecoverySelectedProbe = probe;
         nextProbe?.(probe);
       }
     }, { capture: true });
@@ -115,7 +117,9 @@ test(`a real writer proof recovers after a same-build tab stops withholding prob
         // Persist evidence in the old origin so the surviving page can read it.
         window.addEventListener('beforeunload', () => {
           localStorage.setItem('fitfocus.e2e.proof-navigation', JSON.stringify({
-            probe: control.__proofRecoveryLastBlockedProbe, unloadAtMs: performance.now(),
+            probe: control.__proofRecoverySelectedProbe,
+            lastBlockedProbe: control.__proofRecoveryLastBlockedProbe,
+            unloadAtMs: performance.now(),
           }));
         }, { once: true });
         return new Promise<{ challengeId: string; atMs: number }>(resolve => {
@@ -126,10 +130,13 @@ test(`a real writer proof recovers after a same-build tab stops withholding prob
       await blockedPage.goto('about:blank');
       const navigation = await currentPage.evaluate(() =>
         JSON.parse(localStorage.getItem('fitfocus.e2e.proof-navigation') ?? 'null') as {
-          probe: { challengeId: string; atMs: number }; unloadAtMs: number;
+          probe: { challengeId: string; atMs: number };
+          lastBlockedProbe: { challengeId: string; atMs: number };
+          unloadAtMs: number;
         } | null);
       expect(navigation).not.toBeNull();
       expect(navigation!.probe.challengeId).toBe(probe.challengeId);
+      expect(navigation!.lastBlockedProbe.atMs).toBeGreaterThanOrEqual(probe.atMs);
       const elapsed = navigation!.unloadAtMs - probe.atMs;
       // This measures page-side ordering only. The worker starts its own timer
       // before delivery, so it does not prove that the worker still awaits this reply.
