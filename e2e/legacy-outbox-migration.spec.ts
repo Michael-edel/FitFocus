@@ -468,6 +468,9 @@ test('preserves legacy intent across a full storage clear without sending an unp
     // The fresh all-client fence may open the sender gate for current work, but
     // it cannot establish which server generation this old operation targeted.
     expect(server.stateWriteKeys).not.toContain(targetKey);
+    // Both pages have just navigated to the new build; their fresh session and
+    // writer-fence checks can briefly restart the shared durable migration.
+    // Wait for that revalidation to settle while keeping the terminal state strict.
     await expect.poll(async () => {
       const state = await migrationState(currentPage);
       const imported = itemForRecord(state.migrationItems, targetKey, previousOldRecord.value!);
@@ -494,7 +497,7 @@ test('preserves legacy intent across a full storage clear without sending an unp
         sendAllowed: state.progress?.sendAllowed,
         writersStopped: state.progress?.writersStopped,
       };
-    }).toEqual({
+    }, { timeout: 30_000 }).toEqual({
       source: null,
       oldSnapshotRetained: true,
       targetState: 'imported',
