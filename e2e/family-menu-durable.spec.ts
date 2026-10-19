@@ -389,6 +389,10 @@ test('a delayed family server preview after same-account reauthentication cannot
     const reauthenticatedPage = await context.newPage();
     const reauthenticatedSession = { id: 'google-e2e-sub', sid: 'f'.repeat(64) };
     const errorsReauthenticated = await openSwitchAccount(reauthenticatedPage, reauthenticatedSession);
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: reauthenticatedSession.id,
+      serverSessionId: reauthenticatedSession.sid,
+    });
     const currentSession = await activeSessionIdentity(reauthenticatedPage);
     expect(currentSession).toMatchObject({
       accountId: reauthenticatedSession.id,

@@ -644,6 +644,7 @@ test('ignores a late response from an expired sender after another tab acknowled
   await verifiedServer(page, server, options);
   await openApp(page, '/#settings');
   await page.clock.setFixedTime(await page.evaluate(() => Date.now()));
+  retryTab = await context.newPage();
 
   try {
     await page.getByRole('button', { name: /^Светлая/ }).click();
@@ -654,7 +655,6 @@ test('ignores a late response from an expired sender after another tab acknowled
     expect(original).toMatchObject({ status: 'sending', type: 'put' });
 
     options.settingsSuccessGate = { started: markRetryStarted, wait: retryWait };
-    retryTab = await context.newPage();
     await mockApp(retryTab, { session: 'app' });
     await verifiedServer(retryTab, server, options);
     await retryTab.clock.setFixedTime((original.attempt?.startedAtMs ?? 0) + 30_001);

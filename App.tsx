@@ -880,7 +880,7 @@ const App: React.FC = () => {
 
   const loginAsUser = useCallback(async (
     user: UserProfile,
-    authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
+    authUser: null | { sub?: string; email?: string; picture?: string },
     isCurrent: () => boolean = () => true,
     readGuard?: OutboxReadGuard,
   ) => {
@@ -916,7 +916,7 @@ const App: React.FC = () => {
     hasPendingProfileChangesRef.current = pendingProfile;
     setProfileSyncState(pendingProfile ? 'saving' : 'idle');
     setLastProfileSyncAt(null);
-  }, [googleMe?.sub, googleMe?.email, googleMe?.picture]);
+  }, []);
 
 
   const applyRemoteProfile = useCallback((profile: UserProfile) => {

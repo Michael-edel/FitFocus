@@ -779,6 +779,7 @@ test('AI Council discards its held answer after the same account starts a new se
     if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
   });
   const fixtureA = await installAccountApi(page, state, 'council_chairman');
+  const reauthenticatedPage = await context.newPage();
   await openApp(page, '/#council');
   await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
@@ -797,7 +798,6 @@ test('AI Council discards its held answer after the same account starts a new se
   const reauthenticated = { id: accountA.id, sid: 'e'.repeat(64) };
   state.current = reauthenticated;
   state.profile = profileFor(accountA.id);
-  const reauthenticatedPage = await context.newPage();
   reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
   reauthenticatedPage.on('console', message => {
     if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
@@ -1568,6 +1568,7 @@ test('held weekly report cannot write after the same account starts a new server
     if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
   });
   const fixtureA = await installAccountApi(page, state, 'wis_text');
+  const reauthenticatedPage = await context.newPage();
   await page.addInitScript(({ reportKey, report, settingsKey, settings }) => {
     localStorage.setItem(reportKey, JSON.stringify([report]));
     localStorage.setItem(settingsKey, JSON.stringify(settings));
@@ -1600,7 +1601,6 @@ test('held weekly report cannot write after the same account starts a new server
   const reauthenticated = { id: accountA.id, sid: 'f'.repeat(64) };
   state.current = reauthenticated;
   state.profile = profileFor(accountA.id);
-  const reauthenticatedPage = await context.newPage();
   reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
   reauthenticatedPage.on('console', message => {
     if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
