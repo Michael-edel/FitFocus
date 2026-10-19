@@ -7683,3 +7683,13 @@ Paywall, сообщение об обновлении профиля и неде
 Firefox/WebKit прошли 3/3. Это несовпадение тестового селектора с mobile DOM,
 не воспроизведение runtime-дефекта. Общая mobile account/session матрица выросла
 до 61 сценария и 244 запусков. Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка recipe-photo auth refusal, [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240), 19.10.2026
+
+Снят desktop-only skip со scoped auth-refusal теста анализа фото рецепта.
+Искусственный отказ для `foodphoto_enhanced` не показывает обычную ошибку
+рецепта, browser alert или page error и не помечает анализ как завершённый.
+Проверка прошла 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone
+Safari/PWA (`workers=1,retries=0`), включая 4 мобильных запуска. Production-код
+не менялся; сценарий использует mock API. Общая mobile account/session матрица
+составляет 62 сценария и 248 запусков. Точный CI follow-up ожидает push.

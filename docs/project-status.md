@@ -45,7 +45,11 @@ PDF account-switch acceptance прошёл 7/7, включая четыре мо
 Камерный dialog остаётся desktop-only: мобильный экран использует native capture
 input (`label` с `input[type=file][capture]`), поэтому модальная проверка там
 неприменима. Накопленная матрица теперь — 61 сценарий и 244 мобильных запуска.
-Точный CI текущего HEAD ещё не завершён.
+Затем follow-up [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
+расширил scoped auth-refusal проверку recipe photo на все профили: 7/7, включая
+4 мобильных запуска. Auth refusal не показывает обычную ошибку рецепта, browser alert
+или page error. Суммарная матрица выросла до 62 сценариев и 248 мобильных
+запусков. Точный CI текущего HEAD ещё не завершён.
 
 [Draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93) нацелен на
 `fix/state-generations` и зависит от открытых PR [#94](https://github.com/Michael-edel/FitFocus/pull/94)

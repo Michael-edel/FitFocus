@@ -327,8 +327,12 @@ Huawei OAuth, устройство и staging не покрыты. Follow-up [`f
 добавил мобильную приёмку paywall и profile-sync/adaptation notices: 21/21 на
 семи профилях (12 мобильных запусков). Camera dialog остаётся desktop-only:
 мобильный экран использует native capture input, не in-app modal. Итоговая
-матрица — 61 сценарий и 244 мобильных запуска. Полный P0.4/P0.5 lifecycle и
-точный CI текущего HEAD остаются открытыми.
+матрица на этом этапе — 61 сценарий и 244 мобильных запуска. Затем follow-up
+[`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
+расширил recipe-photo auth-refusal acceptance: 7/7 на семи профилях, включая
+4 мобильных запуска; обычная ошибка рецепта, browser alert и page error не
+появились. Накопленная матрица составляет 62 сценария и 248 мобильных запусков.
+Полный P0.4/P0.5 lifecycle и точный CI текущего HEAD остаются открытыми.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

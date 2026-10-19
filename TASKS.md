@@ -727,6 +727,10 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     (`workers=1,retries=0`). Камерный dialog остаётся desktop-only, поскольку на
     телефонах его заменяет native capture input; locator-проверка подтвердила,
     что это `<label>` с `input[type=file][capture]`, не in-app dialog.
+    Follow-up [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
+    расширил recipe-photo scoped-auth-refusal acceptance: 7/7 на семи
+    desktop/mobile/PWA профилях, включая 4 мобильных запуска; обычная ошибка
+    рецепта, browser alert и page error не появляются (`workers=1,retries=0`).
     Коммит [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
     закрывает browser acceptance черновика регистрации:
     после смены активной IndexedDB-сессии экран A блокируется, пока Google identity
