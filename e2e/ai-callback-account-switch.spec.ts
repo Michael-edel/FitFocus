@@ -3749,8 +3749,7 @@ test('pending account A outbox pauses on logout and resumes after login with a f
   await page.screenshot({ path: info.outputPath('state-outbox-account-a-after-login.png') });
 });
 
-test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei acceptance runs in desktop browser profiles.');
+test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }) => {
   const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
   const state: FixtureState = { current: accountA, profile: profileA };
   const fixtureA = await installAccountApi(page, state, undefined, true);
@@ -3781,8 +3780,7 @@ test('late Huawei sync after another tab signs in as account B cannot commit acc
   expect(rawValue(afterB, profileKey(accountB.id))).toBe(profileBBefore);
 });
 
-test('late Huawei sync is rejected after the same account signs in with a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei session-replacement acceptance runs in desktop browser profiles.');
+test('late Huawei sync is rejected after the same account signs in with a new server session', async ({ page, context }) => {
   const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
   const state: FixtureState = { current: accountA, profile: profileA };
   const fixtureA = await installAccountApi(page, state, undefined, true);
