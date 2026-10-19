@@ -747,7 +747,8 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     с adaptation notice. Целевой unit — 13/13; удержанный plateau response при
     повторном входе прошёл 3/3 desktop E2E; typecheck, production build и diff check
     прошли. Межаккаунтный UI-сбой до изменения не воспроизведён; это защита
-    stale UI-state. Точный CI ожидает push.
+    stale UI-state. Код опубликован в PR #93; точный CI актуального HEAD нужно
+    проверить перед слиянием.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
