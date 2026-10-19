@@ -7651,3 +7651,17 @@ iPhone Safari/PWA; вместе с предыдущими desktop Chromium/Firef
 менялся; общий account/session прогон вырос до 56 сценариев и 224 мобильных
 запусков. Точный CI follow-up ожидает push; CI предыдущего опубликованного HEAD
 продолжает выполняться.
+
+## P0.5 — мобильная приёмка позднего Huawei sync, [`12f7da6`](https://github.com/Michael-edel/FitFocus/commit/12f7da6949ecbbbd55287ccc7a455ac191299344), 19.10.2026
+
+Сняты desktop-only skips с двух Huawei Health delayed-sync сценариев. В первом
+после начала sync аккаунта A другая вкладка входит в аккаунт B; поздний ответ
+не меняет профиль A или B. Во втором та же учётная запись входит заново с новой
+server session; поздний ответ старой сессии не коммитится. Мобильная часть
+прошла 8/8 на Android Chrome/PWA и iPhone Safari/PWA; вместе с desktop
+Chromium/Firefox/WebKit оба сценария прошли 14/14 (`workers=1,retries=0`).
+Проверка использует mock API и подтверждает только клиентскую account/session
+изоляцию. Настоящий Huawei OAuth, реальные устройства/BFCache, staging и полный
+P0.5 lifecycle остаются открытыми. Накопленная мобильная account/session
+матрица выросла до 58 сценариев и 232 запусков. Точный CI нового HEAD ожидает
+push; CI предыдущего опубликованного HEAD продолжает выполняться.
