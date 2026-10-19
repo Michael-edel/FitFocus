@@ -29,8 +29,12 @@ E2E. Локальный follow-up [`2cec2e2`](https://github.com/Michael-edel/Fi
 исправил callback, который терял profile-sync notice после reload из облака, и
 добавил browser acceptance profile-sync и adaptation notices — 6/6 на desktop
 Chromium, Firefox и WebKit; typecheck прошёл. Он пока не опубликован и не входит
-в CI #1725. Browser acceptance registration draft и Android Chrome/PWA остаются
-открытыми.
+в CI #1725. Следующий локальный follow-up
+[`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
+расширил mobile menu acceptance до Android; сценарий прошёл 2/2 на
+`android-chrome` и `android-pwa-chrome`. Оба локальных коммита ждут push и CI
+после завершения #1725. Browser acceptance registration draft и других root
+surfaces остаётся открытой.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/

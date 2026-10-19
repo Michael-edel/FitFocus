@@ -714,12 +714,15 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     root typecheck и diff check прошли. Точный CI
     [#1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
     для `cf81aab` ожидает завершения. Android Chrome/PWA acceptance для меню
-    остаётся открытой. Локальный follow-up [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e2)
+    остаётся открытой. Локальный follow-up [`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
+    расширил мобильную проверку меню до Android: 2/2 на `android-chrome` и
+    `android-pwa-chrome`. Следующий локальный follow-up
+    [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e21024b2bfc47e9bc0d5fe121a2a6a3606d)
     исправляет stale setter заметки profile sync и добавляет UI acceptance обеих
     notices: 6/6 на desktop Chromium/Firefox/WebKit, typecheck и diff check прошли.
-    Его точный CI ещё не запускался, так как `cf81aab` проходит полный CI. Browser
-    acceptance medical registration draft, Android Chrome/PWA и других root
-    surfaces остаётся открытой; P0.4 не завершён.
+    Эти локальные коммиты не входят в текущий CI для `cf81aab`; новый точный CI
+    запустится после push. Browser acceptance medical registration draft и других
+    root surfaces остаётся открытой; P0.4 не завершён.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

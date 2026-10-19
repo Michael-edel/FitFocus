@@ -43,8 +43,10 @@ skipped**, dependency audit нашёл 0 уязвимостей; schema/privacy/
 Коммит [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
 проверяет мобильное меню «Ещё»: после открытия меню A другая вкладка активирует
 B, и содержимое меню исчезает в обеих вкладках. E2E прошёл **2/2** в `iphone-safari`
-и `iphone-pwa`; root typecheck и `git diff --check` прошли. Android Chrome/PWA
-для этого сценария остаются отдельным пропуском. Точный
+и `iphone-pwa`; root typecheck и `git diff --check` прошли. Следующий локальный
+follow-up [`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
+расширил тот же сценарий на Android: **2/2** в `android-chrome` и
+`android-pwa-chrome`. Этот commit пока не опубликован. Точный
 [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
 на опубликованном HEAD `cf81aab` ещё выполняется; его результат будет записан
 после завершения.
@@ -57,8 +59,8 @@ profile-sync notice до появления login scope, поэтому данн
 скрытие после переключения на B; отдельный сценарий проверяет adaptation notice.
 Оба сценария прошли **6/6** на desktop Chromium, Firefox и WebKit, typecheck и
 `git diff --check` прошли локально. Commit пока не опубликован и GitHub CI для него
-не запускался. Browser acceptance registration draft, Android Chrome/PWA и других
-root surfaces остаётся открытой; P0.4 не закрыт.
+не запускался. Browser acceptance registration draft и других root surfaces
+остаётся открытой; P0.4 не закрыт.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
