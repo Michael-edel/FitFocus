@@ -19,10 +19,15 @@ setter также ограничен своим scope.
 `tests/account_scoped_ui.test.ts` прошли **12/12**; `npm run typecheck` (включая
 admin guards) и `git diff --check` прошли. Unit проверяет скрытие profile-sync/
 adaptation сообщений при logout, смене аккаунта и повторном входе в новую
-сессию, а также сброс registration draft между Google identities. Полный browser
-account-switch acceptance не запускался; точный CI опубликованного HEAD ещё не
-подтверждён. P0.4 остаётся открытым для остальных callbacks/cache и полного
-lifecycle.
+сессию, а также сброс registration draft между Google identities. Существующий
+E2E `an open food insight from account A is hidden after another tab activates
+account B` прошёл локально **3/3** на desktop Chromium/Firefox/WebKit; четыре
+mobile/PWA проекта штатно skipped для двухвкладочного сценария. Это проверяет
+фоторазбор и редактор, но не notices/registration draft в browser UI. Точный
+[CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+для code/test HEAD `71910ae` завершился success, включая browser tests,
+rollback/CAS и сохранение артефактов. P0.4 остаётся открытым для остальных
+callbacks/cache и полного lifecycle.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 

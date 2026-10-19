@@ -703,8 +703,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea),
     [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bbabfec221a65b3c0ac68cd6b8375770c5) и
     [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373); root typecheck, 12 целевых
-    unit-тестов и diff check прошли. Полный browser acceptance и точный CI нового
-    PR-head ещё не подтверждены.
+    unit-тестов и diff check прошли. Существующий E2E фоторазбора/редактора после
+    account switch прошёл 3/3 на desktop Chromium/Firefox/WebKit; mobile/PWA
+    проекты пропускают сценарий двух вкладок. Точный CI [#39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+    для code/test HEAD `71910ae` завершился success, включая browser tests,
+    rollback/CAS и сохранение артефактов. Другие root surfaces и полный browser
+    acceptance остаются открытыми.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

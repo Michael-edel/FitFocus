@@ -24,8 +24,11 @@ follow-ups [`236453b`](https://github.com/Michael-edel/FitFocus/commit/236453bba
 [`b405761`](https://github.com/Michael-edel/FitFocus/commit/b4057613da5251837b69c2a77594d44a80aa3373) привязали paywall, root overlays,
 заметки синхронизации профиля/adaptation и медицинский черновик регистрации к
 владельцу (login session или Google identity). Root typecheck и целевые unit
-12/12 прошли локально; browser acceptance и точный полный CI для этих
-follow-ups пока не подтверждены.
+12/12 прошли локально. E2E скрытия фоторазбора/редактора account A после
+активации B прошёл 3/3 на desktop Chromium/Firefox/WebKit; это не проверяет
+каждый root surface. Точный полный [CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
+для code/test HEAD `71910ae` завершился success: audit, guards, unit, typecheck,
+build, browser tests, rollback/CAS и сохранение артефактов прошли.
 
 Cloudflare branch preview для code HEAD `544f3f5` прошёл read-only smoke 7/7:
 страница, `/api/env`, анонимный `/api/me` — 200; защищённые bootstrap/profile/state/
