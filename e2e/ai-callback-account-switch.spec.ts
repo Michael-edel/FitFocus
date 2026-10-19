@@ -1338,7 +1338,6 @@ test('held plateau explanation cannot appear after the same account starts a new
 });
 
 test('held personal weekly-menu response cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1401,7 +1400,6 @@ test('held personal weekly-menu response cannot write for account A after anothe
 });
 
 test('held personal weekly-menu response cannot write after same-account reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly-menu reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));

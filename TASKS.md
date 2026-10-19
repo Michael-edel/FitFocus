@@ -1247,6 +1247,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   с трёх AI Council account/session сценариев; они прошли 21/21 на desktop,
   Android, iPhone и PWA профилях (`workers=1,retries=0`). Production-код не
   менялся; exact-head CI ещё не завершён.
+- [x] Расширить на мобильные/PWA-профили отложенные personal weekly-menu
+  callbacks для входа аккаунта B и повторной сессии того же владельца. Оба
+  сценария сверяют profile/state/outbox, AI-запросы и achievement effects;
+  прошли 14/14 на desktop Chromium/Firefox/WebKit и Android/iPhone/PWA при
+  `workers=1,retries=0`. Production-код не менялся; exact-head CI ещё не завершён.
 - [x] Подтвердить точным CI сохранение вопроса и очистки истории во время sender
   pause через session-bound local commit guard; ответы AI остаются под строгим
   read guard. 38619175535 выявил время фикстуры, исправлено в 0abb185; 38620253135

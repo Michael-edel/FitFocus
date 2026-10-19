@@ -7556,3 +7556,15 @@ callbacks/cache остаются открытыми.
 account/session наборами расширено 38 сценариев и пройдено 152 мобильных
 запуска. Точный CI опубликованного HEAD ещё не завершён; общий P0.5, staging и
 lifecycle-приёмка остаются открытыми.
+
+## P0.5 — мобильная приёмка личного недельного меню, 19.10.2026
+
+Сняты desktop-only skips с двух delayed weekly-menu сценариев: ответ после входа
+аккаунта B и ответ предыдущей server session после повторного входа того же
+владельца. Приёмка сверяет профиль, managed state и outbox обеих сессий, исходный
+AI proof, profile/state writes и achievement side effects. Прогон прошёл 14/14
+на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`. Production-код не менялся. Вместе с AI Council и ранее
+расширенными account/session наборами мобильное покрытие составляет 40 сценариев
+и 160 запусков. Точный CI опубликованного HEAD ещё не завершён; общий P0.5,
+staging и lifecycle остаются открытыми.
