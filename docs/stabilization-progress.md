@@ -7517,3 +7517,15 @@ family invite/join/create/context/menu и shopping list/check. Их мобиль
 `workers=1,retries=0`. Desktop-проверки существовали отдельно; точный CI с
 объединённой матрицей проверяется после push. Остальные cloud callbacks/cache
 и P0.4 остаются открытыми.
+
+## P0.4/P0.5 — account-switch callbacks и shopping races, 19.10.2026
+
+Ещё десять desktop-only сценариев расширены на четыре Android/iPhone/PWA
+профиля: личные покупки (чтение, экспорт, check и порядок записей), семейная
+покупка (retry/reconciliation), список поддержки, bearer token устройства,
+push status при смене аккаунта и same-account reauthentication, а также поздний
+Stripe Checkout URL. Все 40 мобильных запусков прошли без retries. Вместе с
+предыдущими 15 family callbacks mobile extension составила 100/100 по 25 тестам.
+Desktop acceptance этих сценариев уже существовала отдельно; exact-head CI
+объединённой матрицы проверяется после push. Staging, устройства и прочие
+callbacks остаются открытыми.

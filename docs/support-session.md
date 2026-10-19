@@ -56,7 +56,7 @@ MediaStream и освобождает object URLs вложений при дем
 - Серверный scope и отказ до записи: [support feedback tests](../tests/support_feedback_my.test.ts), [admin route tests](../tests/support_feedback_admin.test.ts).
 - Клиентский proof, заголовки, response markers, IDB invalidation, `beforeunload` и `pagehide` для JSON и вложений: [transport tests](../tests/support_session_transport.test.ts).
 - Browser acceptance загружает ticket- и reply-вложения через scoped fetch, проверяет оба account/session proof и отображение Blob в image elements: [support attachment E2E](../e2e/family-callback-account-switch.spec.ts). Точный CI нового HEAD ещё не подтверждён.
-- Поздний список A после входа B в соседней вкладке: [account-switch E2E](../e2e/family-callback-account-switch.spec.ts).
+- Поздний список A после входа B в соседней вкладке: [account-switch E2E](../e2e/family-callback-account-switch.spec.ts). Desktop acceptance расширена на Android, Android PWA, iPhone Safari и iPhone PWA; mobile extension прошла 4/4 без retries. Exact-head CI проверяется после push.
 - Исходники: [SupportScreen](../SupportScreen.tsx), [transport](../services/supportSession.ts), [серверный scope](../functions/api/_lib/state_session.ts).
 
 Эти проверки подтверждают локальный код своей ревизии. Полный CI, реальный

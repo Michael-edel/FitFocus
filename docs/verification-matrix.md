@@ -276,8 +276,9 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 обновление цели участника после reauthentication и late member response A после
 входа B прошли каждое 7/7 на desktop, Android, iPhone Safari и PWA профилях при
 `workers=1,retries=0`. Ещё 15 семейных A→B и same-account delayed callbacks
-прошли 60/60 на четырёх Android/iPhone/PWA профилях; их ранее проверенная desktop
-часть сохранена отдельно. Полный точный CI этой расширенной матрицы проверяется
+прошли 60/60 на четырёх Android/iPhone/PWA профилях; ещё 10 shopping/support/
+token/push/billing и write-race сценариев прошли 40/40 на тех же профилях. Их
+ранее проверенная desktop часть сохранена отдельно. Полный точный CI объединённой матрицы проверяется
 после push; остальные cloud callbacks/cache и writers семейного членства остаются
 открытыми.
 

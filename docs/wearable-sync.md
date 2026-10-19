@@ -29,6 +29,11 @@ guard again before showing or copying it, and hides the token and setup link whe
 the login changes. Both scope headers are required; unscoped requests receive 401
 before token minting. Older open web bundles must update before rollout.
 
+The delayed token A → account B browser acceptance was expanded from desktop to
+Android, Android PWA, iPhone Safari and iPhone PWA; the mobile extension passed
+4/4 with retries disabled. Exact-head CI is checked after push; real-device and
+staging verification remain open.
+
 ## Required transport
 
 - Authenticated session cookie from FitFocus, or `Authorization: Bearer <token>` from `POST /api/mobile/token`

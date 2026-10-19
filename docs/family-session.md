@@ -301,6 +301,10 @@ Production-код не менялся, runtime-дефект не найден; �
   shopping list/check и соседние ответы прошли 60/60 на четырёх мобильных
   профилях (`workers=1,retries=0`). До снятия фильтра они выполнялись только на
   desktop; общий exact-head CI для расширенной матрицы ещё требуется.
+  Отдельные race-проверки family shopping retry и порядка personal shopping
+  writes также сняли desktop-only skip и прошли 8/8 на четырёх мобильных/PWA
+  профилях. Эти проверки подтверждают локальный порядок UI/запросов, но не
+  заменяют серверный staging или полный CI.
   Покрытие остальных callbacks всё ещё неполное.
 - [x] Подтвердить invite/member family target `2bbec11` в точном CI
   [`9bdeb47` / run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051).

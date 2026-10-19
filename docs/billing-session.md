@@ -50,7 +50,7 @@ checkout callback. Поздний URL не открывается после в�
 
 Локальная приёмка текущего дерева поверх `9fb0cff`: 18 профильных unit-тестов
 в трёх файлах, typecheck, API invariants, auth scope и admin guards прошли.
-Новый E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries; четыре
-не-desktop проекта пропущены по условию теста. Полный CI `9fb0cff` ещё не
-подтверждает этот незакоммиченный код. Старые bundles, staging, реальный Stripe
+Поздний Checkout URL account-switch E2E ранее прошёл 3/3 на desktop Chromium,
+Firefox и WebKit; mobile/PWA extension прошёл 4/4 без retries. Полный точный CI
+текущего HEAD ещё не подтверждён. Старые bundles, staging, реальный Stripe
 checkout, полный lifecycle и release acceptance остаются открытыми.

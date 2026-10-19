@@ -793,6 +793,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     iPhone Safari и PWA профили, ранее пропущенные desktop-only фильтром. Новая
     мобильная часть прошла 60/60 (`workers=1,retries=0`); историческая desktop
     часть проверена отдельно. Совместный exact-head CI запускается после push.
+  - [x] Расширить на Android/iPhone/PWA ещё 10 previously desktop-only сценариев:
+    personal shopping list/export/check, support tickets, mobile bearer token,
+    push status/account reauthentication, checkout URL и две shopping write-race
+    проверки. Мобильная часть прошла 40/40 без retries; точный CI объединённой
+    матрицы проверяется на актуальном HEAD.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).

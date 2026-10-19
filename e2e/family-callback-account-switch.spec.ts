@@ -1381,7 +1381,6 @@ test('a delayed family shopping check from the previous same-account session is 
 });
 
 test('a failed family shopping retry reconciles the optimistic checkbox with the server snapshot', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The family shopping mutation race runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1425,7 +1424,6 @@ test('a failed family shopping retry reconciles the optimistic checkbox with the
 });
 
 test('a delayed personal shopping-list read cannot cross the account boundary', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1468,7 +1466,6 @@ test('a delayed personal shopping-list read cannot cross the account boundary', 
 });
 
 test('personal shopping CSV exports only the current account snapshot', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab shopping export account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1505,7 +1502,6 @@ test('personal shopping CSV exports only the current account snapshot', async ({
 });
 
 test('a delayed personal shopping check from account A is rejected after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1550,7 +1546,6 @@ test('a delayed personal shopping check from account A is rejected after account
 });
 
 test('personal shopping toggles for one item reach the server in user-intent order', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The personal shopping write-order acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1598,7 +1593,6 @@ test('personal shopping toggles for one item reach the server in user-intent ord
 });
 
 test('a delayed support ticket list from account A cannot appear in account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab support account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1669,7 +1663,6 @@ test('loads support ticket and reply attachments with the captured session proof
 });
 
 test('a delayed mobile token from account A is neither shown nor copied after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab mobile-token account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1713,7 +1706,6 @@ test('a delayed mobile token from account A is neither shown nor copied after ac
 });
 
 test('a delayed push status from account A cannot update Settings after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab push account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1751,7 +1743,6 @@ test('a delayed push status from account A cannot update Settings after account 
 });
 
 test('a delayed push status from the previous same-account session cannot update Settings after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account push-status reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const reauthenticated = { ...accountA, sid: 'c'.repeat(64) };
   const state: FixtureState = {
@@ -1810,7 +1801,6 @@ test('a delayed push status from the previous same-account session cannot update
 });
 
 test('a delayed checkout URL from account A is not opened after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab billing account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
