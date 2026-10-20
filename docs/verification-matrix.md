@@ -26,8 +26,13 @@ run.
 после смены текущей сессии. Старая операция очищает данные своего аккаунта и не
 вызывает logout callback новой сессии. Целевой unit-файл прошёл 8/8, полный
 unit-набор — 1467/1467, root typecheck и `git diff --check` прошли. Тест не
-входил в запущенный CI #1823; точный CI follow-up ожидается после его завершения
-и публикации коммита.
+входил в запущенный CI #1823. Browser follow-up
+[`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4) удерживает
+ответ `/api/account/delete`, затем активирует аккаунт B в соседней вкладке;
+сессия B сохраняется, а запрос/ответ удаления остаётся scoped на аккаунт A.
+Вся `registration-account-switch.spec.ts` прошла 14/14 на семи desktop/mobile/PWA
+профилях (`workers=1,retries=0`). Точный CI follow-up ожидается после завершения
+текущего прогона и публикации коммитов.
 
 Коммит [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0)
 покрывает same-account reauthentication во время PDF сравнения замеров и архива

@@ -1282,7 +1282,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   подтверждает удаление после смены локальной сессии, очищаются данные только
   захваченного аккаунта, а его старый logout callback не вызывается. Тест
   `authSession_logout` прошёл 8/8, полный unit — 1467/1467, typecheck прошёл;
-  follow-up `5cb8508` ожидает публикации и точного CI. Проверки 1215 unit, три typecheck, build,
+  межвкладочный E2E в [`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4)
+  прошёл 14/14 на семи desktop/mobile/PWA профилях без retries. Коммиты
+  `5cb8508` и `17db3b4` ожидают публикации и точного CI. Проверки 1215 unit, три typecheck, build,
   auth/API/admin/privacy guards прошли локально на `956cf96`; точный CI после
   push ещё не подтверждён. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
   требует полный proof для `/api/logout`; отсутствие или неполная пара дают 401

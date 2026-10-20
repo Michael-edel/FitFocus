@@ -9,7 +9,12 @@
 сессию. `tests/authSession_logout.test.ts` прошёл 8/8, полный unit suite —
 1467/1467, `npm run typecheck` и `git diff --check` прошли. Production-код не
 менялся. Этот follow-up не входил в текущий [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716);
-его точный CI ожидается после окончания browser matrix и push.
+browser acceptance [`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4)
+удерживает ответ удаления, затем активирует account B в соседней вкладке. Старый
+ответ очищает данные account A и не вызывает logout для account B. Полная
+`registration-account-switch.spec.ts` прошла 14/14 на семи desktop/mobile/PWA
+профилях без retries; typecheck прошёл. Оба коммита ожидают публикации; точный
+CI follow-up запускается после завершения текущего CI #1823.
 
 ## P0.8/P0.9 — ошибка очистки Council history в Firefox CI, 20.10.2026
 
