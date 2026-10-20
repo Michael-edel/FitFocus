@@ -84,3 +84,28 @@ it.each(['beforeunload', 'pagehide'] as const)('aborts a pending Huawei action o
   await result;
   expect(session.controller.signal.aborted).toBe(true);
 });
+
+it.each(['prepare', 'request'] as const)('does not start a Huawei status request after beforeunload during %s proof', async phase => {
+  const target = new EventTarget(); vi.stubGlobal('window', target);
+  const check = outbox.isReadSessionCurrent.bind(outbox);
+  let release!: () => void;
+  let reached!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { reached = resolve; });
+  vi.spyOn(outbox, 'isReadSessionCurrent').mockImplementation(async guard => {
+    reached();
+    await held;
+    return check(guard);
+  });
+  const fetchImpl = vi.fn<typeof fetch>(async () => json({ connected: true }, scope()));
+  session.fetchImpl = fetchImpl;
+  const pending = phase === 'prepare'
+    ? prepareHuaweiSession(session.guard, session.controller, () => true, { outbox, fetchImpl })
+    : requestHuaweiJson(session, '/api/wearable/huawei/status');
+  await started;
+  target.dispatchEvent(new Event('beforeunload'));
+  release();
+  await expect(pending).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  expect(session.controller.signal.aborted).toBe(true);
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
