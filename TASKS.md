@@ -740,9 +740,13 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     не наследует его; оба сценария прошли 7/7 desktop/mobile/PWA профилей.
     Камера-диалог также скрывается после same-account reauthentication: 3/3
     desktop engines, четыре mobile-профиля штатно пропущены из-за native capture
-    input. Матрица расширена до 76 сценариев и 300 мобильных запусков; тесты добавлены
+    input. Разбор фото и несохранённый редактор блюда скрываются после reauth,
+    durable-запись дневника сохраняется; сценарий прошёл 7/7, включая четыре
+    mobile/PWA профиля. Матрица расширена до 77 сценариев и 304 мобильных запусков;
+    тесты добавлены
     в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
     Камера-проверка: [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854).
+    Проверка фото-разбора: [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099).
     Follow-up [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
     расширил recipe-photo scoped-auth-refusal acceptance: 7/7 на семи
     desktop/mobile/PWA профилях, включая 4 мобильных запуска; обычная ошибка
