@@ -193,6 +193,7 @@ async function installAccountApi(
   const heldMobileTokenResponse = deferred();
   const heldPushStatusResponse = deferred();
   const heldBillingCheckoutResponse = deferred();
+  const meSessionIds: string[] = [];
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -209,8 +210,11 @@ async function installAccountApi(
     });
 
     if (path === '/api/env') return json({ requireInvite: false }, state.current);
-    if (path === '/api/me') return json(apiBody(state.current, includePersonalShopping,
-      state.plans?.[state.current.id] ?? 'family'), state.current);
+    if (path === '/api/me') {
+      meSessionIds.push(state.current.sid);
+      return json(apiBody(state.current, includePersonalShopping,
+        state.plans?.[state.current.id] ?? 'family'), state.current);
+    }
     if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current,
       includePersonalShopping, state.plans?.[state.current.id] ?? 'family'), items: [] }, state.current);
     if (path === '/api/profile') return json({ profile: profileFor(scopedAccount), version: 1 });
@@ -521,6 +525,7 @@ async function installAccountApi(
     releaseMobileToken: heldMobileTokenResponse.release,
     releasePushStatus: heldPushStatusResponse.release,
     releaseBillingCheckout: heldBillingCheckoutResponse.release,
+    meSessionIds,
   };
 }
 
@@ -1842,6 +1847,74 @@ test('a delayed checkout URL from account A is not opened after account B signs 
     await accountBPage.screenshot({ path: info.outputPath('billing-account-switch-b.png') });
   } finally {
     fixtureA.releaseBillingCheckout();
+  }
+});
+
+test('a delayed checkout URL from a previous same-account session is not opened after reauthentication', async ({ page, context }) => {
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const reauthenticated = { ...accountA, sid: 'f'.repeat(64) };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    billingCheckoutAccounts: [], releasedBillingCheckouts: 0, plans: { [accountA.id]: 'free' },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, false, true);
+  const popupsA: Page[] = [], popupsReauthenticated: Page[] = [];
+  page.on('popup', popup => popupsA.push(popup));
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  expect(previousSession?.sessionEpoch).toBeTruthy();
+  await page.getByRole('button', { name: 'Выбрать тарифный план' }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Оформить Pro', exact: true }).click();
+  await page.getByRole('button', { name: 'Открыть Stripe Checkout', exact: true }).click();
+  await expect.poll(() => state.billingCheckoutAccounts?.length).toBe(1);
+  expect(state.billingCheckoutAccounts).toEqual([accountA.id]);
+
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+  reauthenticatedPage.on('popup', popup => popupsReauthenticated.push(popup));
+
+  try {
+    await openApp(reauthenticatedPage, '/#settings');
+    await expect.poll(() => fixtureReauthenticated.meSessionIds).toContain(reauthenticated.sid);
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const nextSession = await activeSessionIdentity(reauthenticatedPage);
+    expect(nextSession?.sessionEpoch).toBeTruthy();
+    expect(nextSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseBillingCheckout();
+    await expect.poll(() => state.releasedBillingCheckouts).toBe(1);
+    await page.waitForTimeout(200);
+
+    expect(popupsA).toHaveLength(0);
+    expect(popupsReauthenticated).toHaveLength(0);
+    expect(page.url()).toContain('/#pro');
+    expect(reauthenticatedPage.url()).toContain('/#settings');
+    expect(state.billingCheckoutAccounts).toEqual([accountA.id]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseBillingCheckout();
+    fixtureReauthenticated.releaseBillingCheckout();
   }
 });
 
