@@ -1,5 +1,25 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — ошибка очистки Council history в Firefox CI, 20.10.2026
+
+Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+для `e33fb78` завершился с 1584 browser passed / 67 skipped / 1 failed; все
+предшествующие gates прошли. Единственный отказ пришёлся на Firefox сценарий
+ошибки очистки Council history. Разбор показал, что `useCouncilChat` уже вычислял
+готовность session-scoped записи, но `App.tsx` не прокидывал признак в
+`AppWorkspace`; кнопка разрешала действие, а handler возвращался без записи и
+без сообщения. Теперь признак передаётся до `CouncilScreen`, а кнопка отключена
+до наличия подтверждённого login guard. Тест ожидает активную сессию, ждёт
+включения кнопки и проверяет marker, выставляемый непосредственно перед
+инъекцией `QuotaExceededError`. Исправление зафиксировано в локальном коммите
+[`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1), который
+ожидает push.
+
+Полный `e2e/owned-state.spec.ts` прошёл **42/42** на семи desktop/mobile/PWA
+профилях, проблемный Firefox сценарий — **10/10** повторов. `npm run typecheck`,
+полный `npm run test:unit` (**1466/1466**) и `git diff --check` прошли. Fix ещё
+локальный; точный CI нового SHA будет запущен после публикации.
+
 ## P0.4 — поздний profile ack не завершает операцию новой сессии, [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33), 20.10.2026
 
 Добавлен E2E для ответа `PUT /api/profile`, удержанного со старой server
@@ -11,9 +31,9 @@ session. Пока он ожидает, другая вкладка повтор�
 профильный unit guard — 9/9, root typecheck и `git diff --check` прошли. Это
 mock API acceptance; production-код не менялся.
 
-Текущий CI #1822 проверяет предыдущий SHA `e33fb78` и остаётся активным; этот
-коммит в run не входит. Публикация последует после терминального результата,
-поскольку новый push отменил бы текущий workflow через `cancel-in-progress`.
+CI #1822 проверял предыдущий SHA `e33fb78`; он завершился одной ошибкой в
+Council history, которая разобрана в верхней записи. Этот коммит в run не входит;
+точный follow-up CI будет запущен после push.
 
 ## P0.5 — сравнение и архив прогресса не экспортируют PDF из старой сессии, [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0), 20.10.2026
 
@@ -26,9 +46,9 @@ desktop/mobile/PWA проектах (`workers=2,retries=0`). Короткий и
 `npm run test:unit -- tests/pdf_export_session.test.ts` (6/6) и
 `git diff --check` прошли. Production-код не менялся; используется mock API.
 
-Текущий CI #1822 проверяет предыдущий удалённый SHA `e33fb78` и остаётся активным;
-этот коммит в run не входит. Публикация последует после терминального результата,
-поскольку новый push отменил бы текущий workflow через `cancel-in-progress`.
+CI #1822 для предыдущего удалённого SHA `e33fb78` завершился одной ошибкой в
+Council history, которая разобрана в верхней записи. Этот коммит в run не входит;
+точный follow-up CI будет запущен после push.
 
 ## P0.5 — убрать последнее исключение WebKit при переключении аккаунта, 20.10.2026
 

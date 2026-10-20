@@ -6,7 +6,15 @@
 
 Текущая удалённая ревизия PR #93 — `e33fb78`; точный
 [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-ещё выполняет browser matrix, остальные шаги прошли. Предыдущий CI #1820
+завершился с 1584 browser passed / 67 skipped / 1 failed; audit, guards, unit,
+три typecheck и build прошли. Единственный Firefox отказ — Council history
+delete тест вызвал кнопку до передачи `canClearCouncilHistory` через
+`App.tsx`, поэтому quota error не возникал. Локальный коммит
+[`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1) добавил
+session-ready gate, проверку срабатывания injected failure и ожидание включённой
+кнопки в E2E. Вся `owned-state.spec.ts` прошла 42/42 на семи профилях,
+проблемный Firefox сценарий — 10/10, typecheck и unit — 1466/1466; новый точный
+CI ещё не запущен; коммит ожидает push. Предыдущий CI #1820
 завершился с 1568 browser tests passed, 67 skipped и 3 failed; эти отказы
 исправлены и опубликованы в `e33fb78`. Два state-outbox сценария позднего ответа
 после account switch и same-account reauthentication из `5cfb820` входят в этот
@@ -16,8 +24,8 @@ run.
 покрывает same-account reauthentication во время PDF сравнения замеров и архива
 прогресса. Вместе с коротким и подробным отчётами все четыре browser acceptance
 прошли 28/28 по семи desktop/mobile/PWA профилям без retries; unit guard пяти
-экспортёров — 6/6, root typecheck и diff check прошли. `75b59b0` не входит в
-CI #1822; его точный workflow будет проверен после публикации.
+экспортёров — 6/6, root typecheck и diff check прошли. `75b59b0` не входил в
+CI #1822; его точный workflow будет проверен после публикации follow-up.
 
 Локальный [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33)
 проверяет поздний ответ `PUT /api/profile` после reauthentication того же
