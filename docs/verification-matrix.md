@@ -10,6 +10,9 @@
 `5cfb820` добавляет два state-outbox сценария переключения аккаунта и
 reauthentication; оба прошли 7/7 профилей без retries, но не входят в этот CI.
 Публикация ожидает окончания текущего workflow из-за `cancel-in-progress: true`.
+Локальный stress rerun проблемного iPhone PWA writer-fence сценария прошёл
+10/10 на `c9a1e65` при `workers=2,retries=0`; точный CI #1820 всё ещё нужен
+для проверки в GitHub Actions.
 
 Точный PR CI #1618 для опубликованного `66e8c19` завершился success, включая
 browser mock matrix и rollback/CAS gate. Локальный follow-up `1271dfe` проверяет

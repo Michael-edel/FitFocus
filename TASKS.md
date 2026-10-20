@@ -14,6 +14,8 @@
 legacy writer fence: за 60 секунд барьер не подтвердил `writersStopped` и
 `sendAllowed`. Добавлена failure-only диагностика ответа Service Worker;
 локальный тест прошёл 10/10 повторов, но причина CI-сбоя не установлена.
+Дополнительный стресс-прогон этого сценария на локальном HEAD `c9a1e65`
+прошёл 10/10 при `workers=2,retries=0`.
 Документационный push `fca954d` отменил предыдущий run #1819 по concurrency.
 Два E2E для позднего `/api/state` ответа после смены аккаунта и reauthentication
 добавлены локально; каждый прошёл 7/7 desktop/mobile/PWA профилей без retries.
