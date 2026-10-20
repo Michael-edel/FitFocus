@@ -8041,6 +8041,17 @@ reload источников остаётся открытой.
 `/api/me` page/console warnings; pending и conflicted сценарии прошли **6/6**.
 В сумме все три спеки прошли без retries на desktop WebKit, iPhone Safari и
 iPhone PWA с нулём таких предупреждений. Rollback по-прежнему отдельно проверяет
-точные `requestfailed` отмены. Root typecheck и `git diff --check` запускаются
-для этих локальных правок. Точный CI #1813 проверяет родительский `50592e5`;
-новые strict assertions ожидают следующей публикации.
+точные `requestfailed` отмены. Изменения опубликованы в `6e37e8e`; точный CI
+#1814 сейчас выполняет browser E2E. Предыдущий #1813 для `50592e5` отменён
+после продвижения ветки.
+
+## P0.9 — offline PWA без WebKit `/api/me` warning, 20.10.2026
+
+В `e2e/pwa-offline-durability.spec.ts` удалён допуск одного `/api/me?t=…`
+access-control page error, который ранее объяснялся отменой запроса при
+переключении iPhone PWA offline. Теперь тест требует отсутствия этого warning;
+сохранение settings opId/payload/baseVersion и подтверждение после возврата сети
+остались неизменными. Строгий сценарий прошёл **7/7** desktop/mobile/PWA
+профилей без retries. Root typecheck, admin guards и `git diff --check` прошли.
+Точный CI #1814 проверяет родительский `6e37e8e`;
+offline assertion ожидает следующей публикации.

@@ -79,7 +79,11 @@ weekly-AI запроса через 21 мс после начала reload; уд
 `weekly-menu-durability.spec.ts` — 24/24, pending/conflicted
 `pwa-rollback.spec.ts` — 6/6, все без retries и page/console warnings.
 Rollback по-прежнему проверяет точные ожидаемые request cancellations. Эти
-дополнительные strict follow-up изменения пока локальны и не входят в CI #1813.
+изменения опубликованы в `6e37e8e`; CI #1813 отменён после продвижения ветки,
+точный CI #1814 для этого SHA сейчас выполняет browser E2E. Отдельно снят
+iPhone PWA `/api/me` warning допуск при offline transition: `pwa-offline-
+durability.spec.ts` прошёл 7/7 всех browser/PWA профилей без warnings. Это
+последнее изменение пока локально и не включено в CI #1814.
 
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 

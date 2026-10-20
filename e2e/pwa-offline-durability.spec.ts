@@ -186,12 +186,7 @@ test('real PWA preserves settings through offline reopen and syncs after reconne
     expect(acknowledged.confirmedVersion).toBe(1);
     expect(server.stateWriteKeys).toContain('fitfocus_data_google-e2e-sub_settings');
     expect(server.unexpectedApi).toEqual([]);
-    // WebKit can surface its canceled in-flight /api/me fetch as an
-    // access-control page error while Playwright toggles the iPhone PWA offline.
-    const expectedIphonePwaMeAborts = pageErrors.filter((error) => info.project.name === 'iphone-pwa'
-      && /^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(error));
-    expect(expectedIphonePwaMeAborts.length).toBeLessThanOrEqual(info.project.name === 'iphone-pwa' ? 1 : 0);
-    expect(pageErrors.filter((error) => !expectedIphonePwaMeAborts.includes(error))).toEqual([]);
+    expect(pageErrors).toEqual([]);
   } catch (error) {
     console.error('PWA offline durability diagnostics:', JSON.stringify({
       failedStateWrites,
