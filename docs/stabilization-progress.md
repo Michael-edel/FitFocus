@@ -1,5 +1,28 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — подавление поздней ошибки удаления в новой сессии, [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e), 20.10.2026
+
+Account-delete callback уже очищал только удалённого пользователя, если успех
+приходил после смены active session, и не вызывал старый logout. Проверка нашла
+симметричную дыру в отказных исходах: HTTP 500 показывал alert аккаунту B после
+того, как запрос был начат из сессии A. До изменения новая browser-регрессия
+воспроизвела сообщение `Ошибка удаления: ACCOUNT_DELETE_FAILED` на всех семи
+desktop/mobile/PWA профилях.
+
+Теперь перед alert для HTTP/network ошибки и неверного delete protocol повторно
+проверяется captured login guard. При смене аккаунта или server session поздняя
+ошибка не отображается; при прежней сессии сохраняется существующее сообщение.
+Подтверждённый success path не изменён: удаляются данные captured account, а
+stale logout не применяется к новой сессии.
+
+Проверки на точном кодовом SHA `b5a493ebdcb1daaee21370aa8493929bdcd2f12e`:
+`tests/authSession_logout.test.ts` — **10/10**, успешный и ошибочный delayed
+account-delete E2E — **14/14** на семи профилях (`workers=1,retries=0`), полный
+unit suite — **1469/1469**, root typecheck/admin guards и `git diff --check`
+прошли. До фикса browser regression была 7/7 failing. Коммит локальный;
+опубликованный parent `4ffff5a` ещё проверяется в CI #1824, точный CI нового SHA
+ожидает публикации.
+
 ## P0.8/P0.9 — исправления трёх browser отказов точного CI #1823, 20.10.2026
 
 Точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)

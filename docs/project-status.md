@@ -11,26 +11,27 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Удалённый HEAD Draft PR #93 — `5f92da16632b27b5bace86783757748f42764188`.
-Точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
-для этого SHA завершился с 1603 browser passed / 67 skipped / 3 failed; dependency
-audit, guards, unit, три typecheck и production build прошли. Все три browser
-падения (две причины) исправляются в локальном follow-up
-[`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a):
-ожидание очереди B допускает собственный `weekly_reports`, но блокирует операцию
-A; для принудительного Safari reload разрешены только четыре точных сообщения об
-отменённых GET при наличии соответствующего failed request. Сценарии прошли 7/7
-и 3/3 на затронутых профилях, root typecheck и полный unit 1467/1467 прошли.
-Точный CI follow-up combined HEAD ещё не запускался.
+Удалённый HEAD Draft PR #93 — `4ffff5a8ea2963909a7bdb4a2ca1f624477c7239`.
+Точный [CI #1824](https://github.com/Michael-edel/FitFocus/actions/runs/39439487905)
+сейчас выполняет browser matrix; audit, schema/privacy/auth/API guards, unit,
+три typecheck и production build прошли. Предыдущий точный
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+на `5f92da16632b27b5bace86783757748f42764188` завершился с 1603 browser passed /
+67 skipped / 3 failed. Три падения имели две причины: Safari/PWA snapshot
+ожидал пустую очередь B, хотя B независимо создал `weekly_reports`; desktop
+WebKit reload сообщил четыре точных ошибки отменённых GET. Follow-up
+[`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a) ограничивает
+проверку отсутствием операции A у B, ждёт гидратации настроек и разрешает только
+reload warnings, совпавшие с failed GET. Сценарии прошли 7/7 и 3/3 без retries.
 
-Локальный follow-up [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508)
-покрывает поздний успешный ответ удаления аккаунта после смены текущей сессии:
-данные очищаются для удалённого аккаунта, старая logout callback не вызывается.
-Точечный тест прошёл 8/8, полный unit — 1467/1467, typecheck и diff check
-прошли. Browser acceptance [`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4)
-прошла 14/14 на семи desktop/mobile/PWA профилях: позднее удаление аккаунта A
-не завершает новую сессию B. Коммиты `5cb8508`, `816becd`, `17db3b4`, `59eb569`
-и `26e6b3a` составляют follow-up candidate; точного CI для него ещё нет.
+Новый локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+исправляет stale alert при позднем HTTP/network отказе удаления после входа B:
+исходная session повторно проверяется перед каждым сообщением об ошибке.
+До исправления регрессия упала на 7/7 browser-профилях; после исправления
+успешный и ошибочный delayed-delete сценарии прошли 14/14, целевой unit 10/10,
+полный unit 1469/1469, root typecheck и diff check прошли. `b5a493e` пока
+локальный; точный CI этого кода ещё не запускался. Ранее опубликованные
+`5cb8508`, `816becd`, `17db3b4`, `59eb569` и `26e6b3a` входят в CI #1824.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA

@@ -1,6 +1,6 @@
 # Session guard выхода и удаления аккаунта
 
-Обновлено: 15.10.2026. Кодовый компонент: [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3), ветка `fix/durable-outbox`.
+Обновлено: 20.10.2026. Базовый кодовый компонент: [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3), ветка `fix/durable-outbox`; локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e).
 
 ## Удаление аккаунта
 
@@ -22,6 +22,12 @@
 из captured-сессии и очищает локальные данные только удалённого аккаунта. Если
 активная сессия успела смениться, старый callback не выполняет logout нового
 входа; локальная очистка по-прежнему ограничена удалённым account ID.
+
+Поздний HTTP/network отказ или неверный protocol response тоже не должен
+показывать сообщение в уже сменившейся сессии. Перед alert callback ещё раз
+проверяет captured login guard; при смене аккаунта/сессии ошибка подавляется,
+а в исходной сессии остаётся прежнее сообщение. Успешный ответ по-прежнему
+проверяется серверными scope markers и очищает только подтверждённый аккаунт.
 
 Локальная очистка также удаляет account-scoped счётчик генерации рецептов
 `fitfocus_usage_counters_v1:<encoded-accountId>`. Сравнивается точный
@@ -59,3 +65,10 @@ typecheck, production build, privacy coverage и `git diff --check` прошли
 Точный CI этого follow-up ожидает публикации; это не закрывает общий P0.6.
 Префикс writer/cleanup вынесен в общий каталог ключей на локальном follow-up
 `5d3d5b1`; все указанные unit/typecheck/build проверки прошли на этом HEAD.
+
+В локальном follow-up `b5a493e` stale error regression сначала воспроизвела alert
+после account switch в 7/7 browser-профилях. После фикса целевой
+`authSession_logout` прошёл 10/10, два account-delete E2E — 14/14 по семи
+desktop/mobile/PWA профилям без retries, полный unit suite — 1469/1469,
+typecheck и `git diff --check` прошли. Этот follow-up ещё не опубликован и не
+проверен точным CI.

@@ -4,17 +4,19 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Проверенная ревизия PR #93 для точного
-[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716) —
-`5f92da1`; run завершился с **1603 browser passed / 67 skipped / 3 failed**.
-Все предшествующие gates прошли. Safari/PWA state-outbox test неверно требовал
-пустую очередь B, хотя в неё могла независимо попасть `weekly_reports`; PWA
-reload test не учитывал точные WebKit сообщения об отмене GET-запросов во время
-навигации. Follow-up [`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a)
-ограничивает проверку отсутствием операции A у B, ждёт гидратации настроек и
-классифицирует только четыре точных reload warning при совпадении с failed GET.
-Account-switch сценарий прошёл 7/7, reload — 3/3 без retries; typecheck и полный
-unit suite 1467/1467 прошли. Exact CI combined candidate HEAD ожидается.
+Текущий опубликованный HEAD PR #93 — `4ffff5a8ea2963909a7bdb4a2ca1f624477c7239`;
+его точный [CI #1824](https://github.com/Michael-edel/FitFocus/actions/runs/39439487905)
+выполняет browser matrix. Audit, schema/privacy/auth/API guards, unit, три
+typecheck и production build прошли. Предыдущий точный
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+на `5f92da1` завершился с **1603 browser passed / 67 skipped / 3 failed**.
+Причины устранены в `26e6b3a`; затронутые сценарии прошли 7/7 и 3/3 без retries.
+
+Локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+закрывает stale HTTP/network alert при смене сессии во время удаления аккаунта.
+Ошибка воспроизведена на всех семи browser-профилях; после фикса delayed-delete
+E2E прошли 14/14, целевой unit 10/10, полный unit 1469/1469, typecheck и diff
+check прошли. Для этого SHA точный CI ещё не запускался.
 
 Предыдущий [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
 завершился с 1584 passed / 67 skipped / 1 failed: Firefox Council history delete.

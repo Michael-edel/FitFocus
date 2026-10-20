@@ -7,18 +7,26 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Проверенная ревизия PR #93 в точном
-[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716) —
-`5f92da16632b27b5bace86783757748f42764188`. Все этапы до browser matrix прошли;
-browser matrix завершилась с **1603 passed / 67 skipped / 3 failed**. Три падения
-имели две причины: два iPhone Safari/PWA snapshot теста ожидали пустую очередь
-аккаунта B, хотя B независимо поставил `weekly_reports`; один desktop WebKit
-native PWA reload тест получил четыре ошибки отменённых GET во время принудительной перезагрузки. Follow-up
-[`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a) проверяет
-изоляцию конкретной операции A, ждёт гидратацию настроек B и принимает только
-точные WebKit reload warnings, совпавшие с неудавшимися GET. Account-switch E2E
-прошёл 7/7, PWA reload — 3/3 без retries; root typecheck и полный unit suite
-1467/1467 прошли. Точный CI ещё не запускался для combined follow-up HEAD.
+Опубликованный HEAD Draft PR #93 — `4ffff5a8ea2963909a7bdb4a2ca1f624477c7239`.
+Точный [CI #1824](https://github.com/Michael-edel/FitFocus/actions/runs/39439487905)
+сейчас выполняет browser matrix; audit, schema/privacy/auth/API guards, unit,
+три typecheck и production build прошли. Предыдущий точный
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+на `5f92da16632b27b5bace86783757748f42764188` завершился с **1603 passed /
+67 skipped / 3 failed**. Три падения имели две причины: два iPhone Safari/PWA
+snapshot теста ожидали пустую очередь B, хотя B независимо поставил
+`weekly_reports`; один desktop WebKit reload тест получил четыре ошибки
+отменённых GET. Follow-up [`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a)
+ограничивает проверку отсутствием операции A у B, ждёт гидратацию настроек и
+принимает только точные reload warnings, совпавшие с failed GET; локальные
+сценарии прошли 7/7 и 3/3 без retries.
+
+Локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+повторно проверяет исходную сессию перед alert о позднем HTTP/network отказе
+удаления аккаунта. Дефект воспроизведён на 7/7 browser-профилях; после фикса
+сценарии успешного удаления и позднего отказа прошли 14/14, целевой unit —
+10/10, полный unit — 1469/1469, typecheck и diff check прошли. Коммит ещё не
+опубликован; CI для `b5a493e` ожидает публикации после завершения #1824.
 
 Ранее точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
 для предыдущего SHA завершился с 1584 passed / 67 skipped / 1 failed. Отказ
@@ -1290,13 +1298,21 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `authSession_logout` прошёл 8/8, полный unit — 1467/1467, typecheck прошёл;
   межвкладочный E2E в [`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4)
   прошёл 14/14 на семи desktop/mobile/PWA профилях без retries. Коммиты
-  `5cb8508` и `17db3b4` ожидают публикации и точного CI. Проверки 1215 unit, три typecheck, build,
-  auth/API/admin/privacy guards прошли локально на `956cf96`; точный CI после
-  push ещё не подтверждён. Follow-up [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
+  `5cb8508` и `17db3b4` опубликованы в `4ffff5a`; точный CI #1824 выполняется.
+  Проверки 1215 unit, три typecheck, build, auth/API/admin/privacy guards прошли
+  локально на базовой ревизии `956cf96`. Follow-up
+  [`b2f6938`](https://github.com/Michael-edel/FitFocus/commit/b2f6938136c6ad6a82624b295c6eb7e2fdaf5ee6)
   требует полный proof для `/api/logout`; отсутствие или неполная пара дают 401
   до cookie lookup/revocation, а все ответы не меняют cookie. API/auth/admin
-  guards и три typecheck прошли в изолированном контейнере; точный CI запускается
-  после push. Старые bundles, device/staging и полный lifecycle остаются открытыми.
+  guards и три typecheck прошли в изолированном контейнере; опубликованная версия
+  проверяется в CI #1824. Старые bundles, device/staging и полный lifecycle остаются открытыми.
+  Follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+  повторно проверяет исходный session guard перед показом HTTP, network или
+  protocol error. На незафиксированном состоянии тест до фикса воспроизвёл stale
+  alert в 7/7 browser-профилях; после фикса сочетание успешного cross-session
+  удаления и позднего HTTP 500 прошло 14/14, целевой unit — 10/10, полный unit —
+  1469/1469, typecheck и diff check прошли. Это локальный commit, точный CI
+  последует после публикации.
   [Контракт](docs/account-lifecycle-session.md).
 - [x] Требовать парный account/session proof для расходования invite при
   регистрации; отсутствие и устаревший proof отклоняются до body/consume. Проверки
