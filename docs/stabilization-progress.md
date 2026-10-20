@@ -1,5 +1,27 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — точный CI #1827 и WebKit reload warning, 20.10.2026
+
+Точный [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
+на опубликованном SHA `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e` завершился
+с **1626 browser passed / 67 skipped / 1 failed**. Единственный отказ был в
+iPhone PWA, `weekly-menu-durability.spec.ts`: после reload тест восстановил
+недельное меню и прежний outbox `opId`, но строгая проверка отклонила поздний
+WebKit access-control warning для `/api/me?t=…`. Все предыдущие шаги workflow
+прошли; browser diagnostics сохранены в артефакте run.
+
+В test-only follow-up [`a560c6c`](https://github.com/Michael-edel/FitFocus/commit/a560c6cbee7fc83cd0638488abfe2420c34a9b47)
+тест связывает warning с exact URL неуспешного GET `/api/me`, начатого до reload
+и завершившегося с abort/cancel. Разрешается максимум один distinct warning;
+`/api/achievements/check`, CORS/network failures и несопоставленные запросы
+остаются ошибками. Флаг reload действует до проверки восстановленного экрана,
+поэтому отложенное событие не теряется.
+
+Локальная browser-проверка точного recovery-сценария прошла **10/10** на iPhone
+PWA и **3/3** на desktop WebKit, iPhone Safari и iPhone PWA (`workers=1,
+retries=0`). `npx tsc --noEmit` и `git diff --check` прошли. Новый точный CI
+ожидает push; production-код не менялся.
+
 ## P0.5 — подавление поздней ошибки удаления в новой сессии, [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e), 20.10.2026
 
 Account-delete callback уже очищал только удалённого пользователя, если успех

@@ -2341,8 +2341,14 @@ legacy-ключ не используется для новой очереди �
 - [x] Проверить точный branch preview текущего HEAD `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`:
   read-only smoke прошёл 8/8 GET-only проверок, Service Worker активен, основной
   bundle содержит полный SHA. Это проверка публичного preview, не отдельного
-  staging и не авторизованных интеграций; точный [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
-  ещё выполняет browser matrix.
+  staging и не авторизованных интеграций.
+- [ ] Подтвердить точный CI локального follow-up `a560c6c`:
+  CI #1827 на `1ea3f72` завершился с 1626 browser passed / 67 skipped / 1 failed.
+  В iPhone PWA WebKit сообщил об access-control warning для `/api/me` после
+  reload. Follow-up допускает только warning, связанный с тем же GET, начатым
+  до reload и завершившимся abort/cancel; другие ошибки по-прежнему валят тест.
+  Локально: iPhone PWA 10/10, три WebKit профиля 3/3, TypeScript и diff check
+  прошли. Точный CI — следующий gate после публикации.
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
   - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
     поздний scoped-ответ A не подтверждает операцию A после смены active session;

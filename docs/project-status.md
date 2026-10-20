@@ -11,13 +11,24 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Актуальный удалённый HEAD Draft PR #93 —
+Опубликованный кодовый HEAD Draft PR #93, проверенный в CI #1827, —
 `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`. Точный
 [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
-ещё выполняет browser matrix; audit, schema/privacy/auth/API guards, unit, три
-typecheck и production build прошли. Предшествующий CI для старого SHA не
-переносится на эту ревизию. На branch preview `fix-durable-outbox` выполнен
-read-only smoke: **8/8 GET-only** проверок, Service Worker активен, а
+завершился неуспешно: **1626 browser passed, 67 skipped, 1 failed**.
+Единственный отказ — iPhone PWA reload в `weekly-menu-durability.spec.ts`:
+WebKit выдал позднее сообщение для `/api/me` после восстановления durable
+операции, хотя сам экран и сохранённый `opId` восстановились. Audit,
+schema/privacy/auth/API guards, unit, три typecheck и production build прошли.
+
+Локальный follow-up `a560c6c`
+сопоставляет точное сообщение с тем же `/api/me` GET, который начался до reload
+и завершился abort/cancel. Другие CORS/network ошибки остаются отказами. Тест
+прошёл 10/10 на iPhone PWA и 3/3 на desktop WebKit, iPhone Safari и iPhone PWA;
+TypeScript и `git diff --check` прошли. Этот test-only follow-up ожидает
+публикации и точного CI.
+
+Branch preview `fix-durable-outbox` на кодовой ревизии `1ea3f72` прошёл read-only
+smoke: **8/8 GET-only** проверок, Service Worker активен, а
 `/assets/index-DlluKGhC.js` содержит полный SHA `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`.
 Изолированный staging, авторизованные запросы, OAuth и D1 этой проверкой не
 подтверждены.
