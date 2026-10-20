@@ -7937,3 +7937,14 @@ Mobile account/session matrix составляет 68 сценариев и 272 
 видимым. Сценарий прошёл 7/7 desktop/mobile/PWA профилей без retries;
 `npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
 точный CI этого follow-up запускается после push.
+
+## P0.5 — Support callbacks после same-account reauthentication, 20.10.2026
+
+Добавлены две browser acceptance для Support. Удержанный список и удержанная
+деталь обращения старой server session освобождаются после повторного входа того
+же аккаунта с новым SID. Старый тикет не появляется в UI, актуальная деталь
+остаётся на экране, позднее вложение не загружается, а session-change не
+показывается как ошибка поддержки. Оба сценария прошли 14/14 на семи
+desktop/mobile/PWA профилях без retries; `npm run typecheck` и
+`git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
+запускается после публикации.

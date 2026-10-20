@@ -1492,6 +1492,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   результат в другой сессии. `bc3e7c2`: профильные тесты 34/34, полный unit
   1249/1249, typechecks, guards и build прошли; старые bundles и staging остаются
   открытыми. [Контракт](docs/support-session.md).
+  - [x] Удержать список и деталь обращения вместе с приватным вложением старой
+    server session, повторно войти в тот же account и освободить ответы. Старый
+    тикет и его вложение не появляются; актуальный ticket остаётся видим, а fetch
+    приватного вложения не выполняется. Два E2E сценария прошли 14/14 на семи
+    desktop/mobile/PWA профилях без retries; root typecheck и diff check прошли.
+    Точный CI этого follow-up запускается после push.
 - [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
   guarded diary/history commit, profile usage и успешный UI только для текущей
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли

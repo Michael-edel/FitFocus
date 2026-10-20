@@ -1638,6 +1638,204 @@ test('a delayed support ticket list from account A cannot appear in account B', 
   }
 });
 
+test('a delayed support ticket list from a retired same-account session is discarded after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    releasedMembers: 0, supportListAccounts: [], releasedSupportLists: 0,
+  };
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, false, errors, false, false, false, false, false, false, false, false, true);
+  const reauthenticated: Account = { id: accountA.id, sid: 'd'.repeat(64), name: accountA.name };
+  const renewedTicket = {
+    id: `ticket-${accountA.id}`, created_at: 2, updated_at: 2, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение новой сессии', message: 'Тикет из актуальной сессии', status: 'new', priority: 'normal',
+    attachment_count: 0, messages: [],
+  };
+  const installRenewedSupportResponse = async (target: Page) => {
+    await target.route('**/api/support/feedback/my*', async route => {
+      const request = route.request();
+      if (request.headers()['x-fitfocus-state-session'] !== reauthenticated.sid) return route.fallback();
+      expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+      const body = new URL(request.url()).searchParams.has('id')
+        ? { ticket: renewedTicket }
+        : { tickets: [renewedTicket] };
+      return route.fulfill({
+        contentType: 'application/json',
+        headers: scopedHeaders(reauthenticated),
+        body: JSON.stringify(body),
+      });
+    });
+  };
+  await installRenewedSupportResponse(page);
+  await openApp(page, '/#support');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect.poll(() => state.supportListAccounts?.length).toBe(1);
+  expect(state.supportListAccounts).toEqual([accountA.id]);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+  await installRenewedSupportResponse(renewedPage);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const currentTicketTitle = renewedPage.getByRole('heading', { name: renewedTicket.subject, exact: true });
+    await expect(currentTicketTitle).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    fixtureA.releaseSupportList();
+    await expect.poll(() => state.releasedSupportLists).toBe(1);
+    await expect(currentTicketTitle).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Обращение A', exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByRole('heading', { name: 'Обращение A', exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(renewedTicket.message, { exact: true })).toBeVisible();
+    await expect(page.getByText('Сессия изменилась или истекла. Войдите снова и повторите действие.')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseSupportList();
+  }
+});
+
+test('a delayed support ticket detail and attachment from a retired same-account session are discarded after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    releasedMembers: 0, supportAttachmentRequests: [],
+  };
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  const reauthenticated: Account = { id: accountA.id, sid: 'e'.repeat(64), name: accountA.name };
+  const oldTicket = {
+    id: 'retired-session-ticket', created_at: 1, updated_at: 1, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение прежней сессии', message: 'Секретный ответ прежней сессии', status: 'new', priority: 'normal',
+    attachment_count: 1,
+    attachments: [{ name: 'private-old-session.gif', mime: 'image/gif', size: 26, kind: 'photo',
+      data_url: '/api/support/attachment?id=retired-session-ticket&index=0' }],
+    messages: [],
+  };
+  const currentTicket = {
+    id: 'current-session-ticket', created_at: 2, updated_at: 2, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение текущей сессии', message: 'Актуальный ответ поддержки', status: 'new', priority: 'normal',
+    attachment_count: 0, attachments: [], messages: [],
+  };
+  const held = deferred();
+  let heldDetails = 0, releasedDetails = 0;
+  await page.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    const sessionId = request.headers()['x-fitfocus-state-session'];
+    if (sessionId === accountA.sid) {
+      if (new URL(request.url()).searchParams.has('id')) {
+        heldDetails += 1;
+        await held.promise;
+        await route.fulfill({
+          contentType: 'application/json', headers: scopedHeaders(accountA),
+          body: JSON.stringify({ ticket: oldTicket }),
+        });
+        releasedDetails += 1;
+        return;
+      }
+      return route.fulfill({
+        contentType: 'application/json', headers: scopedHeaders(accountA),
+        body: JSON.stringify({ tickets: [oldTicket] }),
+      });
+    }
+    if (sessionId === reauthenticated.sid) {
+      const body = new URL(request.url()).searchParams.has('id')
+        ? { ticket: currentTicket }
+        : { tickets: [currentTicket] };
+      return route.fulfill({
+        contentType: 'application/json', headers: scopedHeaders(reauthenticated), body: JSON.stringify(body),
+      });
+    }
+    return route.fallback();
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Обращение прежней сессии/ })).toBeVisible();
+  await expect.poll(() => heldDetails).toBe(1);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+  await renewedPage.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    const body = new URL(request.url()).searchParams.has('id')
+      ? { ticket: currentTicket }
+      : { tickets: [currentTicket] };
+    return route.fulfill({
+      contentType: 'application/json', headers: scopedHeaders(reauthenticated), body: JSON.stringify(body),
+    });
+  });
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const currentTicketMessage = renewedPage.getByText(currentTicket.message, { exact: true });
+    await expect(currentTicketMessage).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    held.release();
+    await expect.poll(() => releasedDetails).toBe(1);
+    await expect(renewedPage.getByText(oldTicket.message, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(oldTicket.message, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('private-old-session.gif', { exact: true })).toHaveCount(0);
+    await expect(currentTicketMessage).toBeVisible();
+    expect(state.supportAttachmentRequests).toEqual([]);
+    await expect(page.getByText('Сессия изменилась или истекла. Войдите снова и повторите действие.')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
 test('loads support ticket and reply attachments with the captured session proof', async ({ page }) => {
   const errors: string[] = [];
   const state: FixtureState = {
