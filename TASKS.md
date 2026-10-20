@@ -7,14 +7,18 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Удалённое состояние PR #93 — SHA `44b63567c5b74590de8819ea6a5e02b9caf984a7`;
-на предыдущем SHA `045f934` статические проверки и unit suite прошли, но полный browser E2E в CI #1817
-завершился с одним сбоем iPhone PWA в legacy writer fence: за 60 секунд барьер
-не подтвердил `writersStopped` и `sendAllowed`. Добавлена локальная
-failure-only диагностика снимка миграции и сырого ответа Service Worker;
-тестовый сценарий прошёл 3/3 повторов. Причина CI-сбоя пока не установлена.
-Диагностический follow-up опубликован в `44b6356`; точный CI #1819 запущен
-для этого SHA, его результат ожидается.
+Удалённый HEAD PR #93 — `fca954d18f1d6b902a0c5f3c3641934a317ed2a6`.
+Точный [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
+для этого SHA проходит audit, guards, unit, три typecheck и build; browser
+матрица ещё выполняется. Предыдущий CI #1817 выявил один iPhone PWA сбой
+legacy writer fence: за 60 секунд барьер не подтвердил `writersStopped` и
+`sendAllowed`. Добавлена failure-only диагностика ответа Service Worker;
+локальный тест прошёл 10/10 повторов, но причина CI-сбоя не установлена.
+Документационный push `fca954d` отменил предыдущий run #1819 по concurrency.
+Два E2E для позднего `/api/state` ответа после смены аккаунта и reauthentication
+добавлены локально; каждый прошёл 7/7 desktop/mobile/PWA профилей без retries.
+Они ещё не входят в удалённый HEAD и требуют точного CI после безопасной
+публикации.
 
 Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
 точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
@@ -24,8 +28,9 @@ Service Worker активируется, scope `/`, после reload контр
 подтверждены. `npm run typecheck` и `git diff --check` для локального follow-up
 прошли.
 
-PR #90 остаётся открыт; на момент последней проверки одобряющих review нет.
-Требование защищённой `main` не выполнено, merge не сделан.
+PR #90 остаётся открыт; одобряющего review пока нет. Вы подтвердили, что
+сможете получить необходимое одобрение. Требование защищённой `main` пока не
+выполнено, merge не сделан.
 
 В плане **29 незакрытых пунктов**: 16 в P0, 7 в P1 и 6 в подготовительных и
 компонентных разделах. Ни один P0 не закрыт целиком. Остались другие writers и
@@ -2270,6 +2275,16 @@ legacy-ключ не используется для новой очереди �
 ### P0.9 — приёмка жизненного цикла
 
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
+  - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
+    поздний scoped-ответ A не подтверждает операцию A после смены active session;
+    настройки B отправляются с proof B, без ключа A. Новый тест прошёл 7/7
+    desktop/mobile/PWA профилей (`workers=2,retries=0`); mock API не заменяет
+    staging. Изменение локальное, точный CI этого теста ожидает публикации.
+  - [x] Проверить позднее подтверждение outbox после reauthentication того же
+    аккаунта: исходная операция захватывается новым attempt в новой server
+    session; поздний успех старого запроса не снимает её, а ответ нового attempt
+    завершает очередь. Тест прошёл 7/7 профилей без retries. Mock API; точный CI
+    локального изменения ожидает публикации.
   - [x] Подтвердить полный CI на code HEAD `ba78ba0`: audit, schema/privacy/auth/API
     guards, unit, три typecheck, build, browser matrix (`retries=0`) и rollback/CAS
     завершились success в [run #1688](https://github.com/Michael-edel/FitFocus/actions/runs/39193899739).

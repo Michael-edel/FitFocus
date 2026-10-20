@@ -4334,6 +4334,245 @@ test('detailed health report PDF is not downloaded after same-account reauthenti
   }
 });
 
+test('a late state response from account A cannot acknowledge its outbox after account B signs in', async ({ page, context }, info) => {
+  const planKeyA = `fitfocus_data_${accountA.id}_plan_task_done`;
+  const stateWrites: StateWriteAttempt[] = [];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateWriteLog: stateWrites,
+  };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+
+  const requestStarted = deferred();
+  const releaseResponse = deferred();
+  await page.route('**/api/state', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; baseVersion?: unknown }> } | null;
+    const items = Array.isArray(body?.items) ? body.items : [];
+    if (!items.some(item => item.key === planKeyA)) return route.fallback();
+
+    stateWrites.push({
+      account: request.headers()['x-fitfocus-state-account'],
+      session: request.headers()['x-fitfocus-state-session'],
+      keys: items.map(item => String(item.key ?? '')),
+    });
+    requestStarted.release();
+    await releaseResponse.promise;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({ ok: true, items: items.map(item => ({
+        key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true,
+      })) }),
+    });
+  });
+
+  try {
+    await openApp(page, '/#plan');
+    await expect(page.getByRole('button', { name: 'Записать первый завтрак', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Записать первый завтрак', exact: true }).click();
+    await requestStarted.promise;
+
+    expect(stateWrites.find(write => write.keys.includes(planKeyA)))
+      .toEqual({ account: accountA.id, session: accountA.sid, keys: [planKeyA] });
+    expect(stateWrites.every(write => write.account === accountA.id && write.session === accountA.sid)).toBe(true);
+    const beforeSwitch = await readDurableSnapshot(page);
+    const operation = beforeSwitch.operations.find(entry => entry.accountId === accountA.id && entry.key === planKeyA);
+    expect(operation).toMatchObject({ accountId: accountA.id, status: 'sending' });
+    expect(operation).toBeTruthy();
+
+    const switched = await openAccountB(context, state, true, '/#settings');
+    await waitForAccountSwitch(page);
+    const whileBActive = await readDurableSnapshot(switched.page);
+    expect(whileBActive.activeSession?.accountId).toBe(accountB.id);
+    expect(whileBActive.operations.filter(entry => entry.accountId === accountB.id)).toEqual([]);
+    expect(whileBActive.operations.filter(entry => entry.accountId === accountA.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ opId: operation!.opId, accountId: accountA.id, key: planKeyA, status: 'sending' }),
+    ]));
+
+    const lateResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/state'
+        && response.request().method() === 'PUT'
+        && (response.request().postDataJSON() as { items?: Array<{ key?: unknown }> } | null)?.items?.some(item => item.key === planKeyA) === true,
+    );
+    releaseResponse.release();
+    const response = await lateResponse;
+    expect(response.status()).toBe(200);
+    expect(response.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(response.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+
+    const afterResponse = await readDurableSnapshot(switched.page);
+    expect(afterResponse.activeSession?.accountId).toBe(accountB.id);
+    expect(afterResponse.operations.filter(entry => entry.accountId === accountB.id)).toEqual([]);
+    expect(afterResponse.operations.filter(entry => entry.accountId === accountA.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ opId: operation!.opId, accountId: accountA.id, key: planKeyA }),
+    ]));
+
+    const light = switched.page.getByRole('button', { name: /^Светлая/ });
+    await expect(light).toBeVisible();
+    await light.click();
+    const settingsKeyB = `fitfocus_data_${accountB.id}_settings`;
+    await expect.poll(() => stateWrites.some(write => write.account === accountB.id
+      && write.session === accountB.sid && write.keys.includes(settingsKeyB))).toBe(true);
+    expect(stateWrites.filter(write => write.account === accountB.id)
+      .every(write => !write.keys.includes(planKeyA))).toBe(true);
+    expect(errors).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await switched.page.screenshot({ path: info.outputPath('late-state-response-account-switch.png') });
+  } finally {
+    releaseResponse.release();
+  }
+});
+
+test('a late state acknowledgement from a retired session cannot finish the reclaimed operation', async ({ page, context }) => {
+  const planKey = `fitfocus_data_${accountA.id}_plan_task_done`;
+  const stateWrites: StateWriteAttempt[] = [];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    stateWriteLog: stateWrites,
+  };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+
+  const originalRequestStarted = deferred();
+  const releaseOriginalResponse = deferred();
+  await page.route('**/api/state', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = request.postDataJSON() as { items?: Array<{ key?: unknown; baseVersion?: unknown }> } | null;
+    const items = Array.isArray(body?.items) ? body.items : [];
+    if (!items.some(item => item.key === planKey)) return route.fallback();
+
+    stateWrites.push({
+      account: request.headers()['x-fitfocus-state-account'],
+      session: request.headers()['x-fitfocus-state-session'],
+      keys: items.map(item => String(item.key ?? '')),
+    });
+    originalRequestStarted.release();
+    await releaseOriginalResponse.promise;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({ ok: true, items: items.map(item => ({
+        key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true,
+      })) }),
+    });
+  });
+
+  const renewedAccountA: Account = { id: accountA.id, sid: 'd'.repeat(64) };
+  const renewedRequestStarted = deferred();
+  const releaseRenewedResponse = deferred();
+  let renewedPage: Page | undefined;
+  try {
+    await openApp(page, '/#plan');
+    const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
+    await expect(task).toBeVisible();
+    await task.click();
+    await originalRequestStarted.promise;
+
+    const originalSnapshot = await readDurableSnapshot(page);
+    const originalOperation = originalSnapshot.operations.find(entry => entry.accountId === accountA.id && entry.key === planKey);
+    expect(originalOperation).toMatchObject({ accountId: accountA.id, status: 'sending' });
+    expect(originalOperation?.attempt?.sessionEpoch).toBe(originalSnapshot.activeSession?.sessionEpoch);
+
+    state.current = renewedAccountA;
+    state.profile = profileFor(accountA.id);
+    renewedPage = await context.newPage();
+    renewedPage.on('pageerror', error => errors.push(error.message));
+    renewedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(renewedPage, state);
+    await renewedPage.route('**/api/state', async route => {
+      const request = route.request();
+      if (request.method() !== 'PUT') return route.fallback();
+      const body = request.postDataJSON() as { items?: Array<{ key?: unknown; baseVersion?: unknown }> } | null;
+      const items = Array.isArray(body?.items) ? body.items : [];
+      if (!items.some(item => item.key === planKey)) return route.fallback();
+
+      stateWrites.push({
+        account: request.headers()['x-fitfocus-state-account'],
+        session: request.headers()['x-fitfocus-state-session'],
+        keys: items.map(item => String(item.key ?? '')),
+      });
+      renewedRequestStarted.release();
+      await releaseRenewedResponse.promise;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: scopedHeaders(renewedAccountA),
+        body: JSON.stringify({ ok: true, items: items.map(item => ({
+          key: String(item.key ?? ''), version: Number(item.baseVersion ?? 0) + 1, exists: true,
+        })) }),
+      });
+    });
+    await openApp(renewedPage, '/#plan');
+    await expect.poll(async () => (await readDurableSnapshot(renewedPage!)).activeSession?.serverSessionId)
+      .toBe(renewedAccountA.sid);
+    await renewedRequestStarted.promise;
+
+    const reclaimedSnapshot = await readDurableSnapshot(renewedPage);
+    const reclaimedOperation = reclaimedSnapshot.operations.find(entry => entry.accountId === accountA.id && entry.key === planKey);
+    expect(reclaimedOperation).toMatchObject({ opId: originalOperation!.opId, status: 'sending' });
+    expect(reclaimedOperation?.attempt?.attemptId).not.toBe(originalOperation?.attempt?.attemptId);
+    expect(reclaimedOperation?.attempt?.sessionEpoch).toBe(reclaimedSnapshot.activeSession?.sessionEpoch);
+    expect(stateWrites.filter(write => write.keys.includes(planKey))).toEqual([
+      { account: accountA.id, session: accountA.sid, keys: [planKey] },
+      { account: renewedAccountA.id, session: renewedAccountA.sid, keys: [planKey] },
+    ]);
+
+    const originalLateResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/state'
+        && response.request().method() === 'PUT'
+        && (response.request().postDataJSON() as { items?: Array<{ key?: unknown }> } | null)?.items?.some(item => item.key === planKey) === true,
+    );
+    releaseOriginalResponse.release();
+    const oldResponse = await originalLateResponse;
+    expect(oldResponse.status()).toBe(200);
+    expect(oldResponse.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+
+    const afterOldResponse = await readDurableSnapshot(renewedPage);
+    const stillReclaimed = afterOldResponse.operations.find(entry => entry.accountId === accountA.id && entry.key === planKey);
+    expect(afterOldResponse.activeSession?.serverSessionId).toBe(renewedAccountA.sid);
+    expect(stillReclaimed).toMatchObject({ opId: reclaimedOperation!.opId, status: 'sending' });
+    expect(stillReclaimed?.attempt?.attemptId).toBe(reclaimedOperation?.attempt?.attemptId);
+
+    const renewedResponsePromise = renewedPage.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/state'
+        && response.request().method() === 'PUT'
+        && (response.request().postDataJSON() as { items?: Array<{ key?: unknown }> } | null)?.items?.some(item => item.key === planKey) === true,
+    );
+    releaseRenewedResponse.release();
+    const renewedResponse = await renewedResponsePromise;
+    expect(renewedResponse.status()).toBe(200);
+    expect(renewedResponse.headers()['x-fitfocus-state-session']).toBe(renewedAccountA.sid);
+    await expect.poll(async () => (await readDurableSnapshot(renewedPage!)).operations
+      .filter(entry => entry.accountId === accountA.id && entry.key === planKey)).toEqual([]);
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseOriginalResponse.release();
+    releaseRenewedResponse.release();
+  }
+});
+
 test('a late profile save from account A cannot acknowledge or overwrite after account B signs in', async ({ page, context }, info) => {
   let started!: () => void;
   const writeStarted = new Promise<void>(resolve => { started = resolve; });
