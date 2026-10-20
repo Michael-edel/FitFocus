@@ -33,6 +33,22 @@ guards, unit, typechecks, build и публикация артефактов т�
 Это browser acceptance в CI, не проверка физического устройства, OAuth,
 staging или всего P0.5.
 
+## P0.5 — строгая приёмка Safari reload diagnostics, 21.10.2026
+
+Исторические Safari reload ошибки сопоставлены с конкретными запросами и
+lifecycle: удержанный GET `/api/profile` отменяется при reload и отдельно
+проверен как ожидаемый cancel без page/console ошибок; weekly-AI запрос
+продолжался после старта reload и теперь инвалидируется на `beforeunload`.
+Узкие предупреждения `/api/me`, `/api/ai`, achievements и family больше не
+маскируются допусками в соответствующих спеках; общий CORS/network-фильтр не
+добавлен.
+
+Точный CI [#1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
+для SHA `16305be` прошёл полную browser matrix: **1627 passed / 74 skipped**,
+без workflow failures. Это закрывает диагностику этих исторических reload
+источников в проверенной browser-матрице. Физические Safari/iOS, staging и
+старые установленные bundles остаются отдельными release gates.
+
 ## P0.9 — точный CI #1827 и WebKit reload warning, 20.10.2026
 
 Точный [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)

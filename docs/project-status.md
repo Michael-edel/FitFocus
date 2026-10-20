@@ -27,6 +27,12 @@ Audit, schema/privacy/auth/API guards, unit, три typecheck и production buil
 Workflow использует полный Chrome for Testing, потому что Playwright headless-shell
 отключает BFCache для автоматизированной сессии.
 
+Та же полная CI browser matrix прошла строгие Safari reload assertions без общих
+CORS/network исключений: `/api/profile` cancel обрабатывается как ожидаемая
+отмена при unload, а прежние `/api/me`, `/api/ai`, achievements и family warnings
+не появились. Это закрывает диагностику перечисленных исторических сообщений в
+автоматизированных браузерах; физический iOS и staging остаются открыты.
+
 Исторический P0.9 Firefox timeout в `saved(page)` повторно проверен на текущем
 локальном HEAD: сценарий обновления PWA прошёл 3/3, затем 10/10 в desktop Firefox
 без retries; 10 неприменимых тестов были пропущены. Проблема не повторилась,
