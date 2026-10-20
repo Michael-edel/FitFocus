@@ -1978,6 +1978,7 @@ test('held food photo analysis cannot commit after the same account starts a new
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Анализирую фото...', { exact: true })).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
 
   const beforeReauthentication = await readDurableSnapshot(page);
@@ -2020,6 +2021,8 @@ test('held food photo analysis cannot commit after the same account starts a new
     expect(newSessionValues).toEqual(valuesBefore);
     expect(newSessionOperations).toEqual(operationsBefore);
     expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
 
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
@@ -2032,6 +2035,8 @@ test('held food photo analysis cannot commit after the same account starts a new
     expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
       .toEqual(diaryAndHistoryWritesBefore);
     expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
     expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'foodphoto')).toEqual([{
       feature: 'foodphoto', account: accountA.id, session: accountA.sid,
     }]);
