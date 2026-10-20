@@ -62,8 +62,11 @@ Production-код не менялся; точный CI этой ревизии �
 подробного PDF: запрос шрифта удерживается, затем тот же аккаунт входит с новым
 SID. Старый экспорт не скачивает файл и не вызывает achievement check. Краткий
 PDF прошёл 7/7; новый подробный PDF прошёл 7/7 desktop/mobile/PWA профилей при
-`workers=1,retries=0`. Production-код не менялся. CI #1810 для предыдущего
-опубликованного SHA ещё выполняет browser tests и не содержит новый follow-up.
+`workers=1,retries=0`. Прямые unit-проверки session guard теперь покрывают все
+пять PDF-экспортёров: 6/6 тестов, включая успешный экспорт при текущей сессии.
+`npm run typecheck` прошёл. Production-код не менялся. CI #1811 проверяет SHA
+`87171fe` и не включает новые unit cases; полный exact CI объединённого SHA
+запускается после публикации.
 
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 

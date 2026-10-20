@@ -15,10 +15,11 @@ account-switch тестов (1441 passed / 60 skipped). Причины оказ�
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
-Локально добавлена P0.5 browser acceptance для подробного PDF после повторного
-входа того же аккаунта: 7/7 desktop/mobile/PWA профилей, `workers=1,retries=0`.
-CI #1810 проверяет опубликованный SHA `6f611b4` и не содержит новый тест; его
-итог отслеживается отдельно.
+Локально добавлены P0.5 проверки краткого и подробного PDF после повторного
+входа того же аккаунта (14/14 browser profiles суммарно) и stale-session unit
+проверки всех пяти PDF exporters (6/6 tests с успешным кратким экспортом).
+`npm run typecheck` и `git diff --check` прошли. CI #1811 проверяет опубликованный
+SHA `87171fe`; он содержит подробный PDF E2E, но не новые unit cases.
 
 Основные durable outbox, account/session guards, серверные поколения, семейный
 CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
@@ -1136,9 +1137,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   - [x] Поздний `GET /api/profile` старой сессии после same-account
     reauthentication не перезаписывает значение, сохранённое текущей сессией;
     тот же тест проходит 7/7 desktop/mobile/PWA профилей без retries.
-  - [x] Краткий PDF не скачивается, если во время загрузки шрифта тот же аккаунт
-    получает новую server session. Browser acceptance прошёл 7/7
-    desktop/mobile/PWA профилей (`workers=1,retries=0`); typecheck прошёл.
+  - [x] Краткий и подробный PDF не скачиваются, если во время загрузки шрифта
+    тот же аккаунт получает новую server session. Browser acceptance прошёл
+    14/14 суммарно на desktop/mobile/PWA профилях (`workers=1,retries=0`).
+    Unit guard также проверен для всех пяти экспортёров; 6/6 PDF tests и root
+    typecheck прошли. Production-код не менялся.
   - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
     устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
     idle-страница не удерживает listener. Недельный отчёт оставляет уже
