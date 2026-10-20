@@ -7,7 +7,8 @@
 вкладке. Тест теперь требует пустой список page/console errors. Он прошёл 7/7
 desktop, mobile и PWA профилей, включая desktop WebKit; отдельный повтор WebKit
 также прошёл. `npm run typecheck` и `git diff --check` прошли. Production-код не
-менялся. Точный CI нового HEAD запускается после push.
+менялся. Точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+для `045f934` выполняет полный browser E2E.
 
 В связанном `family-menu-durable.spec.ts` убран допуск четырёх WebKit
 `/api/me`/family reload warnings; переход A→B и same-account reauthentication

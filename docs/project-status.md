@@ -16,7 +16,15 @@ access-control warning при переключении аккаунта в со�
 тест прошёл 7/7 browser/PWA профилей; `npm run typecheck` и `git diff --check`
 прошли. В связанном семейном reload тесте снят допуск предупреждений, сценарии
 смены аккаунта и same-account reauthentication прошли 6/6 WebKit/PWA профилей.
-Точный CI для опубликованного HEAD ожидает запуска.
+Точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+для `045f934` выполняет полный browser E2E; результат пока не получен.
+
+После push `045f934` опубликованный branch preview проверен read-only smoke:
+`npm run test:e2e:staging` прошёл 7/7 GET-only проверок, а загруженный
+`/assets/index-xMHVwOhL.js` содержит полный SHA текущего коммита. Страница,
+`/api/env` и анонимный `/api/me` отвечают 200; защищённые bootstrap/profile/
+state/push-status — 401 без redirect и `Set-Cookie`. Это не отдельный staging и
+не подтверждает OAuth, авторизованные записи или D1.
 
 Тестовый follow-up [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f)
 проверяет поздний Stripe Checkout URL после повторной авторизации того же

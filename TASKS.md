@@ -189,6 +189,9 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
+  Branch preview текущего SHA `045f934` подтверждён: GET-only smoke 7/7,
+  загруженный bundle содержит полный SHA; отдельный staging, D1, APP_URL, OAuth
+  и реальные edge-правила остаются непроверенными.
   - [x] Для current branch preview commit `bb94957` сверить успешный Cloudflare
     deploy, страницу и анонимные GET: root/env/me — 200, защищённые
     bootstrap/profile/state/push — 401 без redirect/cookie. Свежий Chromium
@@ -371,9 +374,8 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   GET `/api/profile`, доступность локального профиля и отсутствие page/console
   errors. В `pwa-update.spec.ts` assertion ужесточён до нуля WebKit `/api/ai`
   warnings; desktop WebKit, iPhone Safari и iPhone PWA прошли 3/3
-  (`workers=1,retries=0`). CI #1813–#1815 отменены после продвижения ветки;
-  #1816 проверял предыдущий HEAD `9d6218e` и будет заменён запуском после
-  следующей публикации.
+  (`workers=1,retries=0`). CI #1813–#1816 отменены после продвижения ветки;
+  точный CI #1817 для `045f934` выполняет полный browser E2E.
   В `pwa-update.spec.ts` снят ещё один `/api/me` допуск; вся спека прошла 6/6.
   В `weekly-menu-durability.spec.ts` удалены допуски для `/api/me` и
   `/api/achievements/check`; спека прошла 24/24. В `pwa-rollback.spec.ts`
