@@ -1,5 +1,18 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — убрать последнее исключение WebKit при переключении аккаунта, 20.10.2026
+
+В `ai-callback-account-switch.spec.ts` удалён допуск для одного WebKit
+`/api/ai due to access control checks` при переходе на другой аккаунт в соседней
+вкладке. Тест теперь требует пустой список page/console errors. Он прошёл 7/7
+desktop, mobile и PWA профилей, включая desktop WebKit; отдельный повтор WebKit
+также прошёл. `npm run typecheck` и `git diff --check` прошли. Production-код не
+менялся. Точный CI нового HEAD запускается после push.
+
+В связанном `family-menu-durable.spec.ts` убран допуск четырёх WebKit
+`/api/me`/family reload warnings; переход A→B и same-account reauthentication
+прошли 6/6 desktop WebKit, iPhone Safari и iPhone PWA без предупреждений.
+
 ## P0.5 — поздняя статистика Admin отбрасывается после same-account reauthentication, [`4cea2bd`](https://github.com/Michael-edel/FitFocus/commit/4cea2bdeb2513307d11b33785a7ee444da82a5b5), 20.10.2026
 
 Добавлен held-response E2E для `/api/admin/stats`: после повторного входа в тот

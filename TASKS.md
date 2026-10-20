@@ -371,9 +371,9 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   GET `/api/profile`, доступность локального профиля и отсутствие page/console
   errors. В `pwa-update.spec.ts` assertion ужесточён до нуля WebKit `/api/ai`
   warnings; desktop WebKit, iPhone Safari и iPhone PWA прошли 3/3
-  (`workers=1,retries=0`). CI #1813 для `50592e5` отменён после продвижения
-  ветки. CI #1814 для `6e37e8e` выполняет browser E2E; #1815 для `8ae5c0f`
-  ожидает своей очереди.
+  (`workers=1,retries=0`). CI #1813–#1815 отменены после продвижения ветки;
+  #1816 проверял предыдущий HEAD `9d6218e` и будет заменён запуском после
+  следующей публикации.
   В `pwa-update.spec.ts` снят ещё один `/api/me` допуск; вся спека прошла 6/6.
   В `weekly-menu-durability.spec.ts` удалены допуски для `/api/me` и
   `/api/achievements/check`; спека прошла 24/24. В `pwa-rollback.spec.ts`
@@ -383,10 +383,15 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   page/console warning не возник. В `pwa-offline-durability.spec.ts` снят допуск
   одного iPhone PWA `/api/me` warning при offline transition; сценарий прошёл
   7/7 на всех browser/PWA профилях; изменение опубликовано в `8ae5c0f`, CI #1815
-  ожидает запуска. В `family-menu-durable.spec.ts` снят cap на четыре
+  отменён при продвижении ветки. В `family-menu-durable.spec.ts` снят cap на четыре
   `/api/me`/family reload access-control errors: смена аккаунта и same-account
   reauthentication прошли 6/6 на трёх WebKit/PWA профилях с нулём warnings.
-  Это изменение пока локальное; точный CI после следующей публикации нужен.
+  Затем в `ai-callback-account-switch.spec.ts` удалено последнее узкое
+  исключение для WebKit `/api/ai` access-control warning при переходе на другой
+  аккаунт. Строгая проверка `errorsA === []` прошла 7/7 browser/PWA профилей,
+  включая desktop WebKit; root typecheck и `git diff --check` прошли.
+  Изменения семейных и AI callback проверок публикуются в текущем follow-up;
+  точный CI после push обязателен.
   Оставить пункт
   открытым до него и сверки остальных исторических Safari reload сообщений.
   Общий CORS-фильтр не добавлять.

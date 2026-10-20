@@ -11,6 +11,13 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
+В текущем follow-up удалено последнее исключение для WebKit `/api/ai`
+access-control warning при переключении аккаунта в соседней вкладке. Строгий
+тест прошёл 7/7 browser/PWA профилей; `npm run typecheck` и `git diff --check`
+прошли. В связанном семейном reload тесте снят допуск предупреждений, сценарии
+смены аккаунта и same-account reauthentication прошли 6/6 WebKit/PWA профилей.
+Точный CI для опубликованного HEAD ожидает запуска.
+
 Тестовый follow-up [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f)
 проверяет поздний Stripe Checkout URL после повторной авторизации того же
 аккаунта. `serverSessionId` и `sessionEpoch` меняются, старая вкладка замечает
@@ -85,8 +92,9 @@ Rollback по-прежнему проверяет точные ожидаемы�
 iPhone PWA `/api/me` warning допуск при offline transition; проверка прошла 7/7
 всех browser/PWA профилей без warnings. Ещё убран cap на четыре семейных
 `/api/me`/family reload warnings; два сценария смены аккаунта и reauthentication
-прошли 6/6 на трёх WebKit/PWA профилях. Это последнее семейное изменение пока
-локально.
+прошли 6/6 на трёх WebKit/PWA профилях. Семейная проверка и строгий
+account-switch сценарий включены в текущую ветку PR #93; результат CI будет
+сверяться по точному HEAD.
 
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
