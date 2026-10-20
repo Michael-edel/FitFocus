@@ -8,7 +8,7 @@ import { createProfileIntent } from './storage/profileState';
 import { Goal, type UserProfile } from './types';
 import { isRecord } from './safeJson';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
-import type { OutboxReadGuard } from './storage/durableOutbox';
+import { isOutboxWriteSessionChanged, type OutboxLocalCommitGuard, type OutboxReadGuard } from './storage/durableOutbox';
 import { SessionReadError } from './storage/sessionRead';
 import { requestJson } from './storage/sessionTransport';
 
@@ -61,6 +61,7 @@ type RegisterFlowDeps = {
   controller?: AbortController;
   loginAsUser: (user: UserProfile, readGuard?: OutboxReadGuard) => Promise<void>;
   isCurrentSession: () => boolean;
+  getProfileWriteGuard: () => Promise<OutboxLocalCommitGuard | null>;
   setActiveTab: (value: 'dashboard' | 'council' | 'plan' | 'nutrition' | 'recipes' | 'workouts' | 'course' | 'family' | 'settings' | 'pro' | 'admin') => void;
   setPlanIntroOpen: (value: boolean) => void;
   fetchImpl?: typeof fetch;
@@ -209,11 +210,25 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
   target?.addEventListener('pagehide', hide, { once: true });
   const repository = new UserStateRepository(newUser.id);
   try {
-    await createProfileIntent(newUser, repository);
+    const profileWriteGuard = await deps.getProfileWriteGuard();
+    if (!isCurrent() || controller.signal.aborted) {
+      target?.removeEventListener('beforeunload', hide);
+      target?.removeEventListener('pagehide', hide);
+      return;
+    }
+    if (!profileWriteGuard) {
+      deps.setPlanError('Сессия изменилась. Повторите вход перед созданием профиля.');
+      target?.removeEventListener('beforeunload', hide);
+      target?.removeEventListener('pagehide', hide);
+      return;
+    }
+    await createProfileIntent(newUser, repository, profileWriteGuard);
   } catch (error) {
-    if (isCurrent() && !pageHidden) deps.setPlanError(error instanceof Error && error.message.startsWith('PROFILE_')
-      ? 'На устройстве уже есть профиль или конфликт создания. Повторите вход, чтобы восстановить его.'
-      : 'Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.');
+    if (isCurrent() && !pageHidden) deps.setPlanError(isOutboxWriteSessionChanged(error)
+      ? 'Сессия изменилась. Повторите вход перед созданием профиля.'
+      : error instanceof Error && error.message.startsWith('PROFILE_')
+        ? 'На устройстве уже есть профиль или конфликт создания. Повторите вход, чтобы восстановить его.'
+        : 'Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.');
     target?.removeEventListener('beforeunload', hide);
     target?.removeEventListener('pagehide', hide);
     return;

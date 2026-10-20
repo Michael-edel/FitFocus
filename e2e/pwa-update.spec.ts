@@ -82,7 +82,7 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     expect(cancelledProfileReads[0]).toMatch(/cancel|abort/i);
     expect(server.counts.profile).toBe(0);
     expect(server.unexpectedApi).toEqual([]);
-    expect(expectedWebKitAiReloadWarnings.length).toBeLessThanOrEqual(isWebKit ? 1 : 0);
+    expect(expectedWebKitAiReloadWarnings).toEqual([]);
     expect(errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {
@@ -356,13 +356,8 @@ test('real service worker waits for an explicit update and preserves durable fam
     expect(cachedApi).toEqual([]); expect(server.unexpectedApi).toEqual([]);
     expect(legacyIdentityLoads).toBeGreaterThan(0); expect(currentIdentityRequests).toEqual([]);
     await expect(page).toHaveTitle(/FitFocus/);
-    const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
     const expectedWebKitApiMeWarnings = errors.filter(error => error.includes('due to access control checks.') && error.includes('/api/me'));
-    if (isWebKit && expectedWebKitApiMeWarnings.length > 0) {
-      expect(meResponses.some(entry => entry.tab === 'new' && entry.status === 200)).toBe(true);
-      expect(failedApiRequests.filter(entry => entry.tab === 'new' && entry.path === '/api/me')).toEqual([]);
-    }
-    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(isWebKit ? 2 : 0);
+    expect(expectedWebKitApiMeWarnings).toEqual([]);
     const currentPageIdbNavigationWarnings = errors.filter(isExpectedFirefoxIdbNavigationWarning);
     expect(currentPageIdbNavigationWarnings.length).toBeLessThanOrEqual(info.project.name === 'desktop-firefox' ? 2 : 0);
     // The retained v2 client may have no legacy state write to reject during this flow.

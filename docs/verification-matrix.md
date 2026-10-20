@@ -1,6 +1,6 @@
 # Матрица проверки стабилизации FitFocus
 
-Сверено: 18.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
+Сверено: 20.10.2026. Это указатель на критерии [TASKS](../TASKS.md),
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
@@ -264,12 +264,157 @@ workers=1/retries=0, без изменения кода. Полный CI `3baac0
 | P0.1 — CI и зависимости | Исправление audit и push; зелёный CI опубликованной ветки | [Журнал](stabilization-progress.md), [workflow](../.github/workflows/ci.yml) | Интеграция зависимостей через защищённую main; CI release SHA |
 | P0.2 — конфликты и ошибки | Outbox сохраняет конфликт и payload для 15 state-ключей, profile и familyMenu | [Outbox tests](../tests/durable_outbox.test.ts), [profile sender](../tests/profile_sender.test.ts), [контракт](profile-persistence.md) | UI разрешения/повтора и полный lifecycle |
 | P0.3 — auth-пауза | Локальная запись продолжается; отправка требует подтверждения владельца; runtime legacy использует свежий `/api/me` и all-client fence | [State sender](../tests/state_sync.test.ts), [runtime migration](../tests/state_sync_legacy_migration.test.ts), [profile E2E](../e2e/profile-durability.spec.ts), [контракт](state-sender.md) | Остальные callbacks, old/new legacy migration smoke и повторный вход на staging |
-| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week; delayed invite и family AI callbacks после входа другого аккаунта проверены на `f9c8425`/`bca2eda`; invite/member используют явную семью на `2bbec11`; food-diary account-switch acceptance сохраняет A и скрывает данные от A/B UI, локально 3/3 desktop; bulk move/delete пишут ровно по одному snapshot, а одинаковый food id остаётся изолированным между A/B, E2E 3/3 desktop engines локально; точный CI #1501 на `7ff579d` завершился success: 850 browser passed / 263 skipped; weekly-report reader повторно проверяет login session после IndexedDB-read; family context, shopping read и check повторно проверяют week scope, rollover E2E — 9/9, полный family-session — 33/33 на desktop engines; старый shopping PATCH остаётся привязан к исходной неделе и не показывает ложную ошибку смены сессии | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [family session E2E](../e2e/family-session.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [weekly report tests](../tests/weekly_auto_engine.test.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks и cache; приёмка смены членства и целей семьи в оставшихся writers |
+| P0.4 — облачная загрузка | Managed hydration и profile seed проверяют pending, revision и auth-fence; `useFamilyCloud` сохраняет исходный login и проверяет family/week; delayed invite и family AI callbacks после входа другого аккаунта проверены на `f9c8425`/`bca2eda`; invite/member используют явную семью на `2bbec11`; food-diary account-switch acceptance сохраняет A и скрывает данные от A/B UI, локально 3/3 desktop; bulk move/delete пишут ровно по одному snapshot, а одинаковый food id остаётся изолированным между A/B, E2E 3/3 desktop engines локально; точный CI #1501 на `7ff579d` завершился success: 850 browser passed / 263 skipped; weekly-report reader повторно проверяет login session после IndexedDB-read; family context, shopping read и check повторно проверяют week scope, rollover E2E — 9/9, полный family-session — 33/33 на desktop engines; старый shopping PATCH остаётся привязан к исходной неделе и не показывает ложную ошибку смены сессии | [Hydration](../tests/session_hydration_durable.test.ts), [bootstrap E2E](../e2e/bootstrap-session.spec.ts), [family session E2E](../e2e/family-session.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [weekly report tests](../tests/weekly_auto_engine.test.ts), [семейный контракт](family-session.md) | Остальные cloud callbacks/cache и writers семейного членства; задержанный update цели после смены семьи прошёл 7/7 локально, точный CI расширенной матрицы ожидается |
 | P0.5 — поздние ответы | Claim/finish и readGuard; guarded bootstrap, меню, достижения и `useFamilyCloud`; мобильный bearer из Settings с fresh proof, guarded no-store и delayed account-switch E2E подтверждён точным CI `08618e3` ([run 38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)); личные покупки следуют profile CAS на `4736ff5`, familyMenu использует исходный guard и family/week CAS на `405238b`; недельный AI-отчёт и retry защищены; Coach/plateau account-switch E2E прошло локально 6/6 в трёх desktop engines, точный CI `9bc98ee` — success ([run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)); delayed family invite/AI, personal-plan retry, achievement account-switch и explicit family target включены в полный CI `9bdeb47` ([run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051)); личное недельное меню после account switch добавлено в `562e20d`, полный CI прошёл ([run 38531646756](https://github.com/Michael-edel/FitFocus/actions/runs/38531646756)); генерация пошагового рецепта из дневника session-bound в `71d2ca4`: account-switch spec — 44 passed / 4 skipped; billing Checkout/admin теперь session-bound (18 профильных unit, checkout E2E 3/3); точный CI billing ожидается после исправления E2E baseline `38671885368` | [Read guard](../tests/session_read_guard.test.ts), [AI account-switch E2E](../e2e/ai-callback-account-switch.spec.ts), [family callback E2E](../e2e/family-callback-account-switch.spec.ts), [family menu E2E](../e2e/family-menu-durable.spec.ts), [menu E2E](../e2e/weekly-menu-durability.spec.ts), [weekly report unit/E2E](weekly-ai-report-session.md), [family E2E](../e2e/family-session.spec.ts), [achievement E2E](../e2e/achievement-session.spec.ts), [billing session](billing-session.md) | Остальные AI retry и family producers; staging, общий lifecycle и приёмка release |
 | P0.6 — аккаунты и вкладки | Постоянный accountId операции, session попытки; транзакционная координация IDB без обязательных Web Locks; runtime проверяет владельца legacy и build id всех вкладок. Параллельная запись разных ключей двумя вкладками прошла CI HEAD `a8f3219` (run 38634080772). Same-key full-snapshot E2E: пока первый PUT в полёте, независимая правка из второй вкладки остаётся конфликтом; локально 3/3 desktop engines. Account-switch 503 → B → свежая A session прошёл локально 3/3 и точный PR CI source HEAD `943d4c0` (run 38641088114). Три account acceptance — смена аккаунта, reload и logout/login с сохранением opId — прошли совместно локально 9/9 в desktop Chromium, Firefox и WebKit без retries; эти account-switch сценарии вошли в полный CI `455cb01` и прошли (run `38656586334`). Обновлённый old/new same-key snapshot acceptance прошёл локально 3/3 без retries: источник повторно проверяется, изменённое намерение остаётся конфликтом | [Outbox](../tests/durable_outbox.test.ts), [lifecycle](../tests/state_sync_lifecycle.test.ts), [cross-tab E2E](../e2e/owned-state.spec.ts), [same-key E2E](../e2e/storage-durability.spec.ts), [account-switch E2E](../e2e/ai-callback-account-switch.spec.ts), [runtime migration](../tests/state_sync_legacy_migration.test.ts), [legacy browser smoke](../e2e/legacy-outbox-migration.spec.ts), [контракт](sync-model.md) | Полное old/new writer overlap, остальные callbacks и общая lifecycle-приёмка |
 | P0.7 — серверные поколения | State protocol 2, tombstones и версия своей мутации | [State generations](../tests/state_generations.test.ts), [серверный контракт](state-generations.md) | Совместимый выпуск сервера/клиента, staging и интеграция в main |
 | P0.8 — постоянная очередь | Одна IDB-outbox; атомарные import/ledger; свежий auth proof владельца; Service Worker all-client fence; old/new smoke прошёл локально 7/7 и в CI `00cd005`; JSON backup v3 экспортирует и атомарно восстанавливает все пять stores; обновлённая migration E2E прошла точный CI `08618e3` ([run 38628487894](https://github.com/Michael-edel/FitFocus/actions/runs/38628487894)). Дополнительный сценарий позднего изменения legacy-снимка старой вкладкой прошёл локально 3/3 desktop engines при `workers=1`; полный CI `455cb01` завершился success (run `38656586334`) | [Legacy queue](../tests/legacy_queue.test.ts), [migration](../tests/legacy_migration.test.ts), [runtime integration](../tests/state_sync_legacy_migration.test.ts), [backup](backup-restore.md), [browser smoke](../e2e/legacy-outbox-migration.spec.ts), [ADR-005](adr/ADR-005-durable-outbox.md) | Staging и полный rollback/release acceptance; полный lifecycle, UI конфликтов и оставшиеся old/new writers |
 | P0.9 — приёмка | Отдельные unit/browser критерии включают commit-with-lost-ack, повторный lease claim, 503/Retry-After, transport abort/reload, 401/403 recovery, DELETE resolution и IndexedDB abort. CI точного опубликованного head `e34544d` завершился ошибкой в [run 38903745625](https://github.com/Michael-edel/FitFocus/actions/runs/38903745625): gates до E2E успешны, browser — 840 passed / 251 skipped / 1 failed; desktop Firefox завис в legacy migration state probe с дополнительным `indexedDB.open()`. Follow-up `0efec93` переиспользует соединение приложения и пишет lifecycle/transaction diagnostics; migration spec прошёл 14/14 по семи профилям, Firefox-сценарий — 10/10, без retries. Полный CI точного SHA follow-up ещё не подтверждён | [Матрица lifecycle](sync-model.md#матрица-приёмки), [release checklist](../RELEASE_CHECKLIST.md), [mock lifecycle](mock-api-lifecycle.md), [PWA диагностика](pwa-updates.md#повторная-проверка-webkit-pageerror-при-pwa-update--12102026), [storage E2E](../e2e/storage-durability.spec.ts), [outbox tests](../tests/durable_outbox.test.ts) | Разделение unit/mock/staging gates, полный P0.9 и rollback acceptance; staging, реальные устройства/BFCache/OAuth и выпуск остаются открыты |
+
+Последующее расширение P0.4 сняло desktop-only skip с трёх семейных callback
+сценариев. Отложенное обновление цели при смене загруженной семьи, отложенное
+обновление цели участника после reauthentication и late member response A после
+входа B прошли каждое 7/7 на desktop, Android, iPhone Safari и PWA профилях при
+`workers=1,retries=0`. Ещё 15 семейных A→B и same-account delayed callbacks
+прошли 60/60 на четырёх Android/iPhone/PWA профилях; ещё 10 shopping/support/
+token/push/billing и write-race сценариев прошли 40/40 на тех же профилях. Их
+ранее проверенная desktop часть сохранена отдельно. Полный точный CI объединённой матрицы проверяется
+после push; остальные cloud callbacks/cache и writers семейного членства остаются
+открытыми.
+
+Ещё десять account-switch сценариев черновиков и локальных cache из
+`ai-callback-account-switch.spec.ts` расширены на четыре мобильных/PWA профиля:
+40/40 запусков прошли. Проверки раскрывают мобильные детали прогресса и
+подтверждают, что AI retry/status остаются в account-scoped ключах при смене
+владельца; те же два сценария прошли 6/6 на desktop Chromium, Firefox и WebKit.
+Вместе с предыдущими 25 сценариями это 35 сценариев и 140 мобильных запусков.
+Точный CI опубликованного HEAD ещё не завершён; общая проверка callbacks/cache не закрыта.
+
+P0.5 mobile acceptance добавила три AI Council account/session сценария,
+которые прошли 21/21 на всех семи профилях: 12 запусков Android/iPhone/PWA и
+9 desktop. Проверены отбрасывание удержанного ответа после входа B и после
+повторного входа того же аккаунта с новой server session, а также очистка
+временного вопроса старой сессии. Суммарное расширение составляет 38 сценариев
+и 152 мобильных запуска; общий P0.5 и точный CI текущего HEAD остаются открыты.
+
+Два delayed personal weekly-menu callback сценария прошли 14/14 на desktop,
+Android, iPhone и PWA профилях: поздний ответ после входа B и после повторной
+сессии того же владельца не меняет профиль/state/outbox и не запускает лишние
+achievement effects. Production-код не менялся. В сумме мобильное расширение
+составляет 40 сценариев и 160 запусков; полный P0.5 остаётся открытым.
+
+Два held weekly-report сценария прошли 14/14, а четыре food/recipe photo
+analysis сценария — 28/28 на desktop Chromium/Firefox/WebKit и Android/iPhone/PWA.
+Суммарно 42/42 прогона без retries; поздние ответы не меняют profile, report,
+diary/history и не запускают лишние achievement effects. Cumulative mobile
+coverage: 46 account/session сценариев и 184 запуска; exact-head CI всё ещё
+ожидает завершения.
+
+Поздние profile save и refresh прошли ещё 14/14 на desktop, Android, iPhone и
+PWA профилях. Ответ A не подменяет профиль B; при возврате A исходная операция
+повторяется с новой session epoch. Три P0.6 outbox lifecycle сценария прошли
+21/21 на семи профилях, в том числе 12 мобильных/PWA запусков. Production-код
+не менялся. Два held step-by-step recipe callback сценария прошли ещё 14/14,
+включая 8 мобильных/PWA запусков. Bulk move/delete дневника прошёл 7/7,
+включая 4 мобильных/PWA запуска. WIS-share callback после reactivation прошёл
+7/7, включая 4 мобильных/PWA запуска. Накопленное мобильное расширение — 55
+сценариев и 220 запусков. PDF account-switch acceptance также прошёл 7/7,
+включая четыре мобильных/PWA запуска. Матрица составляет 56 сценариев и 224
+мобильных запуска. Два задержанных Huawei sync сценария прошли вместе 14/14 на
+семи профилях (8 мобильных/PWA запусков), доведя накопленную матрицу до 58
+сценариев и 232 мобильных запусков. Проверка использует mock API; настоящий
+Huawei OAuth, устройство и staging не покрыты. Follow-up [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369)
+добавил мобильную приёмку paywall и profile-sync/adaptation notices: 21/21 на
+семи профилях (12 мобильных запусков). Camera dialog остаётся desktop-only:
+мобильный экран использует native capture input, не in-app modal. Итоговая
+матрица на этом этапе — 61 сценарий и 244 мобильных запуска. Затем follow-up
+[`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
+расширил recipe-photo auth-refusal acceptance: 7/7 на семи профилях, включая
+4 мобильных запуска; обычная ошибка рецепта, browser alert и page error не
+появились. Накопленная матрица составляет 62 сценария и 248 мобильных запусков.
+Затем [`c751260`](https://github.com/Michael-edel/FitFocus/commit/c751260ac7edbe328eea64a4220648ef570a9adb)
+расширил два held plateau-explanation callbacks: 14/14 на семи профилях,
+включая 8 мобильных запусков; поздний ответ после входа B или новой server
+session не меняет UI, профиль и outbox. Затем [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0)
+расширил успешную пошаговую генерацию рецепта и запись в избранное на все семь
+профилей: 7/7, включая четыре мобильных запуска. Затем
+[`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff)
+расширил прямой success path анализа фото еды до 7/7 на семи профилях, включая
+четыре мобильных запуска. Follow-up
+[`e6f73f2`](https://github.com/Michael-edel/FitFocus/commit/e6f73f27208055ce51bb48899327c0fafc68db67)
+покрыл held AI response после фото, выбранного через mobile `input[capture]`:
+4/4 Android/iPhone browser/PWA прогона; исходный gallery-upload сценарий прошёл
+7/7 после выделения общего assert helper. Это Playwright file-input fixture,
+не запуск камеры ОС. Матрица составляет 67 сценариев и 268 мобильных запусков.
+Затем [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d)
+проверил тот же поздний `foodphoto_enhanced` callback через отдельный native
+capture input страницы рецептов: 4/4 Android/iPhone browser/PWA прогона; исходный
+gallery path — 7/7. Всего 11 passed и 3 ожидаемых desktop skips, без retries.
+Это file-input acceptance; системная камера и физическое устройство не проверены.
+Матрица — 68 сценариев и 272 мобильных запуска.
+Полный P0.4/P0.5 lifecycle и точный CI нового HEAD остаются открытыми.
+
+Коммит [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3)
+проверяет held progress-photo decode после account switch A → B. После
+освобождения `Image.src` profile, managed state, outbox и API write counters
+остаются неизменны; фото отсутствует в обеих вкладках. E2E — 7/7 на desktop
+Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA
+(`workers=1`, `retries=0`); root typecheck и `git diff --check` прошли. Это
+mock API и Playwright file fixture, без физической камеры или staging.
+Матрица выросла до 69 сценариев и 276 мобильных запусков. CI #1791 на родительском
+SHA `4630689` выполнялся и не включает тест; точный CI этой ревизии ожидается
+после push. Полный P0.4/P0.5 lifecycle остаётся открытым.
+
+Коммит [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393)
+добавил P0.6 account/session сценарий для фото прогресса: удержанный callback
+отпускается после повторного входа в аккаунт A с новым `serverSessionId`; тест
+проверяет смену `sessionEpoch`, отсутствие новых profile/state writes, прежние
+profile/managed state/outbox снимки и отсутствие фото в UI. Новый сценарий прошёл
+7/7, а A → B после общего helper — повторно 7/7 на desktop Chromium/Firefox/
+WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
+Вместе матрица составляет 72 сценария и 288 мобильных запусков. Root typecheck
+и `git diff --check` прошли. Используется mock API и SVG file fixture; физическая
+камера и staging не проверялись. Полный P0.4/P0.6 lifecycle остаётся открытым.
+
+Дополнительный same-account reauthentication сценарий открывает paywall в старой
+сессии и входит в тот же аккаунт с новым `serverSessionId` в соседней вкладке.
+IndexedDB `sessionEpoch` меняется, старая вкладка показывает session-change
+notice, а paywall скрывается в обеих вкладках. E2E прошёл 7/7 desktop/mobile/PWA
+профилей без retries. Аналогичные same-account проверки profile-sync и adaptation
+notices прошли по 7/7 каждая. Camera dialog после same-account reauthentication
+прошёл 3/3 desktop engines; четыре mobile/PWA профиля штатно пропущены, потому что
+используют native capture input. Food insight и несохранённый editor после reauth
+прошли 7/7, durable diary entry не изменился. Mobile navigation menu после reauth
+прошло 4/4 на Android/iPhone browser/PWA. Накопленная матрица — 78 сценариев и
+308 мобильных запусков.
+Held food-photo callbacks подтверждают видимый spinner до смены owner/session и
+его очистку после переключения и reauthentication: 18 passed / 3 ожидаемых
+desktop skips; late response его не возвращает.
+Тест находится в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Проверки notices добавлены в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f), camera dialog — в [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854), food insight/editor — в [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099), menu — в [`41c7467`](https://github.com/Michael-edel/FitFocus/commit/41c746729e4791e5aa05ca663eac2f3d63f95fce).
+Spinner-приёмка добавлена в [`4f41c1a`](https://github.com/Michael-edel/FitFocus/commit/4f41c1a883aa663697f7a94d6114467f8dbc71b0).
+Это mock API, физический billing flow и staging не проверялись.
+
+Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
+для `4ed7f0b` завершился browser failure: 1441 passed / 60 skipped, четыре
+отказа в двух account-switch тестах. Проверка AI activity теперь допускает
+собственный `wis_text` cache B и исключает перенос fixture A; adaptation notice
+ждёт начальный AI handshake, подтверждает `plateau` request A и использует
+разные ответы аккаунтов. Оба сценария прошли локально 14/14 на семи профилях;
+root typecheck и `git diff --check` прошли. Точный CI follow-up ожидает push.
+
+Поздний AI plateau-ответ, запущенный во время session hydration, дополнительно
+проверен после входа B и после повторного входа A с новым `serverSessionId`.
+Profile/state/outbox, writes, achievement и UI не изменились; каждый сценарий
+прошёл 7/7 на всех desktop/mobile/PWA профилях без retries. Локальный
+`ECONNREFUSED` при раннем закрытии вкладки устранён передачей очистки общей
+Playwright fixture; повторная матрица прошла без proxy ошибки. Production-код
+не менялся. CI #1794 для `aee0a6c` отменён при публикации follow-up. Точный
+[CI #1796](https://github.com/Michael-edel/FitFocus/actions/runs/39314354105)
+на `8f06da2` прошёл: 1462 unit tests / 216 файлов, 1459 browser passed / 60
+skipped (1 час), audit/guards, три typecheck, build, 23 HTTP/D1 проверки
+rollback/CAS и сохранение browser diagnostics и rollback artifact. Оба новых
+сценария вошли в полный CI.
 
 Локальная DELETE-конфликт приёмка в `e2e/owned-state.spec.ts` прошла 7/7:
 `council_history` сохраняет tombstone, тот же `opId` и проверенный

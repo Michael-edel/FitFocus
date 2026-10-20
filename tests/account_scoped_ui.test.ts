@@ -90,6 +90,13 @@ describe('account-scoped UI state visibility', () => {
     )).toEqual({ profileSync: null, adaptation: '' });
   });
 
+  it('hides an in-flight adaptation indicator after the login session changes', () => {
+    const loadingA = { scopeKey: 'account-a:session-1', value: true };
+
+    expect(getAccountScopedUiStateValue(loadingA, 'account-a:session-2', false)).toBe(false);
+    expect(getAccountScopedUiStateValue(loadingA, 'account-b:session-1', false)).toBe(false);
+  });
+
   it('does not show a health registration draft to a different Google identity', () => {
     const defaults = {
       weight: 70,
@@ -108,6 +115,16 @@ describe('account-scoped UI state visibility', () => {
     expect(getAccountScopedUiStateValue(state, null, defaults)).toEqual(defaults);
     expect(getAccountScopedUiStateValue(state, 'registration:google-account-b', defaults))
       .toEqual(defaults);
+  });
+
+  it('does not show a registration error to a different Google identity', () => {
+    const state = {
+      scopeKey: 'registration:google-account-a',
+      value: 'AI-план аккаунта A не удалось сохранить.',
+    };
+
+    expect(getAccountScopedUiStateValue(state, 'registration:google-account-b', null)).toBeNull();
+    expect(getAccountScopedUiStateValue(state, null, null)).toBeNull();
   });
 
   it('does not accept transient UI updates while no account session is active', () => {

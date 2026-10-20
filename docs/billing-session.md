@@ -38,7 +38,8 @@ marker и scope, повторно проверяет IndexedDB auth-fence и т�
 
 Закрытие окна тарифа и размонтирование paywall инвалидируют незавершённый
 checkout callback. Поздний URL не открывается после входа в другую учётную
-запись.
+запись или повторной авторизации того же аккаунта с новым `serverSessionId` и
+`sessionEpoch`.
 
 ## Проверки и границы
 
@@ -46,11 +47,17 @@ checkout callback. Поздний URL не открывается после в�
 - Серверный checkout scope и response markers: [billing checkout tests](../tests/billing_checkout.test.ts).
 - Административная смена тарифа: [admin session tests](../tests/admin_sessions_subscription.test.ts).
 - Поздний Stripe URL при входе другого аккаунта: [account-switch E2E](../e2e/family-callback-account-switch.spec.ts).
+- Поздний Stripe URL после повторного входа того же аккаунта с новым SID: тот же [account/session E2E](../e2e/family-callback-account-switch.spec.ts).
 - Исходники: [paywall](../PaywallDialog.tsx), [transport](../services/billingSession.ts), [checkout route](../functions/api/billing/checkout.ts), [admin route](../functions/api/admin/subscription.ts).
 
-Локальная приёмка текущего дерева поверх `9fb0cff`: 18 профильных unit-тестов
+Локальная приёмка исходного billing-компонента на `9fb0cff`: 18 профильных unit-тестов
 в трёх файлах, typecheck, API invariants, auth scope и admin guards прошли.
-Новый E2E прошёл 3/3 на desktop Chromium, Firefox и WebKit без retries; четыре
-не-desktop проекта пропущены по условию теста. Полный CI `9fb0cff` ещё не
-подтверждает этот незакоммиченный код. Старые bundles, staging, реальный Stripe
-checkout, полный lifecycle и release acceptance остаются открытыми.
+Поздний Checkout URL при переходе A→B прошёл 3/3 на desktop Chromium, Firefox и
+WebKit; mobile/PWA extension прошёл 4/4 без retries. Новый same-account
+reauthentication сценарий проверяет смену `sessionEpoch`, уведомление старой
+вкладки и отсутствие popup после освобождения старого ответа; он прошёл 7/7 на
+desktop/mobile/PWA профилях без retries. Root typecheck и `git diff --check`
+прошли. Точный CI #1801 для [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f)
+создан для этого SHA; результат более поздней ревизии проверяется отдельно.
+Старые bundles, staging, реальный Stripe checkout, полный
+lifecycle и release acceptance остаются открытыми.

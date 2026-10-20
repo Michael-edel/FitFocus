@@ -1,5 +1,208 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — убрать последнее исключение WebKit при переключении аккаунта, 20.10.2026
+
+В `ai-callback-account-switch.spec.ts` удалён допуск для одного WebKit
+`/api/ai due to access control checks` при переходе на другой аккаунт в соседней
+вкладке. Тест теперь требует пустой список page/console errors. Он прошёл 7/7
+desktop, mobile и PWA профилей, включая desktop WebKit; отдельный повтор WebKit
+также прошёл. `npm run typecheck` и `git diff --check` прошли. Production-код не
+менялся. Точный CI нового HEAD запускается после push.
+
+В связанном `family-menu-durable.spec.ts` убран допуск четырёх WebKit
+`/api/me`/family reload warnings; переход A→B и same-account reauthentication
+прошли 6/6 desktop WebKit, iPhone Safari и iPhone PWA без предупреждений.
+
+## P0.5 — поздняя статистика Admin отбрасывается после same-account reauthentication, [`4cea2bd`](https://github.com/Michael-edel/FitFocus/commit/4cea2bdeb2513307d11b33785a7ee444da82a5b5), 20.10.2026
+
+Добавлен held-response E2E для `/api/admin/stats`: после повторного входа в тот
+же аккаунт с новым `serverSessionId` и `sessionEpoch` тест освобождает ответ
+старого AdminSession. Маркер актуальной статистики остаётся в новой вкладке,
+устаревший не появляется ни в старой, ни в новой. Сценарий прошёл 7/7
+desktop/mobile/PWA профилей (`workers=1,retries=0`); root typecheck и
+`git diff --check` прошли. Используется mock API, production-код не менялся.
+Точный [CI #1803](https://github.com/Michael-edel/FitFocus/actions/runs/39373658102)
+создан для `4cea2bd`.
+
+```text
+npm run test:e2e:mock -- e2e/admin-session.spec.ts --grep "delayed admin stats response from a previous same-account session is discarded after reauthentication" --workers=1 --retries=0
+```
+
+## P0.5 — поздний Checkout URL блокируется после same-account reauthentication, [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f), 20.10.2026
+
+Добавлен held-response E2E для Stripe Checkout: account A начинает оплату,
+затем в том же origin/context тот же account получает новый `serverSessionId`.
+Тест проверяет смену `sessionEpoch`, session-change notice в старой вкладке и
+отсутствие popup/перехода после освобождения прежнего Checkout-ответа. Он прошёл
+7/7 desktop/mobile/PWA профилей (`workers=1,retries=0`). Root typecheck и
+`git diff --check` прошли; production-код не менялся. Запуск точного [CI #1801](https://github.com/Michael-edel/FitFocus/actions/runs/39372909475)
+создан для `04bcde8`; его результат относится только к этому SHA. Команда локальной проверки:
+
+```text
+npm run test:e2e:mock -- e2e/family-callback-account-switch.spec.ts --grep "delayed checkout URL from a previous same-account session is not opened after reauthentication" --workers=1 --retries=0
+```
+
+Предыдущий [CI #1800](https://github.com/Michael-edel/FitFocus/actions/runs/39370729123)
+проверяет родительский `d6c57ad` и не включает этот тест.
+
+## P0.4/P0.6 — spinner фотоанализа очищается при смене сессии, 20.10.2026
+
+Расширена held food-photo E2E-приёмка: «Анализирую фото…» виден во время
+запроса и скрывается после перехода A→B или same-account reauthentication;
+поздний ответ не возвращает spinner. Связанные food photo, native camera и
+same-account сценарии прошли 18/18; три desktop native-capture запуска штатно
+пропущены. Root typecheck и `git diff --check` прошли. Это mock API, production-код
+не менялся. Тестовые проверки добавлены в [`4f41c1a`](https://github.com/Michael-edel/FitFocus/commit/4f41c1a883aa663697f7a94d6114467f8dbc71b0).
+
+## P0.4/P0.6 — фото-разбор и редактор скрываются после повторной авторизации, 20.10.2026
+
+Открытый результат разбора блюда и несохранённый редактор блюда проверены при
+повторном входе в тот же аккаунт с новым `serverSessionId`. После смены
+`sessionEpoch` старые modal state скрыты в обеих вкладках, а уже сохранённая
+durable-запись дневника не меняется. Сценарий прошёл 7/7 desktop, Android,
+iPhone и PWA профилей (`workers=1,retries=0`). Root typecheck и diff check прошли;
+используется mock API, production-код не менялся. Матрица — 77 сценариев и 304
+мобильных запуска. Тест добавлен в [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099).
+
+## P0.4/P0.6 — мобильное меню скрывается после повторной авторизации, 20.10.2026
+
+Добавлен same-account reauthentication сценарий открытого меню «Ещё». После
+смены `sessionEpoch` старая вкладка закрывает меню, новая его не наследует.
+Android Chrome/PWA и iPhone Safari/PWA прошли 4/4 без retries; три desktop
+профиля штатно пропущены как неподдерживаемый мобильный UI. Первая версия
+фикстуры повторно использовала исходный SID; после замены на отдельный SID тест
+проверяет новую сессию. Root typecheck и `git diff --check` прошли; production-код
+не менялся. Матрица — 78 сценариев и 308 мобильных запусков. Тест добавлен в
+[`41c7467`](https://github.com/Michael-edel/FitFocus/commit/41c746729e4791e5aa05ca663eac2f3d63f95fce).
+
+## P0.4/P0.6 — камера-диалог скрывается после повторной авторизации, 20.10.2026
+
+Добавлен same-account reauthentication сценарий открытого in-app camera dialog.
+После входа в тот же аккаунт с новым `serverSessionId` меняется `sessionEpoch`,
+старая вкладка показывает session-change notice, а camera dialog скрыт и в старой,
+и в новой вкладке. Desktop Chromium/Firefox/WebKit прошли 3/3 без retries;
+четыре mobile/PWA профиля штатно пропущены, поскольку используют native capture
+input вместо in-app dialog. Root typecheck и `git diff --check` прошли; mock API,
+production-код не менялся. Матрица — 76 сценариев и 300 мобильных запусков.
+Тест добавлен в [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854).
+
+## P0.4/P0.6 — notices скрываются после повторной авторизации, 20.10.2026
+
+Добавлены same-account reauthentication сценарии для profile-sync и adaptation
+notices. В старой вкладке notice предварительно подтверждается; соседняя вкладка
+входит в тот же аккаунт с новым `serverSessionId`, и IndexedDB принимает новую
+`sessionEpoch`. После этого старый notice скрыт и не появляется в новой вкладке.
+Оба теста прошли 7/7 на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и
+iPhone Safari/PWA (`workers=1,retries=0`). Первая версия adaptation fixture
+ошибочно требовала фоновый `wis_text` в новой вкладке; существующий недельный
+снимок не запускал этот запрос, поэтому это предусловие удалено. Проверки
+sessionEpoch и notice сохранены. Profile-sync и adaptation используют mock API;
+production-код не менялся. Account/session матрица выросла до 75 сценариев и
+300 мобильных запусков.
+Тесты добавлены в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
+
+## P0.4/P0.6 — paywall скрывается после повторной авторизации, 20.10.2026
+
+Добавлен account/session E2E для уже открытого paywall: та же учётная запись
+входит в соседней вкладке с новым `serverSessionId`, IndexedDB принимает новую
+`sessionEpoch`, старая вкладка показывает уведомление о смене сессии, а paywall
+исчезает из обеих вкладок. Код теста сохранён в
+[`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Проверка прошла 7/7 на desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Первый прогон
+выявил слишком строгий тестовый assert, запрещавший штатную фоновую запись
+`weekly_reports`; после удаления этого несвязанного условия целевая матрица прошла
+полностью. Production-код не менялся. Общая account/session матрица — 73 сценария
+и 292 мобильных запуска. Используется mock API; реальный billing flow и staging
+не проверялись.
+
+## P0.4/P0.6 — исправить CI-предположения в account-switch acceptance, 20.10.2026
+
+Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
+на `4ed7f0b` завершился после 1441 browser passed / 60 skipped и четырёх отказов
+в двух account-switch тестах. AI-cache тест ошибочно требовал пустой кэш B,
+хотя B создал собственный `wis_text` action. Adaptation test принимал одинаковый
+текст AI-недельного отчёта за callback плато и запускал его до завершения
+начального AI handshake.
+
+Фикстура теперь различает ответы A/B; тест кэша проверяет, что данные A не
+попали в кэш B, сохраняя допустимые записи самого B. Проверка adaptation notice
+дожидается успешного `wis_text`, подтверждает scoped `plateau` request аккаунта A
+и затем проверяет, что именно ответ A скрыт после входа B. Оба теста прошли 14/14
+на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`; root typecheck и `git diff --check` прошли. Production-код
+не менялся. Полный точный CI исправленного SHA ожидает push; общий P0.4/P0.6
+lifecycle и staging остаются открытыми.
+
+## P0.4/P0.5 — AI plateau при гидратации после смены сессии, 20.10.2026
+
+В `e2e/ai-callback-account-switch.spec.ts` добавлены два held-response сценария
+для вызова `plateau` из `sessionHydration`: ответ аккаунта A освобождается после
+входа B в соседней вкладке и после повторного входа A с новым
+`serverSessionId`. Проверяются активная сессия и epoch, profile/state/outbox
+снимки, отсутствие новых writes/achievement и отсутствие текста старого ответа
+в обеих вкладках. Оба теста прошли **7/7** на desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA и iPhone Safari/PWA, `workers=1,retries=0`.
+
+Первый вариант теста ожидал session notice до ответа, хотя исходная страница ещё
+показывала loading screen. После переноса assertion к проверке позднего ответа
+тест прошёл. В первом same-account прогоне ручной close страницы вызвал локальный
+Vite proxy `ECONNREFUSED`; он убран, а повторная семипрофильная матрица прошла
+без proxy ошибки. Production-код не менялся. CI #1794 на `aee0a6c` отменён при
+push follow-up. Точный [CI #1796](https://github.com/Michael-edel/FitFocus/actions/runs/39314354105)
+на `8f06da2` завершился success: 1462 unit tests / 216 файлов, 1459 browser
+passed / 60 skipped (1 час), audit/guards, три typecheck, build, 23 HTTP/D1
+rollback/CAS проверки и сохранение browser diagnostics и rollback artifact.
+Оба новых сценария включены в этот запуск. Реальные OAuth, BFCache и staging
+остаются отдельными открытыми gates.
+
+## P0.6 — фото прогресса после повторного входа в ту же учётную запись, [`2db372b`](https://github.com/Michael-edel/FitFocus/commit/2db372b4eaa1a0ddb2286cebf76b295efdad8393), 19.10.2026
+
+Новый account/session E2E выбирает файл под account A и удерживает декодирование.
+Во второй вкладке та же учётная запись входит с новым `serverSessionId`; проверка
+подтверждает увеличение `sessionEpoch`, затем освобождает старый callback. Профиль,
+managed state, outbox и API write counters остаются без изменений, фото и ошибки
+не появляются в UI. Сценарий прошёл 7/7 desktop, Android, iPhone и PWA профилей.
+После выделения общего decode gate исходный A → B сценарий повторно прошёл ещё
+7/7. Root typecheck и `git diff --check` прошли; production-код не менялся.
+
+Это mock API и SVG file fixture Playwright; физическая камера, OAuth, BFCache и
+staging не покрыты. Остальные profile/API callbacks и полный P0.6 lifecycle
+остаются открытыми; точный CI новой ревизии запускается после push.
+
+## P0.4 — отложенный callback фото прогресса после смены аккаунта, [`265bb6a`](https://github.com/Michael-edel/FitFocus/commit/265bb6afe939aed6730fd7cbc5dff42218be85d3), 19.10.2026
+
+Новый E2E удерживает декодирование выбранного фото прогресса, активирует
+аккаунт B во второй вкладке и только затем освобождает callback старой вкладки.
+Проверены прежние profile/managed-state/outbox снимки, отсутствие новых profile
+и state API writes после переключения, а также отсутствие изображения и ошибок
+в UI A/B. Все семь desktop, Android, iPhone и PWA профилей прошли без retries;
+root typecheck и `git diff --check` прошли. Производственный код не менялся.
+
+Проверка использует mock API и SVG file fixture Playwright; физическая системная
+камера, OAuth и staging не покрыты. CI #1791 на родительском SHA `4630689`
+выполнялся и не включал этот тест; exact-head CI для новой ревизии запускается
+после push. Остальные callbacks/cache и полный P0.4 lifecycle остаются открытыми.
+
+## Регистрация блокируется до подтверждения владельца — 19.10.2026
+
+В audit обнаружен fail-open в root gate: форма показывалась, когда состояние
+проверки имело `identity`, отличный от текущего Google subject, либо ещё не
+успело обновиться. Форма и обработчик теперь требуют точное совпадение subject и
+статус `active`; обработчик дополнительно проверяет текущий session guard и его
+invalid-флаг. При несовпадении личные поля скрыты, запуск durable profile write
+и AI не начинается.
+
+Локальная проверка выполнялась в ветке `durable-outbox` на чистом HEAD `42683ae`
+с незакоммиченным follow-up: registration unit — **21/21**;
+`registration-account-switch.spec.ts` — **7/7** и `registration-durability.spec.ts`
+— **21/21** на desktop Chromium/Firefox/WebKit, Android Chrome/PWA Chrome и
+iPhone Safari/PWA, `workers=1`, `retries=0`; `npm run typecheck`, production
+build и `git diff --check` прошли. Это browser acceptance через mock API;
+выделенный staging и OAuth не проверялись. PR #93 остаётся draft, merge/deploy
+не выполнены. CI родительской ревизии #1746 не включает эту правку; exact-head
+CI итоговой ревизии нужно подтвердить перед слиянием.
+
 ## P0.4 — root UI и черновик регистрации привязаны к владельцу, `b405761`, 19.10.2026
 
 Продолжая аудит root state, нашёл ещё два сообщения без владельца: заметка
@@ -19,15 +222,102 @@ setter также ограничен своим scope.
 `tests/account_scoped_ui.test.ts` прошли **12/12**; `npm run typecheck` (включая
 admin guards) и `git diff --check` прошли. Unit проверяет скрытие profile-sync/
 adaptation сообщений при logout, смене аккаунта и повторном входе в новую
-сессию, а также сброс registration draft между Google identities. Существующий
-E2E `an open food insight from account A is hidden after another tab activates
-account B` прошёл локально **3/3** на desktop Chromium/Firefox/WebKit; четыре
-mobile/PWA проекта штатно skipped для двухвкладочного сценария. Это проверяет
-фоторазбор и редактор, но не notices/registration draft в browser UI. Точный
-[CI #39220495629](https://github.com/Michael-edel/FitFocus/actions/runs/39220495629)
-для code/test HEAD `71910ae` завершился success, включая browser tests,
-rollback/CAS и сохранение артефактов. P0.4 остаётся открытым для остальных
-callbacks/cache и полного lifecycle.
+сессию, а также сброс registration draft между Google identities.
+
+Follow-up [`d23ceb9`](https://github.com/Michael-edel/FitFocus/commit/d23ceb96f17149f8cdee137d3f8fb1ddd921245e)
+добавил browser acceptance для scanning status, открытого диалога камеры и
+paywall. В удержанном food-photo запросе индикатор виден до account switch и
+скрыт в обеих вкладках после активации B; открытый разбор и редактор A также
+скрываются. Все четыре сценария прошли **12/12** на desktop Chromium, Firefox и
+WebKit (`workers=1`, `retries=0`). Снимки подтверждают, что диалог камеры и
+тарифов закрыты. `npm run typecheck`, targeted unit **12/12** и `git diff --check`
+прошли. Это mock API и desktop two-tab acceptance. Поздний ответ adaptation уже
+проверяется E2E на том же SHA; browser acceptance notices и registration draft
+пока не проверена.
+
+Точный [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
+для `d23ceb9` завершился success: **1457 unit**, **1119 browser passed / 323
+skipped**, dependency audit нашёл 0 уязвимостей; schema/privacy/auth/API guards,
+три typecheck, build, rollback/CAS (23 HTTP requests) и retention обоих
+артефактов прошли. Browser suite выполнялась 34.9 минуты. [Rollback artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936/artifacts/12177192422)
+сохранён до 17.01.2027; [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936/artifacts/12177052520)
+— до 02.11.2026.
+
+Коммит [`cf81aab`](https://github.com/Michael-edel/FitFocus/commit/cf81aabde79d7566ad56349bd0a9a2f10a1b58c1)
+проверяет мобильное меню «Ещё»: после открытия меню A другая вкладка активирует
+B, и содержимое меню исчезает в обеих вкладках. E2E прошёл **2/2** в `iphone-safari`
+и `iphone-pwa`; root typecheck и `git diff --check` прошли. Следующий коммит
+[`3a037f3`](https://github.com/Michael-edel/FitFocus/commit/3a037f3ded9b4546b08927724898456f817bffe5)
+расширил тот же сценарий на Android: **2/2** в `android-chrome` и
+`android-pwa-chrome`.
+
+Коммит [`2cec2e2`](https://github.com/Michael-edel/FitFocus/commit/2cec2e21024b2bfc47e9bc0d5fe121a2a6a3606d)
+исправляет устаревшее замыкание `applyRemoteProfile`: callback захватывал setter
+profile-sync notice до появления login scope, поэтому данные профиля обновлялись,
+а сообщение терялось. Setter теперь входит в зависимости callback. Новые E2E
+проверяют reload облачного профиля A, показ «Профиль обновлён из облака.» и
+скрытие после переключения на B; отдельный сценарий проверяет adaptation notice.
+Оба сценария прошли **6/6** на desktop Chromium, Firefox и WebKit, typecheck и
+`git diff --check` прошли. Оба коммита опубликованы в draft PR #93.
+
+Точный [CI #1725](https://github.com/Michael-edel/FitFocus/actions/runs/39234111699)
+для `cf81aab` отменён при push нового HEAD. [CI #1727](https://github.com/Michael-edel/FitFocus/actions/runs/39236817609)
+для `f3e5b37` также отменён при следующем push. Локально дополнительно прошли
+`npm run test:unit -- tests/account_scoped_ui.test.ts` (**12/12**),
+`npm run typecheck`, `npm run build` и `git diff --check`. Browser acceptance
+registration draft ещё не входила в опубликованный `f3e5b37`; новый локальный
+результат и остающиеся root callbacks описаны ниже. P0.4 не закрыт.
+
+Новый локальный follow-up добавляет browser guard для регистрации. Пока активная
+IndexedDB-сессия не подтверждена, поля черновика скрыты; при смене аккаунта или
+сессионного tuple во второй вкладке регистрация блокируется с сообщением обновить
+страницу. Новый E2E сначала воспроизвёл доступность полей после входа B, затем
+прошёл **3/3** на desktop Chromium, Firefox и WebKit. `npm run typecheck`,
+account-scoped unit **12/12** и `git diff --check` проходят. Изменение опубликовано
+в коммите [`79d2550`](https://github.com/Michael-edel/FitFocus/commit/79d25500341e40bb0be18c65ffff36ed48719237)
+в PR #93. Точный [CI #1730](https://github.com/Michael-edel/FitFocus/actions/runs/39239267181)
+отменён следующим push; [CI #1732](https://github.com/Michael-edel/FitFocus/actions/runs/39239523175)
+проверяет предыдущий HEAD `2563dc8`, без мобильного расширения. P0.4 остаётся
+открытым по остальным root callbacks.
+
+Следующий локальный E2E follow-up удалил ограничение только desktop-проектами для
+`registration-account-switch.spec.ts`. Межвкладочная IndexedDB-проверка прошла
+**7/7** на трёх desktop engines, Android Chrome/PWA Chrome, iPhone Safari и
+iPhone PWA. Проверка опубликована в PR #93 коммитом
+[`083cef0`](https://github.com/Michael-edel/FitFocus/commit/083cef0c1531874db1fae06648a19fc0537e2774).
+
+Коммит [`e91e0b0`](https://github.com/Michael-edel/FitFocus/commit/e91e0b03ecebc908baf6126f9f5cfcac87fd49d1)
+добавляет в `e2e/ai-callback-account-switch.spec.ts` проверку черновика
+Settings при повторном входе того же Google-аккаунта с новой серверной сессией:
+старая вкладка скрывает форму, новая восстанавливает account-scoped черновик,
+а сохранённый профиль и список profile PUT остаются неизменными. Базовый тест
+прошёл **3/3** на desktop Chromium, Firefox и WebKit. Follow-up
+[`8cf1cd9`](https://github.com/Michael-edel/FitFocus/commit/8cf1cd9c92a0ceaccf0916cdfbfd4bed22cb90e2)
+снял desktop-only skip; сценарий прошёл **7/7** на desktop, Android и iPhone/PWA
+профилях без retries (workers=1). `npm run typecheck`, production build и
+`git diff --check` прошли. Тест опубликован в PR #93; точный CI проверяется на
+актуальном PR HEAD. Это проверка владения UI/cache; runtime-дефект не выявлен,
+остальные callbacks и P0.4 остаются открыты.
+
+Follow-up [`d124d6c`](https://github.com/Michael-edel/FitFocus/commit/d124d6cde085220c4b0be662d23d193688d793a5)
+привязал индикатор генерации объяснения плато `adaptLoading` к тому же
+account/session scope, что и adaptation notice. Unit проверка scope прошла
+**13/13**, удержанный plateau response после повторного входа — **3/3** на desktop
+Chromium/Firefox/WebKit. `npm run typecheck`, `npm run build` и
+`git diff --check` прошли. Межаккаунтный UI-сбой до изменения не воспроизвёлся;
+изменение закрывает риск stale loading state. Остальной аудит callbacks/cache и
+P0.4 остаются открытыми.
+
+Follow-up [`e9a14c2`](https://github.com/Michael-edel/FitFocus/commit/e9a14c2)
+привязал `planError` к Google-identity scope, совпадающему с registration draft.
+Сообщение об ошибке входа/создания профиля сбрасывается при смене identity или
+выходе; оно остаётся доступно текущему владельцу после перехода в приложение.
+Целевые unit — **33/33** (`account_scoped_ui` и `registration_flow`),
+`registration-account-switch.spec.ts` — **7/7** на desktop, Android и iPhone/PWA.
+`npm run typecheck`, `npm run build` и `git diff --check` прошли. Cross-identity
+сбой до изменения не воспроизводился; это профилактическое ограничение stale
+root state. Коммит опубликован в PR #93; CI #1744 относится к предыдущему PR
+HEAD и не проверяет эту правку. Exact-head CI следует подтвердить перед слиянием.
 
 ## P0.9 — read-only branch-preview smoke HEAD `ba78ba0`, 19.10.2026
 
@@ -7356,3 +7646,434 @@ scope. Кнопка сброса UI также закрывает paywall.
 [`24180d7`](https://github.com/Michael-edel/FitFocus/commit/24180d744222ea7a618ce1c634fd26d58613a4ea). Это устраняет
 владение конкретными transient overlays, но не закрывает аудит всех callbacks,
 кэшей или общий P0.4.
+
+## P0.4 — транзакционный session guard первого profile commit регистрации, 19.10.2026
+
+Последовательный аудит выявил промежуток между последней проверкой React-состояния
+и созданием регистрации: другая вкладка могла уже заменить активную IDB-сессию,
+пока callback ещё считал её действующей. Перед первым profile commit обработчик
+теперь заново читает активную сессию, сверяет её с подтверждённым session key и
+передаёт accountId, serverSessionId и sessionEpoch в `OutboxLocalCommitGuard`.
+IDB-транзакция отклоняет запись, если сессия успела измениться; при sender pause
+локальная регистрационная операция по-прежнему сохраняется. При таком отказе
+профиль, операция и AI-запрос не создаются.
+
+Регистрационный unit прошёл 22/22. `registration-durability` вместе с
+`registration-account-switch` прошёл 28/28 без retries на семи desktop, Android
+и iPhone/PWA профилях при `workers=1`. В первом общем прогоне с четырьмя
+воркерами WebKit-сценарий не успел завершить активационную анимацию; отдельно он
+прошёл 1/1, затем обе спеки прошли полной последовательной матрицей. Root и
+storage-strict typecheck, auth-scope guard, production build и `git diff --check`
+прошли. Код опубликован в PR #93 как [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65). Его точный CI проверяется отдельно от локальных результатов.
+
+## P0.4 — семейная цель остаётся привязана к загруженной семье, 19.10.2026
+
+Снято desktop-only ограничение с одновкладочной приёмки отложенного запроса
+изменения цели участника. Сценарий загружает семью A, запускает запрос, затем
+загружает семью B тем же аккаунтом и проверяет, что поздний ответ A не меняет
+новый экран и не показывает устаревшую ошибку. Проверка прошла 7/7 на desktop,
+Android, iPhone Safari и PWA профилях без retries. Расширенная матрица ещё не
+проверена CI; кодовая проверка уже существует, а общий P0.4 остаётся открытым.
+
+Снято desktop-only ограничение с двухвкладочного сценария отложенного update
+цели участника при повторном входе того же аккаунта. Пока старая вкладка ждёт
+ответ предыдущего server session, другая вкладка активирует новую сессию и
+загружает семью заново; поздний ответ не меняет новую семью, не запускает
+achievement и не показывает данные старой сессии. Тест прошёл 7/7 на desktop,
+Android, iPhone Safari и PWA профилях при `workers=1,retries=0`. Точный CI
+расширенной матрицы проверяется после push. Оба результата остаются частью
+локальной приёмки; остальные callbacks/cache и P0.4 открыты.
+
+## P0.4 — delayed member update при входе другого аккаунта, 19.10.2026
+
+Снят desktop-only skip с двухвкладочного account-switch сценария: A отправляет
+изменение цели участника, затем входит B, после чего приходит задержанный ответ
+A. Проверка подтверждает, что экран B остаётся своим, аккаунт A не получает
+повторный family GET, ошибки и page error отсутствуют. Тест прошёл 7/7 на desktop,
+Android, iPhone Safari и PWA профилях (`workers=1,retries=0`). Точный CI нового
+HEAD проверяется после push; остальные callbacks/cache остаются открытыми.
+
+## P0.4 — расширение delayed family callbacks на мобильные профили, 19.10.2026
+
+Сняты desktop-only skips с 15 тестов A→B и same-account reauthentication для
+family invite/join/create/context/menu и shopping list/check. Их мобильная часть
+прошла 60/60 в Android Chrome, Android PWA, iPhone Safari и iPhone PWA при
+`workers=1,retries=0`. Desktop-проверки существовали отдельно; точный CI с
+объединённой матрицей проверяется после push. Остальные cloud callbacks/cache
+и P0.4 остаются открытыми.
+
+## P0.4/P0.5 — account-switch callbacks и shopping races, 19.10.2026
+
+Ещё десять desktop-only сценариев расширены на четыре Android/iPhone/PWA
+профиля: личные покупки (чтение, экспорт, check и порядок записей), семейная
+покупка (retry/reconciliation), список поддержки, bearer token устройства,
+push status при смене аккаунта и same-account reauthentication, а также поздний
+Stripe Checkout URL. Все 40 мобильных запусков прошли без retries. Вместе с
+предыдущими 15 family callbacks mobile extension составила 100/100 по 25 тестам.
+Desktop acceptance этих сценариев уже существовала отдельно; exact-head CI
+объединённой матрицы проверяется после push. Staging, устройства и прочие
+callbacks остаются открытыми.
+
+## P0.4 — мобильная приёмка черновиков и кэшей аккаунта, 19.10.2026
+
+Сняты десять desktop-only skips в `e2e/ai-callback-account-switch.spec.ts` для
+черновика рецепта и замера, архива прогресса, профиля, dashboard, поиска
+питания, выбранного дня меню, курса, AI retry/status и фоторазбора. После
+согласования с мобильной навигацией все десять сценариев прошли 40/40 на
+Android Chrome, Android PWA, iPhone Safari и iPhone PWA при
+`workers=1,retries=0`. Два скорректированных сценария дополнительно прошли 6/6
+на desktop Chromium, Firefox и WebKit. Для AI проверка сохраняет desktop UI
+assertions, а на телефонах проверяет, что ключи A остаются account-scoped и не
+появляются в пространстве B: sidebar с AI badge на мобильном скрыт. Вместе с
+предыдущими 25 account-switch/race сценариями мобильное расширение составляет
+140/140 запусков по 35 сценариям. `git diff --check` и локальные E2E прошли;
+точный CI опубликованного HEAD ещё не завершён. P0.4 и остальные
+callbacks/cache остаются открытыми.
+
+## P0.5 — мобильная приёмка AI Council callbacks, 19.10.2026
+
+Сняты desktop-only skips с трёх AI Council сценариев: поздний ответ после
+переключения на аккаунт B, поздний ответ после новой server session того же
+аккаунта и очистка временного вопроса старой вкладки. Все проверки прошли 21/21
+на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA
+при `workers=1,retries=0`. Production-код не менялся. Вместе с предыдущими
+account/session наборами расширено 38 сценариев и пройдено 152 мобильных
+запуска. Точный CI опубликованного HEAD ещё не завершён; общий P0.5, staging и
+lifecycle-приёмка остаются открытыми.
+
+## P0.5 — мобильная приёмка личного недельного меню, 19.10.2026
+
+Сняты desktop-only skips с двух delayed weekly-menu сценариев: ответ после входа
+аккаунта B и ответ предыдущей server session после повторного входа того же
+владельца. Приёмка сверяет профиль, managed state и outbox обеих сессий, исходный
+AI proof, profile/state writes и achievement side effects. Прогон прошёл 14/14
+на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`. Production-код не менялся. Вместе с AI Council и ранее
+расширенными account/session наборами мобильное покрытие составляет 40 сценариев
+и 160 запусков. Точный CI опубликованного HEAD ещё не завершён; общий P0.5,
+staging и lifecycle остаются открытыми.
+
+## P0.5 — мобильная приёмка weekly-report и photo-analysis callbacks, 19.10.2026
+
+Два delayed weekly-report сценария прошли 14/14, а четыре food/recipe
+photo-analysis сценария — 28/28 на desktop Chromium/Firefox/WebKit, Android
+Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Удержанный ответ не
+меняет отчёт, дневник, историю, профиль или outbox другой/новой сессии и не
+запускает лишние achievement effects. Совместно эти шесть сценариев прошли
+42/42; их мобильная часть — 24/24. Cumulative mobile acceptance включает 46
+account/session сценариев и 184 запуска. Production-код не менялся; exact-head
+CI ещё не завершён, полный P0.5 и staging остаются открытыми.
+
+## P0.4/P0.5 — мобильная приёмка profile save и refresh, 19.10.2026
+
+Сняты desktop-only skips с двух account-switch сценариев. Удержанный profile PUT
+от A не подтверждает правку в интерфейсе B; после повторного входа A тот же
+outbox operation повторяется с новой `sessionEpoch`. Поздний profile GET от A
+не гидратирует страницу B. Проверки прошли 14/14 на desktop Chromium/Firefox/
+WebKit, Android Chrome/PWA и iPhone Safari/PWA при `workers=1,retries=0`.
+Production-код не менялся. Совокупное мобильное расширение составляет 48
+account/session сценариев и 192 запуска. Exact-head CI ещё не завершён; общий
+P0.4/P0.5, staging и lifecycle остаются открытыми.
+
+## P0.6 — мобильная приёмка возобновления outbox, 19.10.2026
+
+Сняты desktop-only skips с трёх state outbox сценариев: pending операция
+аккаунта A остаётся изолированной при входе B и возобновляется после возврата A;
+та же операция с прежним `opId` переживает reload и отправляется с новой
+session; после logout sender ставится на паузу и возобновляет отправку после
+входа под свежей server session. Совместный прогон прошёл 21/21 в desktop
+Chromium/Firefox/WebKit и Android Chrome/PWA, iPhone Safari/PWA
+(`workers=1,retries=0`), включая 12 мобильных/PWA запусков. Production-код не
+менялся. Совокупная мобильная account/session матрица составляет 51 сценарий и
+204 запуска. Точный CI нового HEAD ещё не завершён; общий P0.6, callbacks,
+staging и полный lifecycle остаются открытыми.
+
+## P0.4/P0.5 — мобильная приёмка пошаговой генерации рецепта, [`46cfe39`](https://github.com/Michael-edel/FitFocus/commit/46cfe39dae002301638415266c5bfe01af9b1bcf), 19.10.2026
+
+Сняты desktop-only skips с двух delayed callback сценариев для пошаговой
+генерации рецепта из дневникового фото: поздний ответ после входа аккаунта B и
+после создания новой server session того же аккаунта. Оба сценария прошли
+14/14 на desktop Chromium/Firefox/WebKit, Android Chrome/PWA, iPhone Safari/PWA
+(`workers=1,retries=0`), включая 8 мобильных/PWA запусков. Поздний ответ не
+меняет дневник, профиль, outbox или usage другой/новой сессии и не показывает
+рецепт в старой или новой вкладке. Production-код не менялся. Общая мобильная
+матрица выросла до 53 сценариев и 212 запусков. Точный CI follow-up ожидает
+push; точный CI предшествующего HEAD пока выполняется.
+
+## P0.4 — мобильная приёмка bulk move/delete дневника, [`0c4ba6a`](https://github.com/Michael-edel/FitFocus/commit/0c4ba6a4c9391c0ac520632d417fc37dc8a796d8), 19.10.2026
+
+Снят desktop-only skip с account-switch приёмки массового перемещения и удаления
+выбранных блюд. Четыре мобильных/PWA запуска прошли на Android Chrome/PWA и
+iPhone Safari/PWA; вместе с ранее пройденными desktop Chromium/Firefox/WebKit
+полная матрица составляет 7/7 (`workers=1,retries=0`). Проверено, что bulk move
+и bulk-delete каждый создают по одному scoped state write, выбранные строки не
+переходят в UI аккаунта B, его значения и outbox остаются неизменными. Общая
+мобильная account/session матрица составляет 54 сценария и 216 запусков.
+Точный CI follow-up ожидает push; CI предыдущего опубликованного HEAD
+продолжает выполняться.
+
+## P0.4 — мобильная приёмка WIS-share callback, [`971844d`](https://github.com/Michael-edel/FitFocus/commit/971844d80819ee41add9a5a979a2aa35ad65e43f), 19.10.2026
+
+Снят desktop-only skip с проверки завершения системного share после отзыва и
+повторной активации аккаунта A. Удержанный share promise старой вкладки после
+перехода A → B → A не восстанавливает устаревшее уведомление. Мобильная часть
+прошла 4/4 на Android Chrome/PWA и iPhone Safari/PWA; вместе с desktop
+Chromium/Firefox/WebKit — 7/7 (`workers=1,retries=0`). Проверяется mock `navigator.share`,
+поэтому тест не заменяет реальное share menu на устройствах. Общая мобильная
+account/session матрица составляет 55 сценариев и 220 запусков. Точный CI
+follow-up ожидает push; CI предыдущего опубликованного HEAD продолжает
+выполняться.
+
+## P0.4/P0.5 — мобильная приёмка позднего PDF download, [`39ff89e`](https://github.com/Michael-edel/FitFocus/commit/39ff89e43bf939ebc83c4e0789fe76efd4d2cb4a), 19.10.2026
+
+Снят desktop-only skip с account-switch теста health-report PDF: запрос шрифта
+удерживается после нажатия экспорта, в другой вкладке активируется аккаунт B,
+после чего старый обработчик отпускается. Ни desktop, ни mobile не инициируют
+скачивание отзываемой сессии. Мобильная часть прошла 4/4 на Android Chrome/PWA и
+iPhone Safari/PWA; вместе с предыдущими desktop Chromium/Firefox/WebKit
+полная матрица составляет 7/7 (`workers=1,retries=0`). Production-код не
+менялся; общий account/session прогон вырос до 56 сценариев и 224 мобильных
+запусков. Точный CI follow-up ожидает push; CI предыдущего опубликованного HEAD
+продолжает выполняться.
+
+## P0.5 — мобильная приёмка позднего Huawei sync, [`12f7da6`](https://github.com/Michael-edel/FitFocus/commit/12f7da6949ecbbbd55287ccc7a455ac191299344), 19.10.2026
+
+Сняты desktop-only skips с двух Huawei Health delayed-sync сценариев. В первом
+после начала sync аккаунта A другая вкладка входит в аккаунт B; поздний ответ
+не меняет профиль A или B. Во втором та же учётная запись входит заново с новой
+server session; поздний ответ старой сессии не коммитится. Мобильная часть
+прошла 8/8 на Android Chrome/PWA и iPhone Safari/PWA; вместе с desktop
+Chromium/Firefox/WebKit оба сценария прошли 14/14 (`workers=1,retries=0`).
+Проверка использует mock API и подтверждает только клиентскую account/session
+изоляцию. Настоящий Huawei OAuth, реальные устройства/BFCache, staging и полный
+P0.5 lifecycle остаются открытыми. Накопленная мобильная account/session
+матрица выросла до 58 сценариев и 232 запусков. Точный CI нового HEAD ожидает
+push; CI предыдущего опубликованного HEAD продолжает выполняться.
+
+## P0.5 — мобильная приёмка account-scoped notices, [`f233eff`](https://github.com/Michael-edel/FitFocus/commit/f233effd968ad0b2d498ce83e75963150d877369), 19.10.2026
+
+Paywall, сообщение об обновлении профиля и недельная adaptation notice больше не
+ограничены desktop-only в account-switch acceptance. Все три сценария прошли
+21/21 на desktop Chromium/Firefox/WebKit и Android/iPhone Safari/PWA
+(`workers=1,retries=0`), включая 12 мобильных запусков. Тесты проверяют, что
+состояние аккаунта A скрывается в обеих вкладках после входа B; runtime-код не
+менялся.
+
+При попытке включить сюда camera-dialog сценарий mobile run 4/4 раз не нашёл
+`getByRole('button', { name: 'Снять' })`. Сохранённый экран показывает, что
+телефонный путь использует `<label>` с `input[type=file][capture]`, а desktop
+открывает in-app `CameraCapture` dialog; это разные UI-потоки. Поэтому mobile
+остался ожидаемо пропущен именно для dialog-сценария, а desktop Chromium/
+Firefox/WebKit прошли 3/3. Это несовпадение тестового селектора с mobile DOM,
+не воспроизведение runtime-дефекта. Общая mobile account/session матрица выросла
+до 61 сценария и 244 запусков. Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка recipe-photo auth refusal, [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240), 19.10.2026
+
+Снят desktop-only skip со scoped auth-refusal теста анализа фото рецепта.
+Искусственный отказ для `foodphoto_enhanced` не показывает обычную ошибку
+рецепта, browser alert или page error и не помечает анализ как завершённый.
+Проверка прошла 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone
+Safari/PWA (`workers=1,retries=0`), включая 4 мобильных запуска. Production-код
+не менялся; сценарий использует mock API. Общая mobile account/session матрица
+составляет 62 сценария и 248 запусков. Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка held plateau explanation, [`c751260`](https://github.com/Michael-edel/FitFocus/commit/c751260ac7edbe328eea64a4220648ef570a9adb), 19.10.2026
+
+Сняты desktop-only skips с двух удержанных недельных adaptation callbacks. Позднее
+объяснение аккаунта A отпускается после входа B либо после повторного входа A с
+новой server session; в обоих случаях оно не появляется в старой/новой вкладке,
+а профиль и outbox остаются прежними. Проверка прошла 14/14 на desktop
+Chromium/Firefox/WebKit и Android/iPhone Safari/PWA (`workers=1,retries=0`),
+включая 8 мобильных запусков. Production-код не менялся; это mock API acceptance.
+Накопленная mobile account/session матрица выросла до 64 сценариев и 256 запусков.
+Точный CI follow-up ожидает push.
+
+## P0.5 — мобильная приёмка успешного пошагового рецепта, [`ebddd21`](https://github.com/Michael-edel/FitFocus/commit/ebddd21265c897316f7337e1c605c7524c9fefe0), 19.10.2026
+
+Снят desktop-only skip со сценария успешной генерации пошагового рецепта из
+разобранного блюда и последующего сохранения в избранное. Проверка подтверждает
+запись рецепта в дневник, избранное и usage активного аккаунта; искусственный
+сбой durable-записи сначала оставляет рецепт доступным для повтора. Сценарий
+прошёл 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone Safari/PWA
+(`workers=1,retries=0`), включая 4 мобильных запуска. Изменений production-кода
+нет; используется mock API. Накопленная mobile account/session матрица выросла
+до 65 сценариев и 260 запусков. Точный CI нового HEAD ожидает завершения.
+
+## P0.5 — мобильная приёмка прямого анализа фото еды, [`81aec0d`](https://github.com/Michael-edel/FitFocus/commit/81aec0d59a1d71f034c09570071c02e1f804feff), 19.10.2026
+
+Снят desktop-only skip со сценария успешного food-photo analysis. На всех семи
+desktop/mobile/PWA профилях проверены запись блюда в дневник и историю, списание
+usage активного аккаунта и отсутствие оставшихся outbox операций. Сценарий
+прошёл 7/7 (`workers=1,retries=0`), включая 4 мобильных запуска. Production-код
+не менялся; используется mock API. Матрица выросла до 66 сценариев и 264
+мобильных запусков. CI #1788 проверяет предыдущий опубликованный HEAD; точный CI
+этого follow-up ожидает push.
+
+## P0.4/P0.5 — mobile capture input account switch, [`e6f73f2`](https://github.com/Michael-edel/FitFocus/commit/e6f73f27208055ce51bb48899327c0fafc68db67), 19.10.2026
+
+Добавлен отдельный phone-only сценарий через `NutritionScreen` native
+`input[type=file][capture]`. Когда ответ food-photo AI удержан, тест активирует
+аккаунт B во второй вкладке и отпускает ответ аккаунта A; профиль, дневник,
+история, outbox и side-effect requests обоих владельцев остаются прежними.
+Новый сценарий прошёл 4/4 на Android Chrome/PWA и iPhone Safari/PWA при
+`workers=1,retries=0`. Существующий gallery-upload сценарий после выделения
+общей проверки прошёл 7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone
+browser/PWA профилях. Root typecheck, legacy queue/migration unit — 128/128 и
+`git diff --check` прошли. Playwright устанавливает синтетическое изображение
+в capture input; системная камера и физическое устройство не проверялись.
+Накопленная mobile account/session матрица — 67 сценариев и 268 запусков.
+Точный CI этого коммита ожидает публикации; полный P0.4/P0.5 lifecycle,
+staging и реальная camera/OAuth-приёмка остаются открытыми.
+
+## P0.4/P0.5 — mobile recipe capture account switch, [`746e26e`](https://github.com/Michael-edel/FitFocus/commit/746e26eb483dca986f4ca10fea896279dd34fd0d), 19.10.2026
+
+Расширен held `foodphoto_enhanced` account-switch сценарий отдельным
+`RecipesScreen` native `input[type=file][capture]`. После выбора фото аккаунтом A
+ответ удерживается; вход аккаунта B во второй вкладке и последующее освобождение
+ответа не создают stale recipe draft и не меняют профиль, дневник, историю, outbox
+или side effects владельцев. Native capture прошёл 4/4 на Android Chrome/PWA и
+iPhone Safari/PWA; прежний gallery path после выделения общей проверки прошёл
+7/7 на desktop Chromium/Firefox/WebKit и Android/iPhone browser/PWA профилях.
+Общий targeted прогон: 11 passed, 3 ожидаемых desktop skips,
+`workers=1,retries=0`; root typecheck и `git diff --check` прошли. Playwright
+подаёт synthetic file в capture input и не запускает системную камеру.
+Mobile account/session matrix составляет 68 сценариев и 272 запуска. Точный CI
+этого коммита ожидает push; staging и физическое устройство не проверялись.
+
+## P0.5 — achievement check после same-account reauthentication, 20.10.2026
+
+Добавлен E2E для позднего `POST /api/achievements/check` с unlock от `app_open`:
+ответ старой сессии удерживается, тот же аккаунт повторно входит с новым SID, а
+новая сессия получает собственное достижение. После освобождения старого ответа
+устаревший unlock не появляется ни в одной вкладке, а новое достижение остаётся
+видимым. Сценарий прошёл 7/7 desktop/mobile/PWA профилей без retries;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI этого follow-up запускается после push.
+
+## P0.5 — Support callbacks после same-account reauthentication, 20.10.2026
+
+Добавлены две browser acceptance для Support. Удержанный список и удержанная
+деталь обращения старой server session освобождаются после повторного входа того
+же аккаунта с новым SID. Старый тикет не появляется в UI, актуальная деталь
+остаётся на экране, позднее вложение не загружается, а session-change не
+показывается как ошибка поддержки. Оба сценария прошли 14/14 на семи
+desktop/mobile/PWA профилях без retries; `npm run typecheck` и
+`git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
+запускается после публикации.
+
+## P0.5 — mobile bearer token после same-account reauthentication, 20.10.2026
+
+Добавлен E2E для удержанного `POST /api/mobile/token` старой сессии. Тот же
+аккаунт повторно входит с новым SID и получает новый token; старый ответ после
+освобождения не показывается ни в одной вкладке и не копируется. Проверяются
+свежие account/session headers, смена `sessionEpoch`, сохранность нового token и
+clipboard, а также отсутствие ошибок и error overlay. Сценарий прошёл 7/7
+desktop/mobile/PWA профилей при `workers=1,retries=0`; `npm run typecheck` и
+`git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
+запускается после push.
+
+## P0.5 — поздние Support create/reply после same-account reauthentication, 20.10.2026
+
+Добавлены две browser acceptance для Support-мутаций. Удержанный create response
+после повторного входа с новым SID не показывает success и не добавляет старый
+тикет в текущий экран. Удержанный reply response не очищает актуальный экран и
+не запускает дополнительное чтение детали/списка. Оба сценария прошли 14/14
+совокупно на семи desktop/mobile/PWA профилях при `workers=1,retries=0`;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI этого follow-up запускается после публикации.
+
+## P0.4/P0.5 — profile refresh после same-account reauthentication, 20.10.2026
+
+Добавлена browser acceptance для удержанного `GET /api/profile` старой server
+session. После повторного входа того же аккаунта с новым SID профиль меняется и
+сохраняется из текущей сессии; освобождённый старый ответ не заменяет значение в
+IndexedDB или поле настроек. Проверка прошла 7/7 desktop/mobile/PWA профилей при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся; точный CI этой ревизии проверяется после push.
+
+## P0.5 — health report PDF после same-account reauthentication, 20.10.2026
+
+Добавлена browser acceptance для отложенного `Краткий PDF`: запрос Noto Sans
+удерживается во время подготовки документа, затем та же учётная запись входит
+с новым SID. После освобождения шрифта старый экспорт не начинает browser
+download, не запускает новую achievement-проверку и не показывает runtime error.
+Сценарий прошёл 7/7 desktop/mobile/PWA профилей при `workers=1,retries=0`;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI новой ревизии проверяется после push.
+
+## P0.5 — подробный PDF после same-account reauthentication, 20.10.2026
+
+Расширена browser acceptance для активного подробного health report PDF. Пока
+запрос Noto Sans удерживается, тот же аккаунт повторно входит с новым SID; после
+освобождения запроса старая вкладка не скачивает PDF и не запускает achievement
+check. Проверка прошла 7/7 desktop/mobile/PWA профилей при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся.
+CI #1811 для `87171fe` проверяет browser follow-up, но не включает unit guard
+этого раздела; новый объединённый SHA будет проверен отдельным точным CI.
+
+## P0.5 — session guard всех PDF-экспортёров, 20.10.2026
+
+Прямые unit-проверки stale-session поведения расширены на все пять активных
+экспортёров: краткий и подробный health report, недельный отчёт, сравнение
+прогресса и архив. Если сессия меняется, пока загружается Noto Sans, функция
+возвращает `false` и не вызывает `doc.save()`. Набор прошёл 6/6, включая
+положительную проверку короткого экспорта при неизменной сессии; `npm run
+typecheck` и `git diff --check` прошли. Production-код не менялся. CI #1811 для
+`87171fe` не включает эти новые unit cases; точный CI объединённого SHA
+ожидается после push.
+
+## P0.8/P0.9 — уточнение источника Safari reload page error, 20.10.2026
+
+Исследован сохранённый [артефакт CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258/artifacts/12127895608)
+для `de56ab3`. HAR и Playwright trace подтверждают, что удержанный native
+`GET /api/profile` отменился при reload (ожидаемый `requestfailed`), а сообщение
+WebKit `/api/ai due to access control checks` пришло от отдельного фонового
+weekly-AI запроса примерно через 21 мс после начала `page.reload()`. Стек
+ошибки проходит через AI bundle. Это устанавливает источник отказа данного CI,
+но не доказывает, что объяснены все более ранние Safari сообщения.
+
+В `e2e/pwa-update.spec.ts` удалён допуск одного такого предупреждения: сценарий
+теперь требует полного отсутствия `/api/ai` page errors. Текущий код отмены
+weekly-AI при `beforeunload` прошёл строгий сценарий **3/3** на desktop WebKit,
+iPhone Safari и iPhone PWA (`workers=1,retries=0`). Root typecheck и
+`git diff --check` прошли. CI #1812 относится к
+предыдущему SHA `561ee93` и не включает это изменение; его точный CI ожидает
+публикации. Общий CORS-фильтр не добавлялся. Диагностика остальных исторических
+reload источников остаётся открытой.
+
+## P0.8/P0.9 — строгая проверка weekly-menu reload без WebKit исключений, 20.10.2026
+
+В `e2e/weekly-menu-durability.spec.ts` убраны допуски для WebKit access-control
+сообщений `/api/me` и `/api/achievements/check` во время reload. Вместо
+ограничения числа warning тест теперь требует их полного отсутствия; сама
+обработка pageerror/console осталась включённой. Полная спека прошла **24/24**.
+В `pwa-update.spec.ts` такой же строгий запрет применён к `/api/me`; обе проверки
+обновления Service Worker прошли **6/6**. В `pwa-rollback.spec.ts` удалён допуск
+`/api/me` page/console warnings; pending и conflicted сценарии прошли **6/6**.
+В сумме все три спеки прошли без retries на desktop WebKit, iPhone Safari и
+iPhone PWA с нулём таких предупреждений. Rollback по-прежнему отдельно проверяет
+точные `requestfailed` отмены. Изменения опубликованы в `6e37e8e`; точный CI
+#1814 сейчас выполняет browser E2E. Предыдущий #1813 для `50592e5` отменён
+после продвижения ветки.
+
+## P0.9 — offline PWA без WebKit `/api/me` warning, 20.10.2026
+
+В `e2e/pwa-offline-durability.spec.ts` удалён допуск одного `/api/me?t=…`
+access-control page error, который ранее объяснялся отменой запроса при
+переключении iPhone PWA offline. Теперь тест требует отсутствия этого warning;
+сохранение settings opId/payload/baseVersion и подтверждение после возврата сети
+остались неизменными. Строгий сценарий прошёл **7/7** desktop/mobile/PWA
+профилей без retries. Root typecheck, admin guards и `git diff --check` прошли.
+Изменение опубликовано в `8ae5c0f`; точный CI #1815 ожидает своей очереди.
+
+## P0.8 — семейный menu-state reload без WebKit warning cap, 20.10.2026
+
+В `e2e/family-menu-durable.spec.ts` удалён лимит в четыре WebKit access-control
+page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
+`/api/family/menu/state`. Проверялись два held durable menu-state read: после
+входа другого аккаунта и после same-account reauthentication с новым SID.
+В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
+Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
+retries. Точный CI текущего коммита ожидает следующей публикации.

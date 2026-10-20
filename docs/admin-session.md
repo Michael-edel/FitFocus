@@ -50,3 +50,10 @@ guard, middleware и `logout_all`. Transport-тесты также посыла�
 сохранение исходного proof; матрица прошла 7/7 desktop/mobile/PWA проектов без
 retries. Это не проверка BFCache. Общий критерий P0.5 остаётся открытым, пока не
 проверены остальные API callbacks и полный lifecycle.
+
+Same-account reauthentication acceptance удерживает `/api/admin/stats` для
+старого входа, открывает Admin в новой вкладке того же аккаунта с новым
+`serverSessionId`, затем освобождает старый ответ. Новая вкладка сохраняет свой
+stats marker, а marker старой сессии не появляется ни в одной вкладке. Сценарий
+прошёл 7/7 desktop/mobile/PWA профилей без retries. Это mock API acceptance;
+реальный admin backend и staging остаются отдельными проверками.

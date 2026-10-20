@@ -100,6 +100,7 @@ import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
 import { useCloudSyncRecovery } from './features/profile/useCloudSyncRecovery';
 import { buildCloudSyncBadge } from './features/profile/cloudSyncBadge';
 import { clearAppUiStorage } from './features/profile/clearUiState';
+import { isRegistrationSessionReady, type RegistrationSessionState } from './features/auth/registrationSession';
 import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
 import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
@@ -140,7 +141,7 @@ import { usePlanActivation } from './features/auth/usePlanActivation';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
-import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox, type OutboxCommitGuard, type OutboxLocalCommitGuard, type OutboxReadGuard, type OutboxWriteGuard } from './storage/durableOutbox';
 import { assertReadSession } from './storage/sessionRead';
 import { applyHabitToggle } from './features/habits/legacyProgress';
 import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
@@ -340,6 +341,90 @@ const App: React.FC = () => {
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
+  const [registrationSessionState, setRegistrationSessionState] = useState<RegistrationSessionState>({
+    identity: null,
+    status: 'checking',
+  });
+  const registrationSessionStateRef = useRef(registrationSessionState);
+  registrationSessionStateRef.current = registrationSessionState;
+  const registrationSessionGuardRef = useRef<{
+    identity: string;
+    sessionKey: string | null;
+    invalid: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const identity = authState === 'register' ? googleMe?.sub : undefined;
+    registrationSessionGuardRef.current = null;
+    if (!identity) {
+      setRegistrationSessionState({ identity: null, status: 'checking' });
+      return;
+    }
+
+    let disposed = false;
+    let checking = false;
+    const setSessionStatus = (status: 'checking' | 'active' | 'unavailable' | 'changed') => {
+      setRegistrationSessionState(previous => previous.identity === identity && previous.status === status
+        ? previous
+        : { identity, status });
+    };
+    setSessionStatus('checking');
+    const outbox = new DurableOutbox();
+    const refreshSession = () => {
+      if (checking) return;
+      checking = true;
+      void outbox.sessionState()
+        .then(({ active }) => {
+          if (disposed) return;
+          let guard = registrationSessionGuardRef.current;
+          if (!guard || guard.identity !== identity) {
+            guard = { identity, sessionKey: null, invalid: false };
+            registrationSessionGuardRef.current = guard;
+          }
+          if (guard.invalid) {
+            setSessionStatus('changed');
+            return;
+          }
+
+          const sessionKey = active
+            ? JSON.stringify([active.accountId, active.serverSessionId ?? null, active.sessionEpoch])
+            : null;
+          if (!active || active.accountId !== identity || !sessionKey
+            || (guard.sessionKey !== null && guard.sessionKey !== sessionKey)) {
+            guard.invalid = true;
+            setSessionStatus('changed');
+            return;
+          }
+
+          guard.sessionKey = sessionKey;
+          setSessionStatus('active');
+        })
+        .catch(() => {
+          if (!disposed) setSessionStatus('unavailable');
+        })
+        .finally(() => { checking = false; });
+    };
+
+    refreshSession();
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    } catch {
+      // IndexedDB polling and focus listeners remain as fallbacks.
+    }
+    channel?.addEventListener('message', refreshSession);
+    const interval = window.setInterval(refreshSession, 2_000);
+    const refreshWhenVisible = () => { if (!document.hidden) refreshSession(); };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      channel?.removeEventListener('message', refreshSession);
+      channel?.close();
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [authState, googleMe?.sub]);
   const authIdentityRef = useRef(googleMe?.sub);
   authIdentityRef.current = googleMe?.sub;
   const isCurrentProfileSession = useMemo(() => {
@@ -523,7 +608,7 @@ const App: React.FC = () => {
   });
 
   // Metabolic Adaptation States
-  const [adaptLoading, setAdaptLoading] = useState(false);
+  const { value: adaptLoading, setValue: setAdaptLoading } = useAccountScopedUiState(rootAccountSessionScope, false);
   const { value: adaptNote, setValue: setAdaptNote } = useAccountScopedUiState(rootAccountSessionScope, '');
   const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
@@ -672,7 +757,7 @@ const App: React.FC = () => {
   });
   const [versionInfoOpen, setVersionInfoOpen] = useState(false);
 
-  const [planError, setPlanError] = useState<string | null>(null);
+  const { value: planError, setValue: setPlanError } = useAccountScopedUiState<string | null>(registrationScope, null);
 
   // Cinematic AI activation steps
   const ACTIVATION_TOTAL_MS = 3200;
@@ -947,7 +1032,7 @@ const App: React.FC = () => {
     hasPendingProfileChangesRef.current = false;
     setProfileSyncState('idle');
     setProfileSyncNote('Профиль обновлён из облака.');
-  }, []);
+  }, [setProfileSyncNote]);
 
   const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
@@ -1473,8 +1558,31 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     registrationControllerRef.current = controller;
     const bootstrap = authBootstrapAttemptRef.current;
     const accountId = googleMe?.sub;
-    const isCurrent = () => attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
-      && accountId === authIdentityRef.current;
+    const isCurrent = () => {
+      const sessionGuard = registrationSessionGuardRef.current;
+      return attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
+        && accountId === authIdentityRef.current
+        && isRegistrationSessionReady(accountId, registrationSessionStateRef.current)
+        && sessionGuard?.identity === accountId && sessionGuard.sessionKey !== null && !sessionGuard.invalid;
+    };
+    const getProfileWriteGuard = async (): Promise<OutboxLocalCommitGuard | null> => {
+      if (!accountId || !isCurrent()) return null;
+      const { active } = await new DurableOutbox().sessionState();
+      if (!isCurrent() || !active || active.accountId !== accountId
+        || typeof active.serverSessionId !== 'string' || !/^[a-f0-9]{64}$/.test(active.serverSessionId)
+        || !active.sessionEpoch) return null;
+      const sessionGuard = registrationSessionGuardRef.current;
+      const sessionKey = JSON.stringify([active.accountId, active.serverSessionId, active.sessionEpoch]);
+      if (sessionGuard?.identity !== accountId || sessionGuard.invalid || sessionGuard.sessionKey !== sessionKey) return null;
+      return {
+        localCommitGuard: {
+          accountId,
+          serverSessionId: active.serverSessionId,
+          sessionEpoch: active.sessionEpoch,
+        },
+        canCommit: isCurrent,
+      };
+    };
     try {
       await runRegistrationFlow({
         regData,
@@ -1490,6 +1598,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         loginAsUser: (user, readGuard) => loginAsUser(user, googleMe, isCurrent, readGuard),
         controller,
         isCurrentSession: isCurrent,
+        getProfileWriteGuard,
         setActiveTab,
         setPlanIntroOpen,
         fetchImpl: fetch,
@@ -1498,7 +1607,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       if (registrationControllerRef.current === controller) registrationControllerRef.current = null;
     }
   }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe,
-    setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
+    registrationSessionState, setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
 
   const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
     totalMs: ACTIVATION_TOTAL_MS,
@@ -1820,6 +1929,24 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       />
     </React.Suspense>
   );
+
+  if (authState === 'register' && !isRegistrationSessionReady(googleMe?.sub, registrationSessionState)) {
+    const status = registrationSessionState.identity === googleMe?.sub
+      ? registrationSessionState.status
+      : 'checking';
+    const registrationSessionMessage = status === 'checking'
+      ? 'Проверяем активную сессию…'
+      : status === 'unavailable'
+        ? 'Не удалось подтвердить активную сессию. Данные регистрации скрыты; повторите вход.'
+        : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
+    return (
+      <div className="min-h-[100dvh] bg-slate-950 px-4 flex items-center justify-center text-slate-200">
+        <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
+          {registrationSessionMessage}
+        </div>
+      </div>
+    );
+  }
 
   if (authState === 'register') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>

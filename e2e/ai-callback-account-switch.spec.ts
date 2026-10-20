@@ -1,4 +1,4 @@
-import { expect, type BrowserContext, type Page, type Request } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Request, type TestInfo } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 import { dashboardReadinessSnapshot, observeDashboardReadiness } from './support/dashboardReadiness';
@@ -273,7 +273,9 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
               ingredients: [{ name: 'Яйца', amount: '100 г' }],
               steps: [{ n: 1, text: 'Приготовить блюдо', timeMin: 5 }], tips: [],
             })
-          : 'Тестовая интерпретация недели.';
+          : feature === 'plateau'
+            ? `Тестовая интерпретация недели для аккаунта ${responseAccount.id === accountA.id ? 'A' : 'B'}.`
+            : 'Тестовая интерпретация недели.';
       await json({ text }, responseAccount);
       if (typeof feature === 'string') counts.completedAiFeatures.push(feature);
       return;
@@ -379,6 +381,70 @@ async function waitForAccountOutboxIdle(page: Page, account: Account) {
 async function waitForOutboxKeyIdle(page: Page, account: Account, key: string) {
   await expect.poll(async () => (await readDurableSnapshot(page)).operations
     .filter(operation => operation.accountId === account.id && operation.key === key), { timeout: 15_000 }).toEqual([]);
+}
+
+async function installProgressPhotoDecodeGate(page: Page) {
+  await page.addInitScript(() => {
+    const scopedWindow = window as Window & {
+      __fitfocusHoldProgressPhoto?: boolean;
+      __fitfocusProgressPhotoDecodeHeld?: boolean;
+      __fitfocusProgressPhotoDecodeLoaded?: boolean;
+      __fitfocusProgressPhotoDecodeError?: string;
+      __fitfocusReleaseProgressPhoto?: () => void;
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!descriptor?.set) throw new Error('HTML_IMAGE_SRC_SETTER_NOT_AVAILABLE');
+    let pending: { image: HTMLImageElement; url: string } | null = null;
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: descriptor.configurable,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get ? function(this: HTMLImageElement) { return descriptor.get?.call(this); } : undefined,
+      set: function(this: HTMLImageElement, value: string) {
+        if (scopedWindow.__fitfocusHoldProgressPhoto && value.startsWith('blob:')) {
+          pending = { image: this, url: value };
+          scopedWindow.__fitfocusProgressPhotoDecodeHeld = true;
+          return;
+        }
+        descriptor.set?.call(this, value);
+      },
+    });
+    scopedWindow.__fitfocusReleaseProgressPhoto = () => {
+      const held = pending;
+      if (!held) throw new Error('PROGRESS_PHOTO_DECODE_NOT_HELD');
+      pending = null;
+      scopedWindow.__fitfocusHoldProgressPhoto = false;
+      held.image.addEventListener('load', () => { scopedWindow.__fitfocusProgressPhotoDecodeLoaded = true; }, { once: true });
+      held.image.addEventListener('error', () => { scopedWindow.__fitfocusProgressPhotoDecodeError = 'IMAGE_DECODE_FAILED'; }, { once: true });
+      descriptor.set?.call(held.image, held.url);
+    };
+  });
+}
+
+async function selectHeldProgressPhoto(page: Page, note: string) {
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusHoldProgressPhoto?: boolean }).__fitfocusHoldProgressPhoto = true;
+  });
+  await page.getByPlaceholder('Подпись к фото: например, месяц 1').fill(note);
+  const photoInput = page.locator('input[type="file"][accept="image/*"][capture]');
+  await expect(photoInput).toHaveCount(1);
+  await photoInput.setInputFiles({
+    name: 'progress.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeHeld?: boolean }).__fitfocusProgressPhotoDecodeHeld === true,
+  )).toBe(true);
+}
+
+async function releaseHeldProgressPhoto(page: Page) {
+  await page.evaluate(() => {
+    (window as Window & { __fitfocusReleaseProgressPhoto?: () => void }).__fitfocusReleaseProgressPhoto?.();
+  });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __fitfocusProgressPhotoDecodeLoaded?: boolean }).__fitfocusProgressPhotoDecodeLoaded === true,
+  )).toBe(true);
+  expect(await page.evaluate(() => (window as Window & { __fitfocusProgressPhotoDecodeError?: string }).__fitfocusProgressPhotoDecodeError ?? null)).toBeNull();
 }
 
 async function waitForAccountSwitch(page: Page) {
@@ -566,6 +632,164 @@ test('navigation aborts the plateau AI request during session hydration before t
   expect(errors).toEqual([]);
 });
 
+test('a held hydration plateau response from account A cannot update account B after another tab signs in', async ({ page, context }, info) => {
+  const diary = [{
+    id: 'hydration-plateau-food', name: 'Завтрак', calories: 320, protein: 23, fat: 21, carbs: 4,
+    timestamp: new Date().toISOString(),
+  }];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id, true),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify(diary), exists: true, version: 1,
+    }, {
+      accountId: accountA.id, key: `fitfocus_data_${accountA.id}_habits`, value: '[]', exists: true, version: 1,
+    }],
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  }]);
+
+  const beforeSwitch = await readDurableSnapshot(page);
+  const profileABefore = rawValue(beforeSwitch, profileKey(accountA.id));
+  const valuesABefore = valuesFor(beforeSwitch, accountA);
+  const operationsABefore = operationsFor(beforeSwitch, accountA);
+  const profileWritesBefore = [...fixtureA.counts.profileWrites];
+  const stateWritesBefore = [...fixtureA.counts.stateWrites];
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    const switched = await openAccountB(context, state);
+    await waitForAccountSwitch(page);
+    await waitForAccountOutboxIdle(switched.page, accountB);
+    const accountBBefore = await readDurableSnapshot(switched.page);
+    const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
+    const valuesBBefore = valuesFor(accountBBefore, accountB);
+    const operationsBBefore = operationsFor(accountBBefore, accountB);
+    await expect(switched.page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
+
+    const finalA = await readDurableSnapshot(page);
+    const finalB = await readDurableSnapshot(switched.page);
+    expect(rawValue(finalA, profileKey(accountA.id))).toBe(profileABefore);
+    expect(valuesFor(finalA, accountA)).toEqual(valuesABefore);
+    expect(operationsFor(finalA, accountA)).toEqual(operationsABefore);
+    expect(rawValue(finalB, profileKey(accountB.id))).toBe(profileBBefore);
+    expect(valuesFor(finalB, accountB)).toEqual(valuesBBefore);
+    expect(operationsFor(finalB, accountB)).toEqual(operationsBBefore);
+    expect(fixtureA.counts.profileWrites).toEqual(profileWritesBefore);
+    expect(fixtureA.counts.stateWrites).toEqual(stateWritesBefore);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+      feature: 'plateau', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(switched.page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(switched.errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('hydration-plateau-late-response-account-switch.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
+test('a held hydration plateau response cannot update a new session of the same account', async ({ page, context }, info) => {
+  const diary = [{
+    id: 'hydration-reauth-plateau-food', name: 'Завтрак', calories: 320, protein: 23, fat: 21, carbs: 4,
+    timestamp: new Date().toISOString(),
+  }];
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id, true),
+    stateValues: [{
+      accountId: accountA.id, key: diaryKey(accountA.id), value: JSON.stringify(diary), exists: true, version: 1,
+    }, {
+      accountId: accountA.id, key: `fitfocus_data_${accountA.id}_habits`, value: '[]', exists: true, version: 1,
+    }],
+  };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, 'plateau');
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  }]);
+
+  const nextSession: Account = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = nextSession;
+  state.profile = profileFor(accountA.id, true);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureNextSession = await installAccountApi(reauthenticatedPage, state);
+
+  try {
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, nextSession);
+    const beforeLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(beforeLateResponse.activeSession?.accountId).toBe(accountA.id);
+    expect(beforeLateResponse.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    const profileBefore = rawValue(beforeLateResponse, profileKey(accountA.id));
+    const valuesBefore = valuesFor(beforeLateResponse, accountA);
+    const operationsBefore = operationsFor(beforeLateResponse, accountA);
+    expect(fixtureNextSession.counts.aiRequests.filter(request => request.feature === 'plateau')
+      .every(request => request.session === nextSession.sid)).toBe(true);
+
+    fixtureA.release();
+    await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(nextSession.sid);
+    const afterLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(rawValue(afterLateResponse, profileKey(accountA.id))).toBe(profileBefore);
+    expect(valuesFor(afterLateResponse, accountA)).toEqual(valuesBefore);
+    expect(operationsFor(afterLateResponse, accountA)).toEqual(operationsBefore);
+    expect(fixtureA.counts.profileWrites).toEqual([]);
+    expect(fixtureA.counts.stateWrites).toEqual([]);
+    expect(fixtureA.counts.achievementChecks).toBe(0);
+    expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'plateau')).toEqual([{
+      feature: 'plateau', account: accountA.id, session: accountA.sid,
+    }]);
+    await expect(page.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Позднее объяснение плато из профиля A', { exact: true })).toHaveCount(0);
+    expect(errorsA).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await reauthenticatedPage.screenshot({ path: info.outputPath('hydration-plateau-late-response-reauth.png') });
+  } finally {
+    fixtureA.release();
+  }
+});
+
 test('held coach retry cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const profileA = profileFor(accountA.id);
@@ -726,7 +950,6 @@ test('held coach retry cannot write after the same account starts a new server s
 });
 
 test('AI Council uses account A proof and discards its held answer after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab AI Council account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -771,7 +994,6 @@ test('AI Council uses account A proof and discards its held answer after account
 });
 
 test('AI Council discards its held answer after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account AI Council callback acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -838,7 +1060,6 @@ test('AI Council discards its held answer after the same account starts a new se
 });
 
 test('AI Council hides its transient draft after the same account starts a new session in another tab', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account new-session UI acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1192,7 +1413,6 @@ test('held plateau retry cannot appear after the same account starts a new serve
 });
 
 test('held plateau explanation cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
   const profileA = profileFor(accountA.id, true);
   const state: FixtureState = { current: accountA, profile: profileA };
   const errorsA: string[] = [];
@@ -1254,7 +1474,6 @@ test('held plateau explanation cannot appear after another tab signs in as accou
 });
 
 test('held plateau explanation cannot appear after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance uses desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1296,6 +1515,8 @@ test('held plateau explanation cannot appear after the same account starts a new
     await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
       .toBe(reauthenticated.sid);
     await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByRole('button', { name: 'AI думает...', exact: true })).toHaveCount(0);
     await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
 
     const beforeOldResponse = await readDurableSnapshot(reauthenticatedPage);
@@ -1340,7 +1561,6 @@ test('held plateau explanation cannot appear after the same account starts a new
 });
 
 test('held personal weekly-menu response cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The plan screen acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1403,7 +1623,6 @@ test('held personal weekly-menu response cannot write for account A after anothe
 });
 
 test('held personal weekly-menu response cannot write after same-account reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly-menu reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1476,7 +1695,6 @@ test('held personal weekly-menu response cannot write after same-account reauthe
 });
 
 test('held weekly report cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The weekly AI report account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1560,7 +1778,6 @@ test('held weekly report cannot write for account A after another tab signs in a
 });
 
 test('held weekly report cannot write after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account weekly AI report reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1658,8 +1875,12 @@ test('held weekly report cannot write after the same account starts a new server
   }
 });
 
-test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary account-switch acceptance runs in desktop browser profiles.');
+async function expectHeldFoodPhotoCannotWriteAfterAccountSwitch(
+  page: Page,
+  context: BrowserContext,
+  info: TestInfo,
+  uploadSelector: string,
+) {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1670,7 +1891,7 @@ test('held food photo analysis cannot write for account A after another tab sign
   await openApp(page, '/#nutrition');
   await expect(page).toHaveTitle(/FitFocus/);
   await waitForAccountOutboxIdle(page, accountA);
-  const upload = page.locator('input[type="file"][multiple]').first();
+  const upload = page.locator(uploadSelector).first();
   await expect(upload).toHaveCount(1);
   await upload.setInputFiles({
     name: 'meal.svg',
@@ -1727,10 +1948,19 @@ test('held food photo analysis cannot write for account A after another tab sign
   } finally {
     fixtureA.release();
   }
+}
+
+test('held food photo analysis cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  await expectHeldFoodPhotoCannotWriteAfterAccountSwitch(page, context, info, 'input[type="file"][multiple]');
+});
+
+test('held native camera capture cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'),
+    'The native camera capture input is available on phone browser profiles.');
+  await expectHeldFoodPhotoCannotWriteAfterAccountSwitch(page, context, info, 'input[type="file"][capture]');
 });
 
 test('held food photo analysis cannot commit after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Photo diary reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1749,6 +1979,7 @@ test('held food photo analysis cannot commit after the same account starts a new
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
+  await expect(page.getByText('Анализирую фото...', { exact: true })).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
 
   const beforeReauthentication = await readDurableSnapshot(page);
@@ -1791,6 +2022,8 @@ test('held food photo analysis cannot commit after the same account starts a new
     expect(newSessionValues).toEqual(valuesBefore);
     expect(newSessionOperations).toEqual(operationsBefore);
     expect(Date.now() - fixtureA.counts.heldStartedAtMs).toBeLessThan(MAX_HELD_AI_RESPONSE_MS);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
 
     fixtureA.release();
     await expect.poll(() => fixtureA.counts.releasedResponses).toBe(1);
@@ -1803,6 +2036,8 @@ test('held food photo analysis cannot commit after the same account starts a new
     expect(fixtureA.counts.stateWrites.filter(key => diaryKeys.includes(key)))
       .toEqual(diaryAndHistoryWritesBefore);
     expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    await expect(page.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Анализирую фото...', { exact: true })).toHaveCount(0);
     expect(fixtureA.counts.aiRequests.filter(request => request.feature === 'foodphoto')).toEqual([{
       feature: 'foodphoto', account: accountA.id, session: accountA.sid,
     }]);
@@ -1822,8 +2057,12 @@ test('held food photo analysis cannot commit after the same account starts a new
   }
 });
 
-test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo account-switch acceptance runs in desktop browser profiles.');
+async function expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+  page: Page,
+  context: BrowserContext,
+  info: TestInfo,
+  uploadSelector: string,
+) {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1833,7 +2072,7 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   const fixtureA = await installAccountApi(page, state, 'foodphoto_enhanced');
   await openApp(page, '/#recipes');
   await expect(page).toHaveTitle(/FitFocus/);
-  const fileInput = page.locator('input[type="file"]').nth(1);
+  const fileInput = page.locator(uploadSelector).first();
   await expect(fileInput).toHaveCount(1);
   await fileInput.setInputFiles({
     name: 'recipe.svg',
@@ -1885,10 +2124,23 @@ test('held recipe photo analysis cannot create a stale draft after another tab s
   } finally {
     fixtureA.release();
   }
+}
+
+test('held recipe photo analysis cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+  await expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+    page, context, info, 'input[type="file"][accept="image/*"]:not([capture])',
+  );
+});
+
+test('held native recipe camera capture cannot create a stale draft after another tab signs in as account B', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'),
+    'The native camera capture input is available on phone browser profiles.');
+  await expectHeldRecipePhotoCannotCreateStaleDraftAfterAccountSwitch(
+    page, context, info, 'input[type="file"][accept="image/*"][capture]',
+  );
 });
 
 test('held recipe photo analysis cannot create a draft after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1968,8 +2220,7 @@ test('held recipe photo analysis cannot create a draft after the same account st
   }
 });
 
-test('a scoped auth refusal during recipe photo analysis does not show an ordinary recipe error', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe photo auth-refusal acceptance runs in desktop browser profiles.');
+test('a scoped auth refusal during recipe photo analysis does not show an ordinary recipe error', async ({ page }) => {
   const state: FixtureState = {
     current: accountA,
     profile: profileFor(accountA.id),
@@ -2002,7 +2253,6 @@ test('a scoped auth refusal during recipe photo analysis does not show an ordina
 });
 
 test('an unsaved recipe draft from account A is cleared when another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -2057,7 +2307,6 @@ test('an unsaved recipe draft from account A is cleared when another tab activat
 });
 
 test('an unsaved progress measurement draft is cleared when another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   const failedStateRequests: string[] = [];
@@ -2100,6 +2349,9 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   await page.reload();
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  if (!info.project.name.startsWith('desktop-')) {
+    await page.getByRole('button', { name: 'Детали', exact: true }).click();
+  }
   await expect(page.getByRole('button', { name: 'Сахар', exact: true })).toHaveClass(/border-indigo-500/);
   await waitForAccountOutboxIdle(page, accountA);
 
@@ -2137,14 +2389,7 @@ test('an unsaved progress measurement draft is cleared when another tab activate
   expect(errorsA, `Failed /api/state requests: ${JSON.stringify(failedStateRequests)}`).toEqual([]);
   expect(await switched.page.getByText('98.765', { exact: true }).count()).toBe(0);
   expect(fixtureA.counts.profileWrites).toEqual([]);
-  // WebKit reports an access-control error when account activation aborts the
-  // old page's in-flight automatic AI request. Keep this allowlist exact and
-  // limited to that transition; all other errors remain fatal.
-  const expectedWebKitAiAbort = (error: string) => info.project.name === 'desktop-webkit'
-    && /^error: \/127\.0\.0\.1:\d+\/api\/ai due to access control checks\.$/.test(error);
-  const expectedWebKitAiAborts = errorsA.filter(expectedWebKitAiAbort);
-  expect(expectedWebKitAiAborts.length).toBeLessThanOrEqual(info.project.name === 'desktop-webkit' ? 1 : 0);
-  expect(errorsA.filter(error => !expectedWebKitAiAborts.includes(error))).toEqual([]);
+  expect(errorsA).toEqual([]);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
@@ -2152,7 +2397,6 @@ test('an unsaved progress measurement draft is cleared when another tab activate
 });
 
 test('progress archive expansion cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab progress archive account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2206,7 +2450,6 @@ test('progress archive expansion cached for account A is not restored after anot
 });
 
 test('a profile draft cached for account A is not restored after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#settings');
@@ -2238,9 +2481,52 @@ test('a profile draft cached for account A is not restored after another tab act
   expect(fixtureA.counts.profileWrites).toEqual([]);
 });
 
+test('a profile draft stays hidden in a retired same-account session and restores after reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const nameDraft = page.getByPlaceholder('Как к вам обращаться');
+  await expect(nameDraft).toHaveValue('Профиль A');
+  await nameDraft.fill('Черновик после повторного входа A');
+  const settingsKeyA = `fitfocus.settings.ui.v1:${accountA.id}`;
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), settingsKeyA))
+    .toContain('Черновик после повторного входа A');
+  const snapshotBeforeReauthentication = await readDurableSnapshot(page);
+  const profileBeforeReauthentication = rawValue(snapshotBeforeReauthentication, profileKey(accountA.id));
+
+  const reauthenticated = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(reauthenticated.sid);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveCount(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), settingsKeyA))
+    .toContain('Черновик после повторного входа A');
+
+  await reauthenticatedPage.goto('/#settings');
+  await expect(reauthenticatedPage.getByPlaceholder('Как к вам обращаться'))
+    .toHaveValue('Черновик после повторного входа A');
+  const snapshotAfterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(rawValue(snapshotAfterReauthentication, profileKey(accountA.id))).toBe(profileBeforeReauthentication);
+  expect(fixtureA.counts.profileWrites).toEqual([]);
+  expect(fixtureReauthenticated.counts.profileWrites).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-settings-draft-restored.png') });
+});
+
 for (const delayedStateHydration of [false, true]) {
 test(`a dashboard weight draft cached for account A is hidden after another tab activates account B${delayedStateHydration ? ' after delayed state hydration' : ''}`, async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace draft account-switch acceptance runs in desktop browser profiles.');
+  test.skip(delayedStateHydration && !info.project.name.startsWith('desktop-'),
+    'Delayed state hydration acceptance runs in desktop browser profiles.');
   await observeDashboardReadiness(page);
   const phases: Array<{ stage: string; atMs: number }> = [];
   const startedAt = Date.now();
@@ -2351,7 +2637,6 @@ test(`a dashboard weight draft cached for account A is hidden after another tab 
 }
 
 test('a nutrition search cached for account A stays private after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace search-cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixtureA = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -2387,7 +2672,6 @@ test('a nutrition search cached for account A stays private after another tab ac
 });
 
 test('a selected weekly-menu day cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const baseProfileA = profileFor(accountA.id);
   const state: FixtureState = {
     current: accountA,
@@ -2436,7 +2720,6 @@ test('a selected weekly-menu day cached for account A is hidden after another ta
 });
 
 test('a course lesson and quiz cached for account A stay hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -2495,7 +2778,6 @@ test('a course lesson and quiz cached for account A stay hidden after another ta
 });
 
 test('AI activity cached for account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace cache account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   await installAccountApi(page, state);
   const aiStatusKeyA = `fitfocus_data_${accountA.id}_ai_last_status_v1`;
@@ -2511,22 +2793,38 @@ test('AI activity cached for account A is hidden after another tab activates acc
     actionKey: aiActionKeyA,
     action: cachedActionA,
   });
+  const aiStatusKeyB = `fitfocus_data_${accountB.id}_ai_last_status_v1`;
+  const aiActionKeyB = `fitfocus_data_${accountB.id}_ai_last_action_v1`;
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
-  await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+  if (info.project.name.startsWith('desktop-')) {
+    await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+  }
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
-  await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  const [statusAAfterSwitch, actionAAfterSwitch, statusBAfterSwitch, actionBAfterSwitch] = await switched.page.evaluate(
+    keys => keys.map(key => localStorage.getItem(key)),
+    [aiStatusKeyA, aiActionKeyA, aiStatusKeyB, aiActionKeyB],
+  );
+  expect(statusAAfterSwitch).not.toBeNull();
+  expect(JSON.parse(actionAAfterSwitch ?? 'null').userId).toBe(accountA.id);
+  expect(statusBAfterSwitch).not.toBe(JSON.stringify(cachedStatusA));
+  expect(actionBAfterSwitch).not.toBe(JSON.stringify(cachedActionA));
+  if (actionBAfterSwitch !== null) {
+    expect(JSON.parse(actionBAfterSwitch).userId).toBe(accountB.id);
+  }
+  if (info.project.name.startsWith('desktop-')) {
+    await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  }
   expect(switched.errors).toEqual([]);
 });
 
 test('an open food insight from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Workspace content account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -2560,8 +2858,62 @@ test('an open food insight from account A is hidden after another tab activates 
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
+test('an open food insight and editor from a retired session are hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Корректировать', exact: true }).click();
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const diaryBefore = rawValue(beforeReauthentication, diaryKey(accountA.id));
+
+  const renewedAccountA = { id: accountA.id, sid: 'b'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#nutrition');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+  expect(rawValue(afterReauthentication, diaryKey(accountA.id))).toBe(diaryBefore);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-food-insight-hidden.png') });
+});
+
 test('an open camera dialog from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Camera account-switch acceptance runs in desktop browser profiles.');
+  test.skip(!info.project.name.startsWith('desktop-'), 'Mobile profiles use a native capture input instead of the in-app camera dialog.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2585,8 +2937,50 @@ test('an open camera dialog from account A is hidden after another tab activates
   await switched.page.screenshot({ path: info.outputPath('camera-dialog-hidden-after-account-switch.png') });
 });
 
+test('an open camera dialog from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('desktop-'), 'Mobile profiles use a native capture input instead of the in-app camera dialog.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Снять', exact: true }).click();
+  await expect(page.getByText('Камера', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  const renewedAccountA = { id: accountA.id, sid: 'f'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#nutrition');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Камера', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Камера', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-camera-dialog-hidden.png') });
+});
+
 test('an open paywall from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Paywall account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2610,8 +3004,312 @@ test('an open paywall from account A is hidden after another tab activates accou
   await switched.page.screenshot({ path: info.outputPath('paywall-hidden-after-account-switch.png') });
 });
 
+test('an open paywall from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  await page.getByRole('button', { name: 'Выбрать тарифный план', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+
+  const renewedAccountA = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(message.text());
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#pro');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-paywall-hidden-after-reauthentication.png') });
+});
+
+test('a profile sync notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const profileName = page.getByPlaceholder('Как к вам обращаться');
+  await expect(profileName).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+
+  state.profile = { ...profileFor(accountA.id), name: 'Облачный профиль A', version: 5 };
+  await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+  await expect(profileName).toHaveValue('Облачный профиль A');
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#settings');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('profile-sync-notice-hidden-after-account-switch.png') });
+});
+
+test('a profile sync notice from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const profileName = page.getByPlaceholder('Как к вам обращаться');
+  await expect(profileName).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+
+  state.profile = { ...profileFor(accountA.id), name: 'Облачный профиль A', version: 5 };
+  await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+  await expect(profileName).toHaveValue('Облачный профиль A');
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+
+  const renewedAccountA = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = renewedAccountA;
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(message.text());
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#settings');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const renewedSnapshot = await readDurableSnapshot(reauthenticatedPage);
+  expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+  expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+  expect(rawValue(renewedSnapshot, profileKey(accountA.id))).toBe(profileBefore);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-profile-sync-notice-hidden.png') });
+});
+
+test('a progress photo decode released after account switch cannot update account B profile', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+
+  await installProgressPhotoDecodeGate(page);
+
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const profileABefore = rawValue(before, profileKey(accountA.id));
+  const valuesBefore = valuesFor(before, accountA);
+  const operationsBefore = operationsFor(before, accountA);
+  await selectHeldProgressPhoto(page, 'Черновик фото аккаунта A');
+
+  const switched = await openAccountB(context, state, true, '/#settings');
+  const snapshotB = await readDurableSnapshot(switched.page);
+  const profileBBeforeRelease = rawValue(snapshotB, profileKey(accountB.id));
+  await waitForAccountSwitch(page);
+  const profileWritesBeforeRelease = [...fixtureA.counts.profileWrites];
+  const stateWritesBeforeRelease = [...fixtureA.counts.stateWrites];
+  await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+  await expect(page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText('Черновик фото аккаунта A', { exact: true })).toHaveCount(0);
+
+  await releaseHeldProgressPhoto(page);
+  await waitForAccountOutboxIdle(page, accountA);
+  const after = await readDurableSnapshot(page);
+  expect(after.activeSession?.accountId).toBe(accountB.id);
+  expect(rawValue(after, profileKey(accountA.id))).toBe(profileABefore);
+  expect(rawValue(after, profileKey(accountB.id))).toBe(profileBBeforeRelease);
+  expect(valuesFor(after, accountA)).toEqual(valuesBefore);
+  expect(operationsFor(after, accountA)).toEqual(operationsBefore);
+  expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeRelease);
+  expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeRelease);
+  await expect(page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  await expect(switched.page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  expect(errorsA).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('a progress photo decode released after same-account reauthentication cannot update the renewed profile session', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errorsA.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await installProgressPhotoDecodeGate(page);
+
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const profileBefore = rawValue(before, profileKey(accountA.id));
+  const valuesBefore = valuesFor(before, accountA);
+  const operationsBefore = operationsFor(before, accountA);
+  await selectHeldProgressPhoto(page, 'Черновик фото прежней сессии');
+
+  const reauthenticated = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const errorsReauthenticated: string[] = [];
+  reauthenticatedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (message.type() === 'error') errorsReauthenticated.push(message.text());
+  });
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#settings');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect(reauthenticatedPage.getByText('История визуальных замеров', { exact: true })).toBeVisible();
+  const renewedSnapshot = await readDurableSnapshot(reauthenticatedPage);
+  expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+  expect(renewedSnapshot.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+  expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(before.activeSession?.sessionEpoch);
+  expect(rawValue(renewedSnapshot, profileKey(accountA.id))).toBe(profileBefore);
+  const profileWritesBeforeRelease = [...fixtureA.counts.profileWrites];
+  const stateWritesBeforeRelease = [...fixtureA.counts.stateWrites];
+  await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+  await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+  await expect(page.getByText('Черновик фото прежней сессии', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Черновик фото прежней сессии', { exact: true })).toHaveCount(0);
+
+  await releaseHeldProgressPhoto(page);
+  await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+  const after = await readDurableSnapshot(reauthenticatedPage);
+  expect(after.activeSession?.accountId).toBe(accountA.id);
+  expect(after.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+  expect(rawValue(after, profileKey(accountA.id))).toBe(profileBefore);
+  expect(valuesFor(after, accountA)).toEqual(valuesBefore);
+  expect(operationsFor(after, accountA)).toEqual(operationsBefore);
+  expect(fixtureA.counts.profileWrites).toEqual(profileWritesBeforeRelease);
+  expect(fixtureA.counts.stateWrites).toEqual(stateWritesBeforeRelease);
+  await expect(page.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  await expect(reauthenticatedPage.getByAltText('Последнее фото прогресса')).toHaveCount(0);
+  expect(errorsA).toEqual([]);
+  expect(errorsReauthenticated).toEqual([]);
+  expect(fixtureReauthenticated.counts.profileWrites).toEqual([]);
+  expect(fixtureReauthenticated.counts.stateWrites).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('an adaptation notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+
+  const accountANotice = 'Тестовая интерпретация недели для аккаунта A.';
+  await page.getByRole('button', { name: 'Объяснить', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.aiRequests).toContainEqual({
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  });
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('plateau');
+  await expect(page.getByText(accountANotice, { exact: true }).first()).toBeVisible();
+
+  const switched = await openAccountB(context, state, true, '/#dashboard');
+  await waitForAccountSwitch(page);
+  await expect(page.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  await expect(switched.page.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(switched.errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
+  await switched.page.screenshot({ path: info.outputPath('adaptation-notice-hidden-after-account-switch.png') });
+});
+
+test('an adaptation notice from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+
+  const accountANotice = 'Тестовая интерпретация недели для аккаунта A.';
+  await page.getByRole('button', { name: 'Объяснить', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.aiRequests).toContainEqual({
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  });
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('plateau');
+  await expect(page.getByText(accountANotice, { exact: true }).first()).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  const renewedAccountA = { id: accountA.id, sid: 'e'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id, true);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-adaptation-notice-hidden.png') });
+});
+
 test('an open mobile navigation menu from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('iphone-'), 'Mobile navigation account-switch acceptance runs in iPhone browser profiles.');
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'), 'Mobile navigation account-switch acceptance runs in phone browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -2635,8 +3333,50 @@ test('an open mobile navigation menu from account A is hidden after another tab 
   await switched.page.screenshot({ path: info.outputPath('mobile-more-menu-hidden-after-account-switch.png') });
 });
 
-test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab food selection acceptance runs in desktop browser profiles.');
+test('an open mobile navigation menu from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  test.skip(!info.project.name.startsWith('iphone-') && !info.project.name.startsWith('android-'), 'Mobile navigation session acceptance runs in phone browser profiles.');
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  await expect(page.getByText('Ещё разделы', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  const renewedAccountA = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-mobile-more-menu-hidden.png') });
+});
+
+test('bulk move and delete write once and cannot cross account diary keys', async ({ page, context }) => {
   const sharedEntryIdA = 'shared-food-entry-a';
   const sharedEntryIdB = 'shared-food-entry-b';
   const timestamp = new Date();
@@ -2854,7 +3594,6 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop-chromium', 'The full photo analysis success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -2938,7 +3677,6 @@ test('a favorite recipe draft stays open when its durable commit fails and can b
 });
 
 test('a held step-by-step recipe response cannot update the diary or usage after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe generation account-switch acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -3004,7 +3742,6 @@ test('a held step-by-step recipe response cannot update the diary or usage after
 });
 
 test('a held step-by-step recipe response cannot update after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'Recipe generation reauthentication acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -3099,7 +3836,6 @@ test('a held step-by-step recipe response cannot update after the same account s
 });
 
 test('step-by-step recipe generation and favorite saving commit to the active session', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop-chromium', 'The full step-by-step recipe success path is covered in desktop Chromium.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -3224,8 +3960,111 @@ test('a held achievement unlock from account A is ignored after another tab sign
     held.release();
   }
 });
+
+test('a held achievement unlock from a retired same-account session is ignored after reauthentication', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+
+  const held = deferred();
+  const oldAchievement = {
+    key: 'retired-session-unlock', title: 'Достижение прежней сессии',
+    description: 'Поздний ответ не должен публиковаться', tier: 'bronze', category: 'profile',
+  };
+  let heldChecks = 0;
+  let releasedChecks = 0;
+  await page.route('**/api/achievements', async route => route.fulfill({
+    contentType: 'application/json',
+    headers: scopedHeaders(accountA),
+    body: JSON.stringify({ enabled: true, catalog: [], unlocked: [] }),
+  }));
+  await page.route('**/api/achievements/check', async route => {
+    const request = route.request();
+    const body = request.postDataJSON() as { context?: { source?: string } };
+    if (request.headers()['x-fitfocus-state-session'] === accountA.sid && body.context?.source === 'app_open') {
+      expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+      heldChecks += 1;
+      await held.promise;
+      await route.fulfill({
+        contentType: 'application/json',
+        headers: scopedHeaders(accountA),
+        body: JSON.stringify({ enabled: true, newlyUnlocked: [oldAchievement] }),
+      });
+      releasedChecks += 1;
+      return;
+    }
+    await route.fallback();
+  });
+
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+  await expect.poll(() => heldChecks).toBe(1);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const previousEpoch = beforeReauthentication.activeSession?.sessionEpoch;
+
+  const reauthenticated: Account = { id: accountA.id, sid: 'f'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => errors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state);
+  const currentAchievement = {
+    key: 'renewed-session-unlock', title: 'Достижение новой сессии',
+    description: 'Текущий ответ остаётся виден', tier: 'silver', category: 'profile',
+  };
+  let renewedChecks = 0;
+  await renewedPage.route('**/api/achievements', async route => {
+    expect(route.request().headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ enabled: true, catalog: [currentAchievement], unlocked: [] }),
+    });
+  });
+  await renewedPage.route('**/api/achievements/check', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    renewedChecks += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ enabled: true, catalog: [currentAchievement], newlyUnlocked: [currentAchievement] }),
+    });
+  });
+
+  try {
+    await openApp(renewedPage, '/#dashboard');
+    await expect.poll(async () => (await readDurableSnapshot(renewedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    const renewedSnapshot = await readDurableSnapshot(renewedPage);
+    expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+    expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(previousEpoch);
+    await expect.poll(() => renewedChecks).toBeGreaterThan(0);
+    await expect(renewedPage.getByText(currentAchievement.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    held.release();
+    await expect.poll(() => releasedChecks).toBe(1);
+    await expect(page.getByText(oldAchievement.title, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(oldAchievement.title, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(currentAchievement.title, { exact: true }).first()).toBeVisible();
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
 test('pending account A outbox stays scoped while B signs in and resumes with a fresh A session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox account-switch acceptance uses desktop tabs.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {
@@ -3301,8 +4140,7 @@ test('pending account A outbox stays scoped while B signs in and resumes with a 
   await returningPage.screenshot({ path: info.outputPath('state-outbox-account-a-resumed.png') });
 });
 
-test('WIS share completion from a retired session cannot restore its notice after account reactivation', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab WIS share lifecycle acceptance runs in desktop browser profiles.');
+test('WIS share completion from a retired session cannot restore its notice after account reactivation', async ({ page, context }) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -3388,8 +4226,7 @@ test('WIS share completion from a retired session cannot restore its notice afte
   }
 });
 
-test('health report PDF is not downloaded when the account changes during font loading', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The account-switch PDF download acceptance runs in desktop browser profiles.');
+test('health report PDF is not downloaded when the account changes during font loading', async ({ page, context }) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -3434,8 +4271,145 @@ test('health report PDF is not downloaded when the account changes during font l
   }
 });
 
+test('health report PDF is not downloaded after same-account reauthentication during font loading', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fontRequestStarted = deferred();
+  const releaseFontRequest = deferred();
+  await page.route('**/*NotoSans-Regular*', async route => {
+    fontRequestStarted.release();
+    await releaseFontRequest.promise;
+    await route.continue();
+  });
+
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect(page.getByRole('button', { name: 'Краткий PDF', exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    await page.getByRole('button', { name: 'Краткий PDF', exact: true }).click();
+    await fontRequestStarted.promise;
+
+    const nextSession: Account = { id: accountA.id, sid: 'e'.repeat(64) };
+    state.current = nextSession;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+    expect(afterReauthentication.activeSession?.sessionEpoch)
+      .not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    releaseFontRequest.release();
+
+    expect(await downloadPromise).toBe(false);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(errorsA).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFontRequest.release();
+  }
+});
+
+test('detailed health report PDF is not downloaded after same-account reauthentication during font loading', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fontRequestStarted = deferred();
+  const releaseFontRequest = deferred();
+  await page.route('**/*NotoSans-Regular*', async route => {
+    fontRequestStarted.release();
+    await releaseFontRequest.promise;
+    await route.continue();
+  });
+
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect(page.getByRole('button', { name: 'Детальный PDF', exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    await page.getByRole('button', { name: 'Детальный PDF', exact: true }).click();
+    await fontRequestStarted.promise;
+
+    const nextSession: Account = { id: accountA.id, sid: 'f'.repeat(64) };
+    state.current = nextSession;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+    expect(afterReauthentication.activeSession?.sessionEpoch)
+      .not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    releaseFontRequest.release();
+
+    expect(await downloadPromise).toBe(false);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(errorsA).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFontRequest.release();
+  }
+});
+
 test('a late profile save from account A cannot acknowledge or overwrite after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile save acceptance runs in desktop browser profiles.');
   let started!: () => void;
   const writeStarted = new Promise<void>(resolve => { started = resolve; });
   const releaseWrite = deferred();
@@ -3550,7 +4524,6 @@ test('a late profile save from account A cannot acknowledge or overwrite after a
 });
 
 test('a late profile refresh from account A cannot hydrate after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab profile refresh acceptance runs in desktop browser profiles.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -3605,8 +4578,98 @@ test('a late profile refresh from account A cannot hydrate after account B signs
   }
 });
 
+test('a late profile refresh from a retired same-account session cannot replace the profile after reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [], reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  let started!: () => void;
+  const refreshStarted = new Promise<void>(resolve => { started = resolve; });
+  const releaseRefresh = deferred();
+  state.holdProfileRead = {
+    active: true,
+    started,
+    wait: releaseRefresh.promise,
+    profile: { ...state.profile },
+  };
+
+  try {
+    await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+    await refreshStarted;
+
+    const reauthenticated = { id: accountA.id, sid: '8'.repeat(64) };
+    const currentProfileName = 'Профиль новой сессии A';
+    state.current = reauthenticated;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#settings');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    const currentSession = await readDurableSnapshot(reauthenticatedPage);
+    expect(currentSession.activeSession?.accountId).toBe(accountA.id);
+    expect(currentSession.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    const currentProfileValue = rawValue(currentSession, profileKey(accountA.id));
+    expect(currentProfileValue).not.toBeNull();
+    expect(JSON.parse(currentProfileValue!).name).toBe('Профиль A');
+    const currentProfileInput = reauthenticatedPage.getByPlaceholder('Как к вам обращаться');
+    await expect(currentProfileInput).toHaveValue('Профиль A');
+    await currentProfileInput.fill(currentProfileName);
+    await reauthenticatedPage.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await expect.poll(async () => {
+      const value = rawValue(await readDurableSnapshot(reauthenticatedPage), profileKey(accountA.id));
+      return value ? JSON.parse(value).name : null;
+    }).toBe(currentProfileName);
+    await expect(currentProfileInput).toHaveValue(currentProfileName);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    const lateProfileResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile'
+      && response.request().method() === 'GET'
+      && response.request().headers()['x-fitfocus-state-session'] === accountA.sid);
+    releaseRefresh.release();
+    const response = await lateProfileResponse;
+    expect(response.status()).toBe(200);
+    expect(response.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(response.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+    expect((await response.json()).profile.name).toBe('Профиль A');
+
+    const afterLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterLateResponse.activeSession?.accountId).toBe(accountA.id);
+    expect(afterLateResponse.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+    expect(JSON.parse(rawValue(afterLateResponse, profileKey(accountA.id))!).name).toBe(currentProfileName);
+    expect(operationsFor(afterLateResponse, accountA)).toEqual([]);
+    await expect(currentProfileInput).toHaveValue(currentProfileName);
+    await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+    expect(rawValue(afterLateResponse, profileKey(accountA.id))).not.toBe(profileBefore);
+    expect(errors).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await reauthenticatedPage.screenshot({ path: info.outputPath('late-profile-refresh-same-account-reauth.png') });
+  } finally {
+    releaseRefresh.release();
+  }
+});
+
 test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox reload acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {
@@ -3659,7 +4722,6 @@ test('pending account A outbox resumes after reload with the same operation and 
 });
 
 test('pending account A outbox pauses on logout and resumes after login with a fresh session', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The state outbox logout/login acceptance runs in desktop browser profiles.');
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];
   const state: FixtureState = {
@@ -3739,8 +4801,7 @@ test('pending account A outbox pauses on logout and resumes after login with a f
   await page.screenshot({ path: info.outputPath('state-outbox-account-a-after-login.png') });
 });
 
-test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei acceptance runs in desktop browser profiles.');
+test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }) => {
   const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
   const state: FixtureState = { current: accountA, profile: profileA };
   const fixtureA = await installAccountApi(page, state, undefined, true);
@@ -3771,8 +4832,7 @@ test('late Huawei sync after another tab signs in as account B cannot commit acc
   expect(rawValue(afterB, profileKey(accountB.id))).toBe(profileBBefore);
 });
 
-test('late Huawei sync is rejected after the same account signs in with a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The Settings Huawei session-replacement acceptance runs in desktop browser profiles.');
+test('late Huawei sync is rejected after the same account signs in with a new server session', async ({ page, context }) => {
   const profileA = { ...profileFor(accountA.id), wearableProvider: 'huawei_health', wearableEnabled: true };
   const state: FixtureState = { current: accountA, profile: profileA };
   const fixtureA = await installAccountApi(page, state, undefined, true);

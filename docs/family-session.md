@@ -290,6 +290,21 @@ Production-код не менялся, runtime-дефект не найден; �
   не запускает achievement и не перечитывает старую семью; с тремя смежными
   shopping сценариями он прошёл 12/12 на desktop engines. Полный CI для новых
   тестов ещё не подтверждён.
+  Следующий account-switch follow-up снял desktop-only skip с задержанного
+  member `PATCH` A после входа B: поздний ответ не меняет UI B и не вызывает
+  повторный family GET для A. Сценарий прошёл 7/7 на desktop, Android, iPhone
+  Safari и PWA (`workers=1,retries=0`). Вместе с same-account reauthentication
+  member update оба сценария теперь проверены на семи профилях; точный CI нового
+  HEAD проверяется после push.
+  Дополнительно 15 delayed family account-switch callbacks были расширены на
+  Android, iPhone Safari и PWA проекты: family invite/join/create/context/menu,
+  shopping list/check и соседние ответы прошли 60/60 на четырёх мобильных
+  профилях (`workers=1,retries=0`). До снятия фильтра они выполнялись только на
+  desktop; общий exact-head CI для расширенной матрицы ещё требуется.
+  Отдельные race-проверки family shopping retry и порядка personal shopping
+  writes также сняли desktop-only skip и прошли 8/8 на четырёх мобильных/PWA
+  профилях. Эти проверки подтверждают локальный порядок UI/запросов, но не
+  заменяют серверный staging или полный CI.
   Покрытие остальных callbacks всё ещё неполное.
 - [x] Подтвердить invite/member family target `2bbec11` в точном CI
   [`9bdeb47` / run 38459458051](https://github.com/Michael-edel/FitFocus/actions/runs/38459458051).

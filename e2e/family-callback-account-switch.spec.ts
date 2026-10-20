@@ -193,6 +193,7 @@ async function installAccountApi(
   const heldMobileTokenResponse = deferred();
   const heldPushStatusResponse = deferred();
   const heldBillingCheckoutResponse = deferred();
+  const meSessionIds: string[] = [];
   await page.route('**/api/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -209,8 +210,11 @@ async function installAccountApi(
     });
 
     if (path === '/api/env') return json({ requireInvite: false }, state.current);
-    if (path === '/api/me') return json(apiBody(state.current, includePersonalShopping,
-      state.plans?.[state.current.id] ?? 'family'), state.current);
+    if (path === '/api/me') {
+      meSessionIds.push(state.current.sid);
+      return json(apiBody(state.current, includePersonalShopping,
+        state.plans?.[state.current.id] ?? 'family'), state.current);
+    }
     if (path === '/api/bootstrap') return json({ user: { sub: state.current.id }, profile: profileFor(state.current,
       includePersonalShopping, state.plans?.[state.current.id] ?? 'family'), items: [] }, state.current);
     if (path === '/api/profile') return json({ profile: profileFor(scopedAccount), version: 1 });
@@ -521,6 +525,7 @@ async function installAccountApi(
     releaseMobileToken: heldMobileTokenResponse.release,
     releasePushStatus: heldPushStatusResponse.release,
     releaseBillingCheckout: heldBillingCheckoutResponse.release,
+    meSessionIds,
   };
 }
 
@@ -575,7 +580,6 @@ async function openAccountB(context: BrowserContext, state: FixtureState, errors
 }
 
 test('a delayed family callback from account A is ignored after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -611,7 +615,6 @@ test('a delayed family callback from account A is ignored after another tab sign
 });
 
 test('a delayed family callback stays bound to its captured family when the same login reloads another family', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA,
@@ -658,7 +661,6 @@ test('a delayed family callback stays bound to its captured family when the same
 });
 
 test('a delayed family-join response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-join account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -701,7 +703,6 @@ test('a delayed family-join response from account A cannot publish success after
 });
 
 test('a delayed family-create response from account A cannot publish success after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-create account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -745,7 +746,6 @@ test('a delayed family-create response from account A cannot publish success aft
 });
 
 test('a delayed family-context read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-context account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -781,7 +781,6 @@ test('a delayed family-context read from account A cannot appear after account B
 });
 
 test('a delayed shared family-menu read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-menu account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const oldMenuName = 'MENU_ACCOUNT_A_ONLY';
   const currentMenuName = 'MENU_ACCOUNT_B_ONLY';
@@ -845,7 +844,6 @@ test('a delayed shared family-menu read from account A cannot appear after accou
 });
 
 test('a delayed family-context read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -897,7 +895,6 @@ test('a delayed family-context read from the previous same-account session is di
 });
 
 test('a delayed shared family-menu read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account shared family-menu reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const oldMenuName = 'MENU_OLD_SERVER_SESSION';
   const newMenuName = 'MENU_NEW_SERVER_SESSION';
@@ -979,7 +976,6 @@ test('a delayed shared family-menu read from the previous same-account session i
 });
 
 test('a delayed family invite from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family invite reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], inviteSessionIds: [], releasedInvites: 0,
@@ -1038,7 +1034,6 @@ test('a delayed family invite from the previous same-account session is discarde
 });
 
 test('a delayed family create from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-create reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1099,7 +1094,6 @@ test('a delayed family create from the previous same-account session is discarde
 });
 
 test('a delayed family join from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-join reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, noFamilyForA: true, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1161,7 +1155,6 @@ test('a delayed family join from the previous same-account session is discarded 
 });
 
 test('a delayed family shopping-list read from account A cannot appear after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family-shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1204,7 +1197,6 @@ test('a delayed family shopping-list read from account A cannot appear after acc
 });
 
 test('a delayed family shopping-list read from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-shopping reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const oldListName = 'СПИСОК_СТАРОЙ_СЕССИИ';
   const newListName = 'СПИСОК_НОВОЙ_СЕССИИ';
@@ -1284,7 +1276,6 @@ test('a delayed family shopping-list read from the previous same-account session
 });
 
 test('a delayed family shopping response cannot trigger an achievement after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family shopping callback acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1329,7 +1320,6 @@ test('a delayed family shopping response cannot trigger an achievement after ano
 });
 
 test('a delayed family shopping check from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family shopping reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1396,7 +1386,6 @@ test('a delayed family shopping check from the previous same-account session is 
 });
 
 test('a failed family shopping retry reconciles the optimistic checkbox with the server snapshot', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The family shopping mutation race runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1440,7 +1429,6 @@ test('a failed family shopping retry reconciles the optimistic checkbox with the
 });
 
 test('a delayed personal shopping-list read cannot cross the account boundary', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1483,7 +1471,6 @@ test('a delayed personal shopping-list read cannot cross the account boundary', 
 });
 
 test('personal shopping CSV exports only the current account snapshot', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab shopping export account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1520,7 +1507,6 @@ test('personal shopping CSV exports only the current account snapshot', async ({
 });
 
 test('a delayed personal shopping check from account A is rejected after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab personal shopping account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1565,7 +1551,6 @@ test('a delayed personal shopping check from account A is rejected after account
 });
 
 test('personal shopping toggles for one item reach the server in user-intent order', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The personal shopping write-order acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1613,7 +1598,6 @@ test('personal shopping toggles for one item reach the server in user-intent ord
 });
 
 test('a delayed support ticket list from account A cannot appear in account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab support account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1654,6 +1638,370 @@ test('a delayed support ticket list from account A cannot appear in account B', 
   }
 });
 
+test('a delayed support ticket list from a retired same-account session is discarded after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    releasedMembers: 0, supportListAccounts: [], releasedSupportLists: 0,
+  };
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  const fixtureA = await installAccountApi(page, state, false, errors, false, false, false, false, false, false, false, false, true);
+  const reauthenticated: Account = { id: accountA.id, sid: 'd'.repeat(64), name: accountA.name };
+  const renewedTicket = {
+    id: `ticket-${accountA.id}`, created_at: 2, updated_at: 2, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение новой сессии', message: 'Тикет из актуальной сессии', status: 'new', priority: 'normal',
+    attachment_count: 0, messages: [],
+  };
+  const installRenewedSupportResponse = async (target: Page) => {
+    await target.route('**/api/support/feedback/my*', async route => {
+      const request = route.request();
+      if (request.headers()['x-fitfocus-state-session'] !== reauthenticated.sid) return route.fallback();
+      expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+      const body = new URL(request.url()).searchParams.has('id')
+        ? { ticket: renewedTicket }
+        : { tickets: [renewedTicket] };
+      return route.fulfill({
+        contentType: 'application/json',
+        headers: scopedHeaders(reauthenticated),
+        body: JSON.stringify(body),
+      });
+    });
+  };
+  await installRenewedSupportResponse(page);
+  await openApp(page, '/#support');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect.poll(() => state.supportListAccounts?.length).toBe(1);
+  expect(state.supportListAccounts).toEqual([accountA.id]);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+  await installRenewedSupportResponse(renewedPage);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const currentTicketTitle = renewedPage.getByRole('heading', { name: renewedTicket.subject, exact: true });
+    await expect(currentTicketTitle).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    fixtureA.releaseSupportList();
+    await expect.poll(() => state.releasedSupportLists).toBe(1);
+    await expect(currentTicketTitle).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Обращение A', exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByRole('heading', { name: 'Обращение A', exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(renewedTicket.message, { exact: true })).toBeVisible();
+    await expect(page.getByText('Сессия изменилась или истекла. Войдите снова и повторите действие.')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseSupportList();
+  }
+});
+
+test('a delayed support ticket detail and attachment from a retired same-account session are discarded after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [],
+    releasedMembers: 0, supportAttachmentRequests: [],
+  };
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  const reauthenticated: Account = { id: accountA.id, sid: 'e'.repeat(64), name: accountA.name };
+  const oldTicket = {
+    id: 'retired-session-ticket', created_at: 1, updated_at: 1, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение прежней сессии', message: 'Секретный ответ прежней сессии', status: 'new', priority: 'normal',
+    attachment_count: 1,
+    attachments: [{ name: 'private-old-session.gif', mime: 'image/gif', size: 26, kind: 'photo',
+      data_url: '/api/support/attachment?id=retired-session-ticket&index=0' }],
+    messages: [],
+  };
+  const currentTicket = {
+    id: 'current-session-ticket', created_at: 2, updated_at: 2, category: 'Ошибка', section: 'Обзор',
+    subject: 'Обращение текущей сессии', message: 'Актуальный ответ поддержки', status: 'new', priority: 'normal',
+    attachment_count: 0, attachments: [], messages: [],
+  };
+  const held = deferred();
+  let heldDetails = 0, releasedDetails = 0;
+  await page.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    const sessionId = request.headers()['x-fitfocus-state-session'];
+    if (sessionId === accountA.sid) {
+      if (new URL(request.url()).searchParams.has('id')) {
+        heldDetails += 1;
+        await held.promise;
+        await route.fulfill({
+          contentType: 'application/json', headers: scopedHeaders(accountA),
+          body: JSON.stringify({ ticket: oldTicket }),
+        });
+        releasedDetails += 1;
+        return;
+      }
+      return route.fulfill({
+        contentType: 'application/json', headers: scopedHeaders(accountA),
+        body: JSON.stringify({ tickets: [oldTicket] }),
+      });
+    }
+    if (sessionId === reauthenticated.sid) {
+      const body = new URL(request.url()).searchParams.has('id')
+        ? { ticket: currentTicket }
+        : { tickets: [currentTicket] };
+      return route.fulfill({
+        contentType: 'application/json', headers: scopedHeaders(reauthenticated), body: JSON.stringify(body),
+      });
+    }
+    return route.fallback();
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Обращение прежней сессии/ })).toBeVisible();
+  await expect.poll(() => heldDetails).toBe(1);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+  await renewedPage.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    const body = new URL(request.url()).searchParams.has('id')
+      ? { ticket: currentTicket }
+      : { tickets: [currentTicket] };
+    return route.fulfill({
+      contentType: 'application/json', headers: scopedHeaders(reauthenticated), body: JSON.stringify(body),
+    });
+  });
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const currentTicketMessage = renewedPage.getByText(currentTicket.message, { exact: true });
+    await expect(currentTicketMessage).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    held.release();
+    await expect.poll(() => releasedDetails).toBe(1);
+    await expect(renewedPage.getByText(oldTicket.message, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(oldTicket.message, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('private-old-session.gif', { exact: true })).toHaveCount(0);
+    await expect(currentTicketMessage).toBeVisible();
+    expect(state.supportAttachmentRequests).toEqual([]);
+    await expect(page.getByText('Сессия изменилась или истекла. Войдите снова и повторите действие.')).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
+test('a delayed support ticket creation from a retired same-account session does not report success after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const reauthenticated: Account = { ...accountA, sid: '6'.repeat(64) };
+  const held = deferred();
+  const createSessions: string[] = [];
+  let releasedCreates = 0;
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  await page.route('**/api/support/feedback', async route => {
+    const request = route.request();
+    if (request.method() !== 'POST') return route.fallback();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+    createSessions.push(request.headers()['x-fitfocus-state-session'] ?? '');
+    await held.promise;
+    releasedCreates += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({ ok: true, id: 'retired-session-created-ticket' }),
+    });
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Например: кнопка не нажимается после сохранения рецепта').fill('Тема из прежней сессии');
+  await page.getByPlaceholder('Что произошло, что вы ожидали увидеть и что увидели на самом деле').fill('Описание из прежней сессии');
+  await page.getByRole('button', { name: 'Отправить обращение' }).click();
+  await expect.poll(() => createSessions.length).toBe(1);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const successMessage = 'Обращение отправлено. Оно появится в админке и будет доступно для проверки.';
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await expect(renewedPage.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+    await expect(renewedPage.getByText(successMessage, { exact: true })).toHaveCount(0);
+
+    held.release();
+    await expect.poll(() => releasedCreates).toBe(1);
+    expect(createSessions).toEqual([accountA.sid]);
+    await expect(page.getByText(successMessage, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(successMessage, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByRole('heading', { name: 'Тема из прежней сессии', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
+test('a delayed support reply from a retired same-account session does not refresh the ticket after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const reauthenticated: Account = { ...accountA, sid: '7'.repeat(64) };
+  const held = deferred();
+  const replySessions: string[] = [];
+  const supportReadSessions: string[] = [];
+  let releasedReplies = 0;
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  await page.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    const sessionId = request.headers()['x-fitfocus-state-session'] ?? '';
+    if (request.method() === 'GET') supportReadSessions.push(sessionId);
+    if (request.method() !== 'POST') return route.fallback();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(sessionId).toBe(accountA.sid);
+    replySessions.push(sessionId);
+    await held.promise;
+    releasedReplies += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({
+        ok: true,
+        ticket: {
+          id: `ticket-${accountA.id}`,
+          messages: [{ id: 'retired-reply', author_role: 'user', author_user_id: accountA.id,
+            message: 'Ответ из завершённой сессии', created_at: 3, attachment_count: 0 }],
+        },
+      }),
+    });
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Обращение A', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Добавьте уточнение, новые шаги или скриншот').fill('Ответ из завершённой сессии');
+  await page.getByRole('button', { name: 'Отправить ответ' }).click();
+  await expect.poll(() => replySessions.length).toBe(1);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    await expect(renewedPage.getByText(`Секретное обращение ${accountA.id}`, { exact: true })).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    const readsBeforeRelease = supportReadSessions.length;
+
+    held.release();
+    await expect.poll(() => releasedReplies).toBe(1);
+    expect(replySessions).toEqual([accountA.sid]);
+    expect(supportReadSessions.slice(readsBeforeRelease)).toEqual([]);
+    await expect(page.getByText('Ответ из завершённой сессии', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('Ответ из завершённой сессии', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(`Секретное обращение ${accountA.id}`, { exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
 test('loads support ticket and reply attachments with the captured session proof', async ({ page }) => {
   const errors: string[] = [];
   const state: FixtureState = {
@@ -1684,7 +2032,6 @@ test('loads support ticket and reply attachments with the captured session proof
 });
 
 test('a delayed mobile token from account A is neither shown nor copied after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab mobile-token account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1727,8 +2074,100 @@ test('a delayed mobile token from account A is neither shown nor copied after ac
   }
 });
 
+test('a delayed mobile token from a retired same-account session is neither shown nor copied after reauthentication', async ({ page, context }) => {
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const reauthenticated: Account = { ...accountA, sid: 'f'.repeat(64) };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    mobileTokenAccounts: [], releasedMobileTokens: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+    accountId: accountA.id,
+    serverSessionId: accountA.sid,
+  });
+  const previousSession = await activeSessionIdentity(page);
+  await page.getByRole('button', { name: 'Сгенерировать token' }).click();
+  await expect.poll(() => state.mobileTokenAccounts?.length).toBe(1);
+  expect(state.mobileTokenAccounts).toEqual([accountA.id]);
+
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, errorsReauthenticated);
+  await renewedPage.addInitScript(() => {
+    const target = window as Window & { __fitfocusClipboardWrites?: string[] };
+    target.__fitfocusClipboardWrites = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value: string) => { target.__fitfocusClipboardWrites?.push(value); } },
+    });
+  });
+  const renewedToken = 'current-session-mobile-token';
+  const renewedTokenSessions: string[] = [];
+  await renewedPage.route('**/api/mobile/token', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    renewedTokenSessions.push(request.headers()['x-fitfocus-state-session'] ?? '');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ token: renewedToken, expiresAt: Date.now() + 60_000 }),
+    });
+  });
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#settings');
+    await expect.poll(() => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const createToken = renewedPage.getByRole('button', { name: 'Сгенерировать token' });
+    await expect(createToken).toBeEnabled();
+    await createToken.click();
+    const currentToken = renewedPage.getByText(renewedToken, { exact: true });
+    await expect(currentToken).toBeVisible();
+    await expect.poll(() => renewedPage.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([renewedToken]);
+    await expect.poll(async () => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseMobileToken();
+    await expect.poll(() => state.releasedMobileTokens).toBe(1);
+    await expect(page.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(currentToken).toBeVisible();
+    await expect.poll(() => renewedPage.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([renewedToken]);
+    await expect.poll(() => page.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([]);
+    expect(renewedTokenSessions).toEqual([reauthenticated.sid]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseMobileToken();
+  }
+});
+
 test('a delayed push status from account A cannot update Settings after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab push account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1766,7 +2205,6 @@ test('a delayed push status from account A cannot update Settings after account 
 });
 
 test('a delayed push status from the previous same-account session cannot update Settings after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account push-status reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const reauthenticated = { ...accountA, sid: 'c'.repeat(64) };
   const state: FixtureState = {
@@ -1825,7 +2263,6 @@ test('a delayed push status from the previous same-account session cannot update
 });
 
 test('a delayed checkout URL from account A is not opened after account B signs in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab billing account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1870,8 +2307,75 @@ test('a delayed checkout URL from account A is not opened after account B signs 
   }
 });
 
+test('a delayed checkout URL from a previous same-account session is not opened after reauthentication', async ({ page, context }) => {
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const reauthenticated = { ...accountA, sid: 'f'.repeat(64) };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    billingCheckoutAccounts: [], releasedBillingCheckouts: 0, plans: { [accountA.id]: 'free' },
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, false, false, true);
+  const popupsA: Page[] = [], popupsReauthenticated: Page[] = [];
+  page.on('popup', popup => popupsA.push(popup));
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  expect(previousSession?.sessionEpoch).toBeTruthy();
+  await page.getByRole('button', { name: 'Выбрать тарифный план' }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Оформить Pro', exact: true }).click();
+  await page.getByRole('button', { name: 'Открыть Stripe Checkout', exact: true }).click();
+  await expect.poll(() => state.billingCheckoutAccounts?.length).toBe(1);
+  expect(state.billingCheckoutAccounts).toEqual([accountA.id]);
+
+  state.current = reauthenticated;
+  const reauthenticatedPage = await context.newPage();
+  const fixtureReauthenticated = await installAccountApi(reauthenticatedPage, state, false, errorsReauthenticated);
+  reauthenticatedPage.on('popup', popup => popupsReauthenticated.push(popup));
+
+  try {
+    await openApp(reauthenticatedPage, '/#settings');
+    await expect.poll(() => fixtureReauthenticated.meSessionIds).toContain(reauthenticated.sid);
+    await expect.poll(() => activeSessionIdentity(reauthenticatedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const nextSession = await activeSessionIdentity(reauthenticatedPage);
+    expect(nextSession?.sessionEpoch).toBeTruthy();
+    expect(nextSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseBillingCheckout();
+    await expect.poll(() => state.releasedBillingCheckouts).toBe(1);
+    await page.waitForTimeout(200);
+
+    expect(popupsA).toHaveLength(0);
+    expect(popupsReauthenticated).toHaveLength(0);
+    expect(page.url()).toContain('/#pro');
+    expect(reauthenticatedPage.url()).toContain('/#settings');
+    expect(state.billingCheckoutAccounts).toEqual([accountA.id]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseBillingCheckout();
+    fixtureReauthenticated.releaseBillingCheckout();
+  }
+});
+
 test('a delayed family member update stays bound to its captured family after the same login loads another family', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-login family target acceptance runs in desktop browser profiles.');
   const errors: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-a-original', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1908,7 +2412,6 @@ test('a delayed family member update stays bound to its captured family after th
 });
 
 test('a delayed family member update from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The same-account family-member reauthentication acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1974,7 +2477,6 @@ test('a delayed family member update from the previous same-account session is d
 });
 
 test('a delayed family member update from account A cannot affect account B after sign-in', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The two-tab family member account-switch acceptance runs in desktop browser profiles.');
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {
     current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,

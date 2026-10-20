@@ -177,10 +177,10 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
       && ((isWebKit && entry.errorText === 'Load request cancelled')
         || (isFirefox && entry.errorText === 'NS_BINDING_ABORTED')));
     expect(failedApiRequests.filter(entry => !expectedNavigationCancellations.includes(entry))).toEqual([]);
-    expect(expectedWebKitApiMeWarnings.length).toBeLessThanOrEqual(isWebKit ? 2 : 0);
+    expect(expectedWebKitApiMeWarnings).toEqual([]);
     expect(expectedNavigationCancellations.length).toBeLessThanOrEqual(isWebKit || isFirefox ? 2 : 0);
     expect(expectedFirefoxIdbNavigationWarnings.length).toBeLessThanOrEqual(isFirefox ? 2 : 0);
-    if (expectedWebKitApiMeWarnings.length > 0 || expectedNavigationCancellations.length > 0) {
+    if (expectedNavigationCancellations.length > 0) {
       const successfulMeTabs = new Set(meResponses.slice(meResponseCountBeforeRollback)
         .filter(entry => entry.status === 200).map(entry => entry.tab));
       expect(successfulMeTabs.has('current')).toBe(true);
