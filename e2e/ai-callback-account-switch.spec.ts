@@ -4798,6 +4798,106 @@ test('a late profile save from account A cannot acknowledge or overwrite after a
   }
 });
 
+test('a late profile save from a retired same-account session cannot acknowledge the reclaimed operation', async ({ page, context }, info) => {
+  let originalStarted!: () => void;
+  let renewedStarted!: () => void;
+  const originalBegan = new Promise<void>(resolve => { originalStarted = resolve; });
+  const renewedBegan = new Promise<void>(resolve => { renewedStarted = resolve; });
+  const releaseOriginal = deferred();
+  const releaseRenewed = deferred();
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    holdProfileWrite: { active: true, started: originalStarted, wait: releaseOriginal.promise },
+  };
+  const errors: string[] = [], renewedErrors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  try {
+    await openApp(page, '/#settings');
+    const profileName = page.getByPlaceholder('Как к вам обращаться');
+    await expect(page).toHaveTitle(/FitFocus/);
+    await expect(profileName).toHaveValue('Профиль A');
+    await waitForAccountOutboxIdle(page, accountA);
+
+    await profileName.fill('Сохранение из старой сессии A');
+    const originalResponsePromise = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await originalBegan;
+
+    const originalSnapshot = await readDurableSnapshot(page);
+    const originalOperation = operationsFor(originalSnapshot, accountA)
+      .find(entry => entry.key === profileKey(accountA.id));
+    expect(originalOperation).toMatchObject({
+      status: 'sending',
+      value: expect.stringContaining('Сохранение из старой сессии A'),
+    });
+    expect(originalOperation).toBeTruthy();
+
+    const renewedAccountA: Account = { id: accountA.id, sid: 'e'.repeat(64) };
+    state.current = renewedAccountA;
+    state.profile = profileFor(accountA.id);
+    state.holdProfileWrite = { active: true, started: renewedStarted, wait: releaseRenewed.promise };
+    const renewedPage = await context.newPage();
+    renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+    renewedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    const renewedFixture = await installAccountApi(renewedPage, state);
+    const renewedResponsePromise = renewedPage.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile' && response.request().method() === 'PUT');
+    await openApp(renewedPage, '/#settings');
+    await expect(renewedPage.getByPlaceholder('Как к вам обращаться'))
+      .toHaveValue('Сохранение из старой сессии A');
+    await renewedBegan;
+
+    const reclaimedSnapshot = await readDurableSnapshot(renewedPage);
+    const reclaimedOperation = operationsFor(reclaimedSnapshot, accountA)
+      .find(entry => entry.key === profileKey(accountA.id));
+    expect(reclaimedSnapshot.activeSession?.serverSessionId).toBe(renewedAccountA.sid);
+    expect(reclaimedOperation).toMatchObject({ opId: originalOperation!.opId, status: 'sending' });
+    expect(reclaimedOperation?.attempt?.attemptId).not.toBe(originalOperation?.attempt?.attemptId);
+    expect(reclaimedOperation?.attempt?.sessionEpoch).not.toBe(originalOperation?.attempt?.sessionEpoch);
+    expect(renewedFixture.counts.profileWrites).toEqual([accountA.id]);
+
+    releaseOriginal.release();
+    const originalResponse = await originalResponsePromise;
+    expect(originalResponse.status()).toBe(200);
+    expect(originalResponse.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(originalResponse.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+
+    const afterOriginalResponse = await readDurableSnapshot(renewedPage);
+    const stillReclaimed = operationsFor(afterOriginalResponse, accountA)
+      .find(entry => entry.key === profileKey(accountA.id));
+    expect(afterOriginalResponse.activeSession?.serverSessionId).toBe(renewedAccountA.sid);
+    expect(stillReclaimed).toMatchObject({ opId: reclaimedOperation!.opId, status: 'sending' });
+    expect(stillReclaimed?.attempt?.attemptId).toBe(reclaimedOperation?.attempt?.attemptId);
+    expect(JSON.parse(rawValue(afterOriginalResponse, profileKey(accountA.id))!).name)
+      .toBe('Сохранение из старой сессии A');
+
+    releaseRenewed.release();
+    const renewedResponse = await renewedResponsePromise;
+    expect(renewedResponse.status()).toBe(200);
+    expect(renewedResponse.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(renewedResponse.headers()['x-fitfocus-state-session']).toBe(renewedAccountA.sid);
+    await expect.poll(async () => operationsFor(await readDurableSnapshot(renewedPage), accountA)
+      .filter(entry => entry.key === profileKey(accountA.id))).toEqual([]);
+    expect(renewedFixture.counts.profileWrites).toEqual([accountA.id]);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await renewedPage.screenshot({ path: info.outputPath('late-profile-save-same-account-reauth.png') });
+  } finally {
+    releaseOriginal.release();
+    releaseRenewed.release();
+  }
+});
+
 test('a late profile refresh from account A cannot hydrate after account B signs in', async ({ page, context }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
