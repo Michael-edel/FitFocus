@@ -6,13 +6,14 @@
 
 Текущая удалённая ревизия PR #93 — `fca954d`; её точный
 [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-прошёл статические проверки и выполняет browser matrix. Локальный follow-up
+прошёл статические проверки, но завершился с 1568 browser tests passed, 67
+skipped и 3 failed. Локальный follow-up
 `5cfb820` добавляет два state-outbox сценария переключения аккаунта и
 reauthentication; оба прошли 7/7 профилей без retries, но не входят в этот CI.
-Публикация ожидает окончания текущего workflow из-за `cancel-in-progress: true`.
-Локальный stress rerun проблемного iPhone PWA writer-fence сценария прошёл
-10/10 на `c9a1e65` при `workers=2,retries=0`; точный CI #1820 всё ещё нужен
-для проверки в GitHub Actions.
+Исправления трёх точных отказов #1820 прошли локально: fence unit 11/11, целевые
+browser проверки 8/8 и stress rerun 24/24 по Android Chrome/iPhone Safari при
+`workers=2,retries=0`; все три typecheck и admin guards прошли. Исправления и
+сценарии не входят в удалённый SHA; exact CI нового SHA ожидает push.
 
 Точный PR CI #1618 для опубликованного `66e8c19` завершился success, включая
 browser mock matrix и rollback/CAS gate. Локальный follow-up `1271dfe` проверяет

@@ -13,26 +13,38 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 
 Удалённый HEAD Draft PR #93 — `fca954d18f1d6b902a0c5f3c3641934a317ed2a6`.
 Точный [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-прошёл dependency audit, guards, unit tests, три typecheck и production build;
-browser matrix всё ещё выполняется. Run #1819 был отменён следующим push из-за
-настройки `cancel-in-progress: true`.
+завершился с 1568 browser tests passed, 67 skipped и 3 failed; dependency audit,
+guards, unit tests, три typecheck и production build прошли. Run #1819 был
+отменён следующим push из-за настройки `cancel-in-progress: true`.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA
 legacy migration не открыл writer fence за 60 секунд, `writersStopped` и
 `sendAllowed` оставались `false`. Причина не установлена. Failure-only
 диагностика добавлена в `44b6356` и вошла в текущий удалённый HEAD; проблемный
-сценарий локально прошёл 10/10 повторов.
+сценарий ранее прошёл 10/10 локальных повторов. В CI #1820 диагностика показала
+текущий контроллер в состоянии `activating`, хотя raw fence reply был полным и
+содержал оба клиента с правильным build id; из-за ожидания `activated` durable
+gate не открывался. `checkLegacyWriterFence` теперь принимает только полностью
+проверенный ответ независимо от запаздывающего lifecycle state.
 Параллельный стресс-прогон того же сценария на локальном HEAD `c9a1e65`
 также прошёл 10/10 (`workers=2,retries=0`); это повышает уверенность в
-воспроизводимости, но не устанавливает причину прежнего CI-сбоя.
+воспроизводимости.
+
+Два остальных CI #1820 отказа тоже устранены в локальном follow-up: photo-analysis
+E2E теперь ждёт durable значения и завершение outbox из одного snapshot, а Safari
+family-menu E2E отфильтровывает только не более двух точных same-origin GET-abort
+сообщений, сохраняя остальные ошибки. Fence unit прошёл 11/11; объединённая
+матрица затронутых сценариев прошла 8/8 и 24/24 (`workers=2,retries=0`) на
+Android Chrome и iPhone Safari. Три typecheck, admin guards и `git diff --check`
+прошли. Этот follow-up ещё не опубликован и требует точного CI.
 
 Локальный коммит [`5cfb820`](https://github.com/Michael-edel/FitFocus/commit/5cfb8200691ba6ba6bf482cd5c448d6b29c4f1a9)
 добавляет две browser-проверки state outbox: поздний ответ A после входа B и
 после повторного входа A с новой server session. Каждая прошла 7/7
 desktop/mobile/PWA профилей без retries; root typecheck и `git diff --check`
 прошли. Коммит пока не опубликован и не входит в CI #1820; его exact CI запустится
-после завершения текущего workflow и push.
+после push исправлений.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный

@@ -3535,7 +3535,23 @@ test('food photo analysis persists the diary entry, history and usage for its ac
 
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
-  await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(async () => {
+    const snapshot = await readDurableSnapshot(page);
+    const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
+    const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ name: string; calories: number }>;
+    const history = JSON.parse(rawValue(snapshot, historyKey(accountA.id)) ?? '[]') as Array<{ name: string; calories: number }>;
+    return {
+      photoUsageCommitted: profile?.usage.aiFoodPhotoCount === 1,
+      diaryCommitted: diary.some(item => item.name === 'Тестовый омлет' && item.calories === 320),
+      historyCommitted: history.some(item => item.name === 'Тестовый омлет' && item.calories === 320),
+      operationsRemaining: operationsFor(snapshot, accountA).length,
+    };
+  }, { timeout: 15_000 }).toEqual({
+    photoUsageCommitted: true,
+    diaryCommitted: true,
+    historyCommitted: true,
+    operationsRemaining: 0,
+  });
   const snapshot = await readDurableSnapshot(page);
   const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
   const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ name: string; calories: number }>;

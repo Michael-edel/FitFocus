@@ -88,7 +88,7 @@ it('does not claim a fence when the active worker or its reply is missing', asyn
   await expect(pending).resolves.toBeNull();
 });
 
-it('waits for a controlled worker to finish activation before sending the fence check', async () => {
+it('accepts a complete all-client proof while the controlled worker is activating', async () => {
   const serviceWorker = Object.assign(new EventTarget(), { state: 'activating' as ServiceWorkerState }) as unknown as ServiceWorker;
   const nativePostMessage = vi.fn((message: { challengeId: string; buildId: string }, ports: Transferable[]) => {
     (ports[0] as MessagePort).postMessage({
@@ -102,10 +102,6 @@ it('waits for a controlled worker to finish activation before sending the fence 
   Object.defineProperty(serviceWorker, 'postMessage', { value: nativePostMessage });
 
   const pending = checkLegacyWriterFence({ controller: serviceWorker }, 'build-123', 500);
-  expect(nativePostMessage).not.toHaveBeenCalled();
-  Object.defineProperty(serviceWorker, 'state', { value: 'activated' });
-  serviceWorker.dispatchEvent(new Event('statechange'));
-
   await expect(pending).resolves.toMatchObject({ buildId: 'build-123', clientIds: ['tab-a'] });
   expect(nativePostMessage).toHaveBeenCalledTimes(1);
 });
@@ -116,11 +112,12 @@ it('abandons the fence when the controlled worker becomes redundant before activ
   Object.defineProperty(serviceWorker, 'postMessage', { value: nativePostMessage });
 
   const pending = checkLegacyWriterFence({ controller: serviceWorker }, 'build-123', 500);
+  expect(nativePostMessage).toHaveBeenCalledTimes(1);
   Object.defineProperty(serviceWorker, 'state', { value: 'redundant' });
   serviceWorker.dispatchEvent(new Event('statechange'));
 
   await expect(pending).resolves.toBeNull();
-  expect(nativePostMessage).not.toHaveBeenCalled();
+  expect(nativePostMessage).toHaveBeenCalledTimes(1);
 });
 
 it('answers a worker probe with this page’s compiled build id', async () => {
