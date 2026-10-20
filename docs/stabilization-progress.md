@@ -1,5 +1,22 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний Checkout URL блокируется после same-account reauthentication, [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f), 20.10.2026
+
+Добавлен held-response E2E для Stripe Checkout: account A начинает оплату,
+затем в том же origin/context тот же account получает новый `serverSessionId`.
+Тест проверяет смену `sessionEpoch`, session-change notice в старой вкладке и
+отсутствие popup/перехода после освобождения прежнего Checkout-ответа. Он прошёл
+7/7 desktop/mobile/PWA профилей (`workers=1,retries=0`). Root typecheck и
+`git diff --check` прошли; production-код не менялся. Запуск точного [CI #1801](https://github.com/Michael-edel/FitFocus/actions/runs/39372909475)
+создан для `04bcde8`; его результат относится только к этому SHA. Команда локальной проверки:
+
+```text
+npm run test:e2e:mock -- e2e/family-callback-account-switch.spec.ts --grep "delayed checkout URL from a previous same-account session is not opened after reauthentication" --workers=1 --retries=0
+```
+
+Предыдущий [CI #1800](https://github.com/Michael-edel/FitFocus/actions/runs/39370729123)
+проверяет родительский `d6c57ad` и не включает этот тест.
+
 ## P0.4/P0.6 — spinner фотоанализа очищается при смене сессии, 20.10.2026
 
 Расширена held food-photo E2E-приёмка: «Анализирую фото…» виден во время

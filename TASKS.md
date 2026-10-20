@@ -1313,7 +1313,8 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     check прошли. Реальные provider/device/staging остаются открытыми.
 - [x] Привязать Stripe Checkout и административную смену тарифа к исходному
   account/session proof, серверному guard, response markers и
-  no-store; не открывать поздний Checkout URL после смены аккаунта. Локально:
+  no-store; не открывать поздний Checkout URL после смены аккаунта или входа
+  того же аккаунта в новую серверную сессию. Локально:
   18 профильных unit в трёх файлах, typecheck и API/auth/admin guards прошли;
   account-switch E2E — 3/3 на desktop Chromium, Firefox и WebKit без retries,
   4 не-desktop проекта штатно пропущены. Код закоммичен в `1b80734`; точный
@@ -1325,7 +1326,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   локальном SHA [`28341ed`](https://github.com/Michael-edel/FitFocus/commit/28341ed27d399dbed61e3bf51b6d79ff61f8c590)
   прошли 1244 unit / 208 файлов, 16 billing/admin тестов, три typecheck,
   API/auth/admin/schema/privacy guards и build. Старые bundles нужно обновить;
-  точный CI, staging и Stripe остаются открытыми.
+  точный CI, staging и Stripe остаются открытыми. Дополнительно удержанный
+  Checkout URL проверен после повторного входа того же аккаунта с новым SID:
+  `sessionEpoch` сменился, старая вкладка получила session-change notice, URL
+  после освобождения ответа не открылся. E2E прошёл 7/7 desktop/mobile/PWA
+  профилей без retries; root typecheck и diff check прошли. Тестовый коммит
+  [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f),
+  для него создан точный CI #1801; результат относится только к этому SHA.
   [Контракт](docs/billing-session.md).
 - [ ] Проверить настоящий Huawei OAuth, BFCache/устройство и staging. Этот
   компонент не закрывает остальные writers и общий lifecycle P0.5. Дополнение

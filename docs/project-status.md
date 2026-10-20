@@ -11,7 +11,19 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Последняя функциональная ревизия — [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65): первый регистрационный профиль записывается с транзакционной проверкой accountId и IndexedDB-сессии. Локально прошли registration unit 22/22, регистрационные durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Семейные goal/member сценарии прошли по 7/7 на семи профилях; ещё 25 ранее desktop-only account-switch и shopping-race сценариев расширены на мобильные профили и прошли 100/100. Следующие callback/cache проверки перечислены ниже; точный CI объединённой матрицы проверяется после push.
+Тестовый follow-up [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f)
+проверяет поздний Stripe Checkout URL после повторной авторизации того же
+аккаунта. `serverSessionId` и `sessionEpoch` меняются, старая вкладка замечает
+смену сессии, а освобождённый старый URL не открывается. Проверка прошла 7/7
+desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
+Для точного SHA создан [CI #1801](https://github.com/Michael-edel/FitFocus/actions/runs/39372909475);
+его итог не переносится на последующие ревизии. Предыдущий CI #1800 относится к
+`d6c57ad` и этот follow-up не включает. Production-код не менялся.
+
+Draft PR #93 остаётся в P0-приёмке. Слияние через PR #90 в защищённую `main`
+ожидает обязательного одобряющего review; пользователь сообщил, что получит его.
+
+Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и
 кэшей в `ai-callback-account-switch.spec.ts`: мобильная/PWA-часть прошла 40/40,
