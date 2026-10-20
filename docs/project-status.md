@@ -68,6 +68,14 @@ PDF прошёл 7/7; новый подробный PDF прошёл 7/7 desktop
 `87171fe` и не включает новые unit cases; полный exact CI объединённого SHA
 запускается после публикации.
 
+В Safari reload acceptance уточнён источник исторической ошибки CI #1603 по
+сохранённому trace: предупреждение `/api/ai` пришло от отдельного фонового
+weekly-AI запроса через 21 мс после начала reload; удержанный `/api/profile`
+запрос отменился штатно. Тест теперь требует ноль таких `/api/ai` page errors.
+Строгая проверка прошла 3/3 на desktop WebKit, iPhone Safari и iPhone PWA при
+`workers=1,retries=0`. CI #1812 для SHA `561ee93` ещё выполняется и не включает
+это незакоммиченное изменение.
+
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и

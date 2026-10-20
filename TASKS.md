@@ -362,19 +362,18 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   кнопка остаётся целью, создаётся одна profile-операция, а 409 сохраняет её
   локальный payload и серверный снимок. Повторный клик не считается исправлением.
 - [ ] Завершить диагностику остальных Safari reload sources, включая `/api/profile`.
-  Источник profile debounce → `/api/me` установлен и исправлен на `f3930ec`;
-  это не объясняет автоматически все исторические сообщения. На `45575d2`
-  profile durability прошёл без retries: 8/8 desktop WebKit, 8/8 iPhone Safari,
-  8/8 iPhone PWA; pageerror не возник. На HEAD `404b3da` те же три проекта
-  повторно прошли 24/24 (`workers=1,retries=0`). На точном HEAD `62bd28c`
-  конфликт профиля после 409 прошёл ещё 24/24 повторов на desktop WebKit,
-  iPhone Safari и iPhone PWA (`workers=1,retries=0`); pageerror не возник.
-  В `264bc4f` добавлена native HTTP PWA-проверка: удерживаем GET `/api/profile`,
-  выполняем reload и подтверждаем настоящий `requestfailed` с причиной cancel,
-  доступность локального профиля и отсутствие pageerror/console error. Она прошла
-  3/3 на desktop WebKit, iPhone Safari и iPhone PWA без retries. Это подтверждает
-  обработку отмены сейчас, но не устанавливает источник старого исторического
-  сообщения. Полный CI этой ревизии ожидается после push.
+  Источник profile debounce → `/api/me` установлен и исправлен на `f3930ec`.
+  Артефакт точного CI #1603 (`de56ab3`) сохранён и изучен: историческая ошибка
+  `/api/ai due to access control checks` возникла у отдельного фонового weekly-AI
+  запроса через 21 мс после начала reload; удержанный GET `/api/profile` был
+  отменён отдельно и ожидаемо. В `useWeeklyAiReport` сигнал запроса теперь
+  инвалидируется на `beforeunload`. Native HTTP acceptance подтверждает cancel
+  GET `/api/profile`, доступность локального профиля и отсутствие page/console
+  errors. В текущем follow-up assertion ужесточён до нуля WebKit `/api/ai`
+  warnings; desktop WebKit, iPhone Safari и iPhone PWA прошли 3/3
+  (`workers=1,retries=0`). CI #1812 относится к родительскому SHA `561ee93` и
+  не включает это ужесточение; точный CI нового SHA ещё нужен. Оставить пункт
+  открытым до его CI и сверки остальных исторических Safari reload сообщений.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.

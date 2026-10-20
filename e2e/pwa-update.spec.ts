@@ -82,7 +82,7 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     expect(cancelledProfileReads[0]).toMatch(/cancel|abort/i);
     expect(server.counts.profile).toBe(0);
     expect(server.unexpectedApi).toEqual([]);
-    expect(expectedWebKitAiReloadWarnings.length).toBeLessThanOrEqual(isWebKit ? 1 : 0);
+    expect(expectedWebKitAiReloadWarnings).toEqual([]);
     expect(errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   } finally {

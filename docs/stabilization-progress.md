@@ -8010,3 +8010,22 @@ CI #1811 для `87171fe` проверяет browser follow-up, но не вкл
 typecheck` и `git diff --check` прошли. Production-код не менялся. CI #1811 для
 `87171fe` не включает эти новые unit cases; точный CI объединённого SHA
 ожидается после push.
+
+## P0.8/P0.9 — уточнение источника Safari reload page error, 20.10.2026
+
+Исследован сохранённый [артефакт CI #1603](https://github.com/Michael-edel/FitFocus/actions/runs/39101610258/artifacts/12127895608)
+для `de56ab3`. HAR и Playwright trace подтверждают, что удержанный native
+`GET /api/profile` отменился при reload (ожидаемый `requestfailed`), а сообщение
+WebKit `/api/ai due to access control checks` пришло от отдельного фонового
+weekly-AI запроса примерно через 21 мс после начала `page.reload()`. Стек
+ошибки проходит через AI bundle. Это устанавливает источник отказа данного CI,
+но не доказывает, что объяснены все более ранние Safari сообщения.
+
+В `e2e/pwa-update.spec.ts` удалён допуск одного такого предупреждения: сценарий
+теперь требует полного отсутствия `/api/ai` page errors. Текущий код отмены
+weekly-AI при `beforeunload` прошёл строгий сценарий **3/3** на desktop WebKit,
+iPhone Safari и iPhone PWA (`workers=1,retries=0`). Root typecheck и
+`git diff --check` прошли. CI #1812 относится к
+предыдущему SHA `561ee93` и не включает это изменение; его точный CI ожидает
+публикации. Общий CORS-фильтр не добавлялся. Диагностика остальных исторических
+reload источников остаётся открытой.
