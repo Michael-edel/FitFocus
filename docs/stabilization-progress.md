@@ -1,5 +1,16 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздний ответ удаления аккаунта после смены сессии, [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508), 20.10.2026
+
+Добавлен регрессионный тест для подтверждённого `/api/account/delete`, ответ
+которого приходит после перехода на другую локальную сессию. Запрос остаётся
+привязан к proof удаляемого аккаунта; после успешного ответа очищаются его
+локальные данные, а захваченный logout callback не может завершить уже новую
+сессию. `tests/authSession_logout.test.ts` прошёл 8/8, полный unit suite —
+1467/1467, `npm run typecheck` и `git diff --check` прошли. Production-код не
+менялся. Этот follow-up не входил в текущий [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716);
+его точный CI ожидается после окончания browser matrix и push.
+
 ## P0.8/P0.9 — ошибка очистки Council history в Firefox CI, 20.10.2026
 
 Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)

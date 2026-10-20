@@ -21,6 +21,14 @@ session-ready gate, проверку срабатывания injected failure �
 после account switch и same-account reauthentication из `5cfb820` входят в этот
 run.
 
+Локальный follow-up [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508)
+проверяет подтверждённое сервером удаление аккаунта, когда ответ приходит уже
+после смены текущей сессии. Старая операция очищает данные своего аккаунта и не
+вызывает logout callback новой сессии. Целевой unit-файл прошёл 8/8, полный
+unit-набор — 1467/1467, root typecheck и `git diff --check` прошли. Тест не
+входил в запущенный CI #1823; точный CI follow-up ожидается после его завершения
+и публикации коммита.
+
 Коммит [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0)
 покрывает same-account reauthentication во время PDF сравнения замеров и архива
 прогресса. Вместе с коротким и подробным отчётами все четыре browser acceptance

@@ -11,12 +11,20 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Удалённый HEAD Draft PR #93 — `e33fb7880f5bf4946abef4f2d91e3c2d0bef5d13`.
+Удалённый HEAD Draft PR #93 — `5f92da16632b27b5bace86783757748f42764188`.
 Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-ещё выполняет browser matrix; dependency audit, guards, unit tests, три typecheck
-и production build прошли. Предыдущий [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-завершился с 1568 browser tests passed, 67 skipped и 3 failed. Все три отказа
-исправлены и опубликованы в `e33fb78`; текущий workflow проверяет точный этот SHA.
+для предыдущего SHA завершился с одним Firefox E2E отказом (1584 passed / 67
+skipped); причина исправлена в `11e1fd1` и опубликована. Новый точный
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+прошёл dependency audit, guards, unit, три typecheck и production build; сейчас
+выполняет browser matrix.
+
+Локальный follow-up [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508)
+покрывает поздний успешный ответ удаления аккаунта после смены текущей сессии:
+данные очищаются для удалённого аккаунта, старая logout callback не вызывается.
+Точечный тест прошёл 8/8, полный unit — 1467/1467, typecheck и diff check
+прошли. Он пока не опубликован и не входит в CI #1823; точный CI запускается
+после окончания текущей browser matrix.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA
