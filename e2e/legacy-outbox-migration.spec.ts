@@ -87,6 +87,75 @@ async function migrationState(page: Page, valueKey = targetKey, traceIndexedDb =
   }, { sourceKey: legacySourceKey, valueKey, traceIndexedDb });
 }
 
+async function legacyWriterFenceDiagnostic(page: Page) {
+  return page.evaluate(async () => {
+    const container = navigator.serviceWorker;
+    const controller = container.controller;
+    const buildId = localStorage.getItem('fitfocus.build.id');
+    let registration: { scope: string; active: { scriptURL: string; state: ServiceWorkerState } | null;
+      waiting: { scriptURL: string; state: ServiceWorkerState } | null } | null = null;
+    try {
+      const value = await Promise.race([
+        container.getRegistration().then((item) => item ? {
+          scope: item.scope,
+          active: item.active ? { scriptURL: item.active.scriptURL, state: item.active.state } : null,
+          waiting: item.waiting ? { scriptURL: item.waiting.scriptURL, state: item.waiting.state } : null,
+        } : null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1_000)),
+      ]);
+      registration = value;
+    } catch { /* Keep the controller and direct reply even if registration lookup fails. */ }
+
+    if (!controller || !buildId) {
+      return { buildId, controller: controller ? { scriptURL: controller.scriptURL, state: controller.state } : null,
+        registration, rawFenceReply: { skipped: !controller ? 'no-controller' : 'no-build-id' } };
+    }
+
+    const challengeId = crypto.randomUUID();
+    const rawFenceReply = await new Promise<unknown>((resolve) => {
+      const channel = new MessageChannel();
+      let settled = false;
+      const finish = (reply: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        channel.port1.close();
+        channel.port2.close();
+        resolve(reply);
+      };
+      const timer = setTimeout(() => finish({ timeout: true }), 5_000);
+      channel.port1.onmessage = (event) => finish(event.data);
+      try {
+        controller.postMessage({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_CHECK', challengeId, buildId }, [channel.port2]);
+      } catch (error) {
+        finish({ postMessageError: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+      }
+    });
+    return {
+      buildId,
+      controller: { scriptURL: controller.scriptURL, state: controller.state },
+      registration,
+      rawFenceReply,
+    };
+  });
+}
+
+async function boundedDiagnostic<T>(label: string, task: Promise<T>, timeoutMs: number): Promise<
+  T | { diagnosticTimeout: string } | { readonly diagnosticError: string }
+> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task.catch((error) => ({ diagnosticError: `${label}: ${String(error)}` } as const)),
+      new Promise<{ diagnosticTimeout: string }>((resolve) => {
+        timer = setTimeout(() => resolve({ diagnosticTimeout: `${label} exceeded ${timeoutMs}ms` }), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function captureAppDatabase(page: Page, label: string, diagnostics: string[]) {
   page.on('console', (message) => {
     if (!message.text().startsWith('FITFOCUS_IDB_LIFECYCLE ')) return;
@@ -562,14 +631,27 @@ test('preserves legacy intent across a full storage clear without sending an unp
       acceptedStateKeys: server.stateWriteKeys, counts: server.counts, storageTrace: storageTrace.slice(-100),
     }), contentType: 'application/json' });
   } catch (error) {
+    const [currentMigration, currentFence, oldMigration, oldFence] = await Promise.all([
+      boundedDiagnostic('current migration state', migrationState(currentPage), 3_000),
+      boundedDiagnostic('current writer fence', legacyWriterFenceDiagnostic(currentPage), 7_000),
+      boundedDiagnostic('old migration state', migrationState(oldPage), 3_000),
+      boundedDiagnostic('old writer fence', legacyWriterFenceDiagnostic(oldPage), 7_000),
+    ]);
+    const [source, currentBody, storageEvents] = await Promise.all([
+      boundedDiagnostic('legacy source', oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey), 3_000),
+      boundedDiagnostic('current body', currentPage.locator('body').innerText(), 3_000),
+      boundedDiagnostic('storage events', currentPage.evaluate(() =>
+        (window as Window & { __fitfocusStorageEvents?: unknown[] }).__fitfocusStorageEvents ?? [],
+      ), 3_000),
+    ]);
     const diagnostic = {
       counts: server.counts, stateWriteKeys: server.stateWriteKeys, unexpectedApi: server.unexpectedApi,
-      source: await oldPage.evaluate((key) => localStorage.getItem(key), legacySourceKey).catch(() => null),
+      source,
+      migration: { current: currentMigration, old: oldMigration },
+      writerFence: { current: currentFence, old: oldFence },
       storageTrace: storageTrace.slice(-100),
-      currentBody: await currentPage.locator('body').innerText().catch(() => ''),
-      storageEvents: await currentPage.evaluate(() =>
-        (window as Window & { __fitfocusStorageEvents?: unknown[] }).__fitfocusStorageEvents ?? [],
-      ).catch(() => []),
+      currentBody,
+      storageEvents,
     };
     await info.attach('legacy-outbox-failure', { body: JSON.stringify(diagnostic), contentType: 'application/json' });
     console.error('LEGACY_OUTBOX_FAILURE', JSON.stringify(diagnostic));

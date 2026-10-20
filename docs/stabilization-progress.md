@@ -7,8 +7,13 @@
 вкладке. Тест теперь требует пустой список page/console errors. Он прошёл 7/7
 desktop, mobile и PWA профилей, включая desktop WebKit; отдельный повтор WebKit
 также прошёл. `npm run typecheck` и `git diff --check` прошли. Production-код не
-менялся. Точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
-для `045f934` выполняет полный browser E2E.
+менялся. Полный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+для `045f934` завершился с 1570 passed / 67 skipped / 1 failed: iPhone PWA тест
+legacy migration 60 секунд не получил `writersStopped=true` и `sendAllowed=true`.
+Причина пока не установлена. В локальном follow-up добавлена failure-only
+диагностика progress и полного ответа Service Worker fence; после изменения
+целевой iPhone PWA тест прошёл 3/3 повторов, root typecheck прошёл. Follow-up
+ещё не опубликован и не проверен новым CI.
 
 В связанном `family-menu-durable.spec.ts` убран допуск четырёх WebKit
 `/api/me`/family reload warnings; переход A→B и same-account reauthentication
@@ -8094,5 +8099,6 @@ branch preview: same-origin `/sw.js` активируется, получает 
 точный SHA `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`; `npm run typecheck` и
 `git diff --check` прошли. Это ограниченный read-only smoke branch preview, а не
 отдельное staging-окружение; OAuth, D1 и авторизованные записи не проверялись.
-Полный CI #1817 для `045f934` ещё выполняется; новая staging-спека не входит в
-него и будет опубликована отдельным follow-up после завершения текущего CI.
+Новая staging-спека не входит в CI #1817. Этот workflow завершился одним
+сбоем legacy writer fence в iPhone PWA; подробная причина пока неизвестна.
+Локальная failure-only диагностика ожидает публикации и отдельного CI.

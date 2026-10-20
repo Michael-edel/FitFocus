@@ -16,8 +16,13 @@ access-control warning при переключении аккаунта в со�
 тест прошёл 7/7 browser/PWA профилей; `npm run typecheck` и `git diff --check`
 прошли. В связанном семейном reload тесте снят допуск предупреждений, сценарии
 смены аккаунта и same-account reauthentication прошли 6/6 WebKit/PWA профилей.
-Точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
-для `045f934` выполняет полный browser E2E; результат пока не получен.
+Полный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+для `045f934` завершился с 1570 пройденными, 67 пропущенными и 1 упавшим
+browser-тестом. Сбой: iPhone PWA legacy migration не открыл writer fence за
+60 секунд; оба флага `writersStopped` и `sendAllowed` оставались `false`.
+Root cause пока не установлен. Локально добавлена failure-only диагностика
+снимка миграции и сырого ответа worker; проблемный сценарий прошёл 3/3 раз.
+Изменение ещё не опубликовано и не проверено новым CI.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный

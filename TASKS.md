@@ -8,9 +8,12 @@
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
 Удалённое состояние PR #93 — SHA `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`;
-проходит все статические проверки и unit suite, сейчас выполняет полный browser
-E2E. Последующие test/docs follow-ups проверены локально и закоммичены в рабочей
-ветке; push отложен до завершения текущего прогона.
+статические проверки и unit suite прошли, но полный browser E2E в CI #1817
+завершился с одним сбоем iPhone PWA в legacy writer fence: за 60 секунд барьер
+не подтвердил `writersStopped` и `sendAllowed`. Добавлена локальная
+failure-only диагностика снимка миграции и сырого ответа Service Worker;
+тестовый сценарий прошёл 3/3 повторов. Причина CI-сбоя пока не установлена,
+диагностический follow-up ещё не опубликован.
 
 Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
 точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
