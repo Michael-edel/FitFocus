@@ -10,7 +10,10 @@ const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session
 export async function saved(page: Page) {
   return page.evaluate(async account => {
     const report = (event: string, detail: Record<string, unknown> = {}) => {
-      if ((window as Window & { __fitfocusE2eIdbDiagnostics?: boolean }).__fitfocusE2eIdbDiagnostics) {
+      const diagnosticsEnabled = (window as Window & {
+        __fitfocusE2eIdbDiagnostics?: boolean;
+      }).__fitfocusE2eIdbDiagnostics;
+      if (diagnosticsEnabled) {
         console.log('[FITFOCUS-SAVED]', JSON.stringify({ event, ...detail }));
       }
     };
@@ -20,6 +23,13 @@ export async function saved(page: Page) {
     if (db) {
       report('connection-reused', { version: db.version });
     } else {
+      const diagnosticsEnabled = (window as Window & {
+        __fitfocusE2eIdbDiagnostics?: boolean;
+      }).__fitfocusE2eIdbDiagnostics;
+      if (diagnosticsEnabled) {
+        report('connection-missing');
+        throw new Error('APP_DATABASE_CONNECTION_NOT_CAPTURED');
+      }
       const request = indexedDB.open('fitfocus-user-state-v1');
       report('open-requested');
       request.addEventListener('blocked', () => report('open-blocked'));

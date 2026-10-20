@@ -11,12 +11,15 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Опубликованный code HEAD draft PR #93 —
-`16305bedbee49fdeb611fa69e9c0ad9625bf7b91`. Коммит добавляет отдельную проверку
+Опубликованный HEAD draft PR #93 —
+`13f425d1636dadb29d107dbe7e38acdfdcac4137`; последний code-bearing commit
+`16305bedbee49fdeb611fa69e9c0ad9625bf7b91` добавляет отдельную проверку
 реального Chrome BFCache: браузер должен восстановить сохранённый документ с
 `pageshow.persisted=true`, после чего FitFocus повторно запрашивает `/api/env`.
 Проверка прошла 1/1 локально в Chrome; обычные lifecycle E2E — 2/2, root
-typecheck и `git diff --check` прошли. Production-код не менялся.
+typecheck и `git diff --check` прошли. CI #1829 для code-bearing commit завершился
+success. CI #1831 проверяет прежний опубликованный HEAD `13f425d` и не включает
+новый Firefox diagnostic follow-up; ему требуется точный CI.
 
 Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 для этого SHA завершился success: **1627 browser passed / 74 skipped**, native
@@ -33,10 +36,15 @@ CORS/network исключений: `/api/profile` cancel обрабатывае�
 не появились. Это закрывает диагностику перечисленных исторических сообщений в
 автоматизированных браузерах; физический iOS и staging остаются открыты.
 
-Исторический P0.9 Firefox timeout в `saved(page)` повторно проверен на текущем
-локальном HEAD: сценарий обновления PWA прошёл 3/3, затем 10/10 в desktop Firefox
-без retries; 10 неприменимых тестов были пропущены. Проблема не повторилась,
-поэтому её первопричина остаётся неизвестной; production-код не менялся.
+Исторический P0.9 Firefox timeout исследован по сохранённому trace: примерно
+87,9 секунды занял независимый `indexedDB.open()` из E2E-помощника `saved(page)`;
+снимок при этом показывает живой экран семьи. Это подтверждает зависание тестового
+probe, но не объясняет задержку Firefox и не доказывает блокировку `versionchange`.
+Локальное тестовое изменение повторно использует connection приложения и
+завершается понятной ошибкой, если connection не захвачен. Целевые повторы прошли
+3/3, полный `pwa-update.spec.ts` — 10 passed / 4 skipped без retries, typecheck
+прошёл. Точный CI нового Firefox diagnostic follow-up ещё требуется; P0.9
+остаётся открытым.
 
 Предыдущий follow-up `a560c6c` связывает точное WebKit reload warning с тем же
 GET `/api/me`, который начался до reload и завершился abort/cancel; прочие

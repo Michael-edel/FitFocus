@@ -8291,3 +8291,24 @@ branch preview: same-origin `/sw.js` активируется, получает 
 Новая staging-спека не входит в CI #1817. Этот workflow завершился одним
 сбоем legacy writer fence в iPhone PWA; подробная причина пока неизвестна.
 Failure-only диагностика опубликована в `44b6356`, точный CI #1819 запущен.
+
+## P0.9 — разбор сохранённого Firefox PWA timeout trace, 21.10.2026
+
+Разобран ранее сохранённый trace из внешнего каталога
+`outputs/pwa-firefox-repeat3-076`. Он показывает один `page.evaluate` вызов
+`saved(page)` длительностью около **87,9 с**, ожидавший отдельный
+`indexedDB.open('fitfocus-user-state-v1')` из `e2e/support/familyHarness.ts`.
+Снимок страницы при timeout всё ещё показывает экран семьи. Trace подтверждает,
+что подвисло дополнительное чтение тестового помощника; он не показывает, почему
+Firefox задержал независимый open, и не доказывает `versionchange`-блокировку.
+
+Локально обновлены `familyHarness.saved()` и failure-only `stateDebug()`: в режиме
+IDB-диагностики они используют захваченное приложением соединение, а при его
+отсутствии завершаются немедленной ошибкой вместо ещё одного `indexedDB.open()`.
+PWA update acceptance теперь требует захвата connection у старой и новой вкладки
+до чтения состояния. Это test-only изменение, production-код не затронут.
+Сценарий прошёл **3/3** целевых повторов desktop Firefox; полная
+`pwa-update.spec.ts` — **10 passed / 4 skipped** без retries. `npm run typecheck`
+и `git diff --check` прошли. Follow-up подготовлен поверх `13f425d`; его должен
+подтвердить точный CI. Историческая причина stall не доказана, поэтому P0.9
+остаётся открыт.

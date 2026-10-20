@@ -208,6 +208,28 @@ Typecheck прошёл. Логи и trace — в `outputs/pwa-firefox-repeat3-07
 `outputs/pwa-firefox-idb-trace8` и `outputs/pwa-firefox-saved-diagnostics-final`
 внешнего каталога `C:\Users\User\Documents\Codex\2026-09-17\yf`.
 
+### Дополнение по сохранённому Firefox trace — 21.10.2026
+
+Trace из `outputs/pwa-firefox-repeat3-076` удалось разобрать позднее. Он
+показывает, что `saved(page)` завис примерно на **87,9 с** внутри отдельного
+`indexedDB.open('fitfocus-user-state-v1')`, вызванного E2E-помощником в
+`page.evaluate`. Снимок страницы в момент отказа показывает живой экран семьи.
+Значит, trace указывает на зависание дополнительного тестового чтения, а не
+подтверждает остановку UI приложения. Он не устанавливает, почему Firefox
+задержал этот независимый open; блокировка `versionchange` также не доказана.
+
+Локальный follow-up в diagnostic mode запрещает помощнику открывать отдельное
+соединение: он повторно использует connection приложения и быстро сообщает
+`APP_DATABASE_CONNECTION_NOT_CAPTURED`, если приложение не успело его
+зарегистрировать. PWA-тест теперь проверяет захват connection у обеих вкладок до
+чтения состояния; failure diagnostic helper использует то же правило. Целевые
+Firefox-повторы прошли **3/3**, вся `pwa-update.spec.ts` — **10 passed / 4
+skipped**, без retries; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся. Follow-up базируется на опубликованном `13f425d`; его
+должен подтвердить точный CI. P0.9 остаётся открытым, поскольку устранена
+возможность зависнуть на независимом test probe, но первопричина исторической
+задержки не установлена.
+
 На рабочей ветке `47da77c` desktop Firefox сценарий дополнительно прошёл
 3/3 и 8/8 с IDB-логами (`workers=1/retries=0`). Для сравнения без влияния
 диагностических listeners временно восстановили `pwa-update.spec.ts` и

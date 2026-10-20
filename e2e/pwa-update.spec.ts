@@ -151,6 +151,12 @@ async function stateDebug(page: Page) {
     let db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
     let closeDatabase = false;
     if (!db) {
+      const diagnosticsEnabled = (window as Window & {
+        __fitfocusE2eIdbDiagnostics?: boolean;
+      }).__fitfocusE2eIdbDiagnostics;
+      if (diagnosticsEnabled) {
+        throw new Error('APP_DATABASE_CONNECTION_NOT_CAPTURED');
+      }
       const request = indexedDB.open('fitfocus-user-state-v1');
       db = await new Promise<IDBDatabase>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
@@ -284,10 +290,12 @@ test('real service worker waits for an explicit update and preserves durable fam
     const standalone = info.project.name.includes('-pwa');
     const oldErrors = await openNative(oldPage, server.origin + '/#family', standalone);
     await expect.poll(() => oldPage.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
+    await expectCapturedAppDatabase(oldPage);
     expect((await saved(oldPage)).version).toBe(2);
     server.release();
     // A release query bypasses the old precached index while retaining the same origin/scope/IDB.
     const errors = await openNative(page, server.origin + '/?release=next#family', standalone);
+    await expectCapturedAppDatabase(page);
     const candidateScript = await page.locator('script[type="module"][src]').getAttribute('src');
     expect(candidateScript).toBeTruthy();
     expect(await oldPage.locator('script[type="module"][src]').getAttribute('src')).not.toBe(candidateScript);
