@@ -1311,13 +1311,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   protocol error. На незафиксированном состоянии тест до фикса воспроизвёл stale
   alert в 7/7 browser-профилях; после фикса сочетание успешного cross-session
   удаления и позднего HTTP 500 прошло 14/14, целевой unit — 10/10, полный unit —
-  1469/1469, typecheck и diff check прошли. Коммит опубликован в SHA `030e10e`,
-  точный CI этого кода — #1825.
+  1469/1469, typecheck и diff check прошли. Коммит опубликован в SHA `030e10e`;
+  его точный CI #1825 superseded при push следующего follow-up.
   Дополнительно same-account reauthentication E2E удерживает HTTP 500 старого
   delete-запроса до активации новой server session того же аккаунта. Проверены
   `serverSessionId` в обеих вкладках и отсутствие позднего alert: 7/7
   desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
-  Точный CI этой новой проверки последует после публикации.
+  Проверка включена в опубликованный SHA `bd488ef` и проходит точный CI #1826.
   [Контракт](docs/account-lifecycle-session.md).
 - [x] Требовать парный account/session proof для расходования invite при
   регистрации; отсутствие и устаревший proof отклоняются до body/consume. Проверки

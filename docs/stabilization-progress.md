@@ -19,17 +19,16 @@ stale logout не применяется к новой сессии.
 в A с новым `serverSessionId`. Обе вкладки подтверждают новую session в IndexedDB;
 поздний ответ не показывает alert. Сценарий прошёл **7/7** desktop/mobile/PWA
 профилей без retries, root typecheck и `git diff --check` прошли. Эта проверка
-добавлена после опубликованного SHA `030e10e`; exact CI для неё начнётся после
-публикации следующего коммита. CI #1825 пока проверяет кодовый fix на SHA
-`030e10e`.
+добавлена в опубликованный SHA `bd488ef`; точный CI #1826 проверяет её вместе
+с кодовым fix.
 
 Проверки на точном кодовом SHA `b5a493ebdcb1daaee21370aa8493929bdcd2f12e`:
 `tests/authSession_logout.test.ts` — **10/10**, успешный и ошибочный delayed
 account-delete E2E — **14/14** на семи профилях (`workers=1,retries=0`), полный
 unit suite — **1469/1469**, root typecheck/admin guards и `git diff --check`
 прошли. До фикса browser regression была 7/7 failing. Коммит опубликован в SHA
-`030e10e`; точный CI #1825 проверяет этот код, а добавленная same-account
-reauthentication проверка ожидает публикации отдельного follow-up.
+`030e10e`; этот код включён в точный CI #1826 вместе с same-account
+reauthentication follow-up.
 
 ## P0.8/P0.9 — исправления трёх browser отказов точного CI #1823, 20.10.2026
 

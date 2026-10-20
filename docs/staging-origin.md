@@ -1,8 +1,22 @@
 # Origin preview и приёмка staging
 
-Сверено: 20.10.2026. Ветка `fix/durable-outbox`, база рабочего компонента —
-`aefc46320de11b83ffdb274e7dae1a911e69612e`. Компонент проверяется локально;
-опубликованный SHA и CI фиксируются в [статусе](project-status.md).
+Сверено: 20.10.2026. PR #93: ветка `fix/durable-outbox` направлена в
+`fix/state-generations`; актуальные HEAD и CI фиксируются в
+[статусе проекта](project-status.md).
+
+### Read-only branch-preview smoke: `bd488ef`, 20.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` повторно выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Документ, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload.
+HTML и `/assets/index-ut6thhBx.js` вернули 200; загруженный bundle содержит полный
+SHA `bd488efd0a62a2275ea2b97f50da1569c376a395`.
+
+Проверка ограничена read-only branch preview. Она не подтверждает отдельный
+изолированный staging, авторизованные действия, OAuth, D1, APP_URL, миграции,
+edge-правила, старые/новые клиентские bundles или выпуск.
 
 ### Read-only branch-preview smoke: `045f934`, 20.10.2026
 

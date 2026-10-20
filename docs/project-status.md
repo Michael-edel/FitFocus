@@ -11,10 +11,21 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Удалённый HEAD Draft PR #93 — `4ffff5a8ea2963909a7bdb4a2ca1f624477c7239`.
-Точный [CI #1824](https://github.com/Michael-edel/FitFocus/actions/runs/39439487905)
-сейчас выполняет browser matrix; audit, schema/privacy/auth/API guards, unit,
-три typecheck и production build прошли. Предыдущий точный
+Актуальный удалённый HEAD Draft PR #93 — `bd488efd0a62a2275ea2b97f50da1569c376a395`.
+Точный [CI #1826](https://github.com/Michael-edel/FitFocus/actions/runs/39444462553)
+выполняет browser matrix; audit, schema/privacy/auth/API guards, unit, три
+typecheck и production build прошли. Предшествующий [CI #1825](https://github.com/Michael-edel/FitFocus/actions/runs/39443043426)
+был superseded при публикации нового коммита; его browser job отменён. В
+`bd488ef` добавлен E2E поздней ошибки удаления после повторного входа того же
+аккаунта с новым `serverSessionId`: 7/7 desktop/mobile/PWA профилей без retries;
+`authSession_logout` — 10/10, root typecheck и diff check прошли. PR #90 всё ещё
+ожидает одобряющего ревью, необходимого для интеграции защищённой `main`.
+На branch preview этого SHA выполнен read-only smoke: **8/8 GET-only** проверок,
+Service Worker активен, `/assets/index-ut6thhBx.js` содержит полный SHA `bd488ef`.
+Отдельный изолированный staging и авторизованные интеграции этой проверкой не
+подтверждены.
+
+Предыдущий точный
 [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
 на `5f92da16632b27b5bace86783757748f42764188` завершился с 1603 browser passed /
 67 skipped / 3 failed. Три падения имели две причины: Safari/PWA snapshot
@@ -24,13 +35,14 @@ WebKit reload сообщил четыре точных ошибки отменё
 проверку отсутствием операции A у B, ждёт гидратации настроек и разрешает только
 reload warnings, совпавшие с failed GET. Сценарии прошли 7/7 и 3/3 без retries.
 
-Новый локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+Опубликованный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
 исправляет stale alert при позднем HTTP/network отказе удаления после входа B:
 исходная session повторно проверяется перед каждым сообщением об ошибке.
 До исправления регрессия упала на 7/7 browser-профилях; после исправления
 успешный и ошибочный delayed-delete сценарии прошли 14/14, целевой unit 10/10,
-полный unit 1469/1469, root typecheck и diff check прошли. `b5a493e` пока
-локальный; точный CI этого кода ещё не запускался. Ранее опубликованные
+полный unit 1469/1469, root typecheck и diff check прошли. Коммит включён в
+опубликованный SHA `030e10e` и проверяется в текущем PR CI #1826 вместе с
+родительскими изменениями. Ранее опубликованные
 `5cb8508`, `816becd`, `17db3b4`, `59eb569` и `26e6b3a` входят в CI #1824.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)

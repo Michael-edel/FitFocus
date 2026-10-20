@@ -70,12 +70,12 @@ typecheck, production build, privacy coverage и `git diff --check` прошли
 account switch в 7/7 browser-профилях. После фикса целевой
 `authSession_logout` прошёл 10/10, два account-delete E2E — 14/14 по семи
 desktop/mobile/PWA профилям без retries, полный unit suite — 1469/1469,
-typecheck и `git diff --check` прошли. Коммит опубликован в SHA `030e10e`,
-который сейчас проходит CI #1825.
+typecheck и `git diff --check` прошли. Коммит опубликован в SHA `030e10e`;
+он входит в точный CI #1826 на последующем SHA.
 
 Дополнительный E2E удерживает HTTP 500 старого account-delete запроса, пока
 соседняя вкладка повторно входит в тот же аккаунт с новым `serverSessionId`.
 После активации новой сессии поздняя ошибка не показывает alert в исходной
 вкладке; targeted E2E прошёл 7/7 desktop/mobile/PWA профилей без retries,
-root typecheck и `git diff --check` прошли. Проверка пока локальная; exact CI
-следующей ревизии начнётся после push.
+root typecheck и `git diff --check` прошли. Проверка опубликована в `bd488ef`
+и проходит точный CI #1826.
