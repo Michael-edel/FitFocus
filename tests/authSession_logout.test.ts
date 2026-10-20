@@ -244,6 +244,46 @@ describe('deleteAccountSession', () => {
     expect(onLogout).not.toHaveBeenCalled();
   });
 
+  it.each(['http', 'network'] as const)(
+    'does not show a stale %s error after another session becomes active', async (failureKind) => {
+      const fetchImpl = vi.fn<typeof fetch>(() => failureKind === 'http'
+        ? Promise.resolve(new Response(JSON.stringify({ error: 'ACCOUNT_DELETE_FAILED' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+        : Promise.reject(new Error('network')));
+      const assertCurrentSession = vi.fn<() => Promise<void>>()
+        .mockResolvedValueOnce()
+        .mockResolvedValueOnce()
+        .mockRejectedValueOnce(new Error('LOGIN_SESSION_CHANGED'));
+      const clearLocalData = vi.fn();
+      const onLogout = vi.fn();
+      const alert = vi.fn();
+      const originalAlert = globalThis.alert;
+      globalThis.alert = alert;
+
+      try {
+        await deleteAccountSession({
+          googleSub: 'user-1',
+          loginGuard: guard,
+          assertCurrentSession,
+          confirmFn: () => 'DELETE',
+          fetchImpl,
+          clearLocalData,
+          onLogout,
+        });
+      } finally {
+        globalThis.alert = originalAlert;
+      }
+
+      expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(assertCurrentSession).toHaveBeenCalledTimes(3);
+      expect(alert).not.toHaveBeenCalled();
+      expect(clearLocalData).not.toHaveBeenCalled();
+      expect(onLogout).not.toHaveBeenCalled();
+    },
+  );
+
   it('explains that the user must sign in again when the server rejects the session scope', async () => {
     const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ error: 'UNAUTH' }), {
       status: 401,

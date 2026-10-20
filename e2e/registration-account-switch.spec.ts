@@ -205,3 +205,61 @@ test('a delayed account deletion response clears its owner without logging out t
   expect(deleteScope).toEqual({ account: accountA.id, session: accountA.sid });
   expect(logoutCalls).toEqual([]);
 });
+
+test('a delayed account deletion error is not shown after another account becomes active', async ({ page, context }) => {
+  let releaseDeleteResponse: () => void = () => {};
+  let markDeleteStarted: () => void = () => {};
+  const deleteStarted = new Promise<void>(resolve => { markDeleteStarted = resolve; });
+  const waitForDeleteResponse = new Promise<void>(resolve => { releaseDeleteResponse = resolve; });
+  const staleDialogs: string[] = [];
+
+  await installIdentityApi(page, accountA, true, {
+    onAccountDelete: async route => {
+      markDeleteStarted();
+      await waitForDeleteResponse;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'ACCOUNT_DELETE_FAILED' }),
+      });
+    },
+  });
+
+  await openApp(page, '/#settings');
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  await expect(page.getByRole('button', { name: /Удалить аккаунт/ })).toBeVisible();
+  page.on('dialog', async dialog => {
+    if (dialog.type() === 'prompt') {
+      await dialog.accept('DELETE');
+      return;
+    }
+    staleDialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.getByRole('button', { name: /Удалить аккаунт/ }).click();
+  await deleteStarted;
+
+  const accountBPage = await context.newPage();
+  await installIdentityApi(accountBPage, accountB, true);
+  await openApp(accountBPage, '/#dashboard');
+  await expect.poll(() => activeAccount(accountBPage)).toBe(accountB.id);
+  await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+
+  const deleteResponse = page.waitForResponse(response =>
+    response.url().includes('/api/account/delete') && response.status() === 500,
+  );
+  const unexpectedDialog = page.waitForEvent('dialog', { timeout: 1000 })
+    .then(async dialog => {
+      const message = dialog.message();
+      await dialog.dismiss();
+      return message;
+    })
+    .catch(() => null);
+  releaseDeleteResponse();
+  await deleteResponse;
+
+  expect(await unexpectedDialog).toBeNull();
+  expect(staleDialogs).toEqual([]);
+  await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+  await expect.poll(() => activeAccount(accountBPage)).toBe(accountB.id);
+});
