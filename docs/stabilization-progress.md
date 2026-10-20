@@ -1,5 +1,38 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — повтор Firefox PWA update timeout, 21.10.2026
+
+Сценарий `real service worker waits for an explicit update and preserves durable
+family intent` повторно запущен на текущем локальном HEAD в desktop Firefox:
+**3/3**, `workers=1,retries=0`; расширенный `--repeat-each=10` завершился
+**10/10 passed / 10 skipped** за 4.7 минуты без retries. Timeout внутри
+`saved(page)` не воспроизвёлся. Это подтверждает повторяемость текущего теста,
+но не устанавливает причину исторического сбоя; пункт P0.9 остаётся открытым.
+Production-код не менялся.
+
+## P0.5 — нативная Chrome BFCache acceptance, [`16305be`](https://github.com/Michael-edel/FitFocus/commit/16305bedbee49fdeb611fa69e9c0ad9625bf7b91), 20.10.2026
+
+Ранее `pageshow.persisted` проверялся синтетическим событием. Новый отдельный
+Playwright-проект запускает полный Chrome с разрешённым BFCache, проверяет
+сохранение/возврат простого same-origin документа, затем открывает production
+build FitFocus, ждёт завершения `/api/env`, выполняет настоящий переход и возврат
+из BFCache и требует ровно один дополнительный запрос `/api/env`. Тест также
+проверяет, что приложение не удерживает активный `beforeunload` listener.
+
+Playwright headless-shell сообщает `BackForwardCacheDisabledForDelegate`, поэтому
+эта проверка использует `channel: 'chrome'` и убирает только его стандартный
+`--disable-back-forward-cache`. CI отдельно устанавливает Chrome for Testing.
+`npm run test:e2e:bfcache` прошёл **1/1** локально; обычный lifecycle E2E прошёл
+**2/2** для desktop Chromium, root typecheck и `git diff --check` прошли. Точный
+[CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
+завершился success на этом SHA: **1627 browser passed / 74 skipped**, native
+BFCache — **1/1** (32 секунды), rollback/CAS — **23/23 HTTP checks**; audit,
+guards, unit, typechecks, build и публикация артефактов также прошли. Сохранены
+[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12292299978)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12293138406).
+Это browser acceptance в CI, не проверка физического устройства, OAuth,
+staging или всего P0.5.
+
 ## P0.9 — точный CI #1827 и WebKit reload warning, 20.10.2026
 
 Точный [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)

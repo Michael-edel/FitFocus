@@ -1,16 +1,23 @@
 # Стабилизация и развитие FitFocus
 
-Обновлено: 20.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
+Обновлено: 21.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
 приёмка полного lifecycle**. Основной код реализуется в Draft PR
 [#93](https://github.com/Michael-edel/FitFocus/pull/93), ветка
 `fix/durable-outbox` → `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Опубликованный HEAD Draft PR #93 — `4ffff5a8ea2963909a7bdb4a2ca1f624477c7239`.
-Точный [CI #1824](https://github.com/Michael-edel/FitFocus/actions/runs/39439487905)
-сейчас выполняет browser matrix; audit, schema/privacy/auth/API guards, unit,
-три typecheck и production build прошли. Предыдущий точный
+Опубликованный HEAD Draft PR #93 —
+`16305bedbee49fdeb611fa69e9c0ad9625bf7b91`. Точный
+[CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
+для него завершился success: 1627 browser passed / 74 skipped, native Chrome
+BFCache — 1/1, rollback/CAS HTTP — 23/23; audit, guards, unit, три typecheck,
+build и сохранение артефактов также прошли. Артефакты: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12292299978)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12293138406).
+После обновления ветки предыдущий run #1828 отменён concurrency policy.
+Локально Chrome BFCache acceptance прошёл 1/1, обычный lifecycle E2E — 2/2.
+
+Предыдущий точный
 [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
 на `5f92da16632b27b5bace86783757748f42764188` завершился с **1603 passed /
 67 skipped / 3 failed**. Три падения имели две причины: два iPhone Safari/PWA
@@ -500,9 +507,11 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   [семейный контракт](docs/family-menu-state.md).
 - [ ] Проверить эти пути на staging и завершить реальные BFCache/OAuth-сценарии;
   остальные AI/report/retry/family writers и их общий lifecycle остаются открыты.
-  Реальный Chrome BFCache подтвердил повтор `/api/env` после restore; OAuth,
-  другие callbacks, устройство и staging остаются открыты. Unit-проверка двух IDB
-  connections не заменяет old/new bundles.
+  Коммит `16305be` добавляет нативную Chrome BFCache acceptance: два same-origin
+  перехода подтверждают настоящее `pageshow.persisted=true`, затем тест приложения
+  проверяет новый GET `/api/env`. Локально Chrome прошёл 1/1; точный CI #1829
+  выполняется. OAuth, другие callbacks, физическое устройство и staging остаются
+  открыты. Unit-проверка двух IDB connections не заменяет old/new bundles.
 
 Ни весь P0.5, ни выпуск этим компонентом не закрыты.
 
@@ -633,7 +642,10 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   для runtime HEAD `1546073` завершился success, включая полную browser-матрицу,
   rollback/CAS и артефакты; это подтверждает текущий код, но не объясняет исходный
   timeout. Предыдущий #1684 для `5250190` отменён concurrency policy при обновлении
-  PR. Staging и устройства остаются открыты.
+  PR. На актуальном локальном HEAD сценарий ещё раз прошёл 3/3 и затем 10/10 в
+  desktop Firefox (`workers=1,retries=0`); ошибка не воспроизвелась. Это
+  повторяемость, а не доказательство причины. Staging и устройства остаются
+  открыты.
 
 - [x] Разобрать исторический native WebKit pageerror по trace CI `5b90249`:
   ошибка привязана к отмене семейного PUT при reload после `controllerchange`,

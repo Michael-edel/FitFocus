@@ -1,6 +1,6 @@
 # Текущее состояние FitFocus
 
-Сверено: 20.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
+Сверено: 21.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
 [`TASKS.md`](../TASKS.md), подробные ревизии и проверки — в
 [журнале стабилизации](stabilization-progress.md).
 
@@ -11,21 +11,32 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Опубликованный кодовый HEAD Draft PR #93, проверенный в CI #1827, —
-`1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`. Точный
-[CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
-завершился неуспешно: **1626 browser passed, 67 skipped, 1 failed**.
-Единственный отказ — iPhone PWA reload в `weekly-menu-durability.spec.ts`:
-WebKit выдал позднее сообщение для `/api/me` после восстановления durable
-операции, хотя сам экран и сохранённый `opId` восстановились. Audit,
-schema/privacy/auth/API guards, unit, три typecheck и production build прошли.
+Опубликованный code HEAD draft PR #93 —
+`16305bedbee49fdeb611fa69e9c0ad9625bf7b91`. Коммит добавляет отдельную проверку
+реального Chrome BFCache: браузер должен восстановить сохранённый документ с
+`pageshow.persisted=true`, после чего FitFocus повторно запрашивает `/api/env`.
+Проверка прошла 1/1 локально в Chrome; обычные lifecycle E2E — 2/2, root
+typecheck и `git diff --check` прошли. Production-код не менялся.
 
-Локальный follow-up `a560c6c`
-сопоставляет точное сообщение с тем же `/api/me` GET, который начался до reload
-и завершился abort/cancel. Другие CORS/network ошибки остаются отказами. Тест
-прошёл 10/10 на iPhone PWA и 3/3 на desktop WebKit, iPhone Safari и iPhone PWA;
-TypeScript и `git diff --check` прошли. Этот test-only follow-up ожидает
-публикации и точного CI.
+Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
+для этого SHA завершился success: **1627 browser passed / 74 skipped**, native
+Chrome BFCache acceptance — **1/1**, а rollback/CAS HTTP-проверка — **23/23**.
+Audit, schema/privacy/auth/API guards, unit, три typecheck и production build
+также прошли; workflow сохранил [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12292299978)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12293138406).
+Workflow использует полный Chrome for Testing, потому что Playwright headless-shell
+отключает BFCache для автоматизированной сессии.
+
+Исторический P0.9 Firefox timeout в `saved(page)` повторно проверен на текущем
+локальном HEAD: сценарий обновления PWA прошёл 3/3, затем 10/10 в desktop Firefox
+без retries; 10 неприменимых тестов были пропущены. Проблема не повторилась,
+поэтому её первопричина остаётся неизвестной; production-код не менялся.
+
+Предыдущий follow-up `a560c6c` связывает точное WebKit reload warning с тем же
+GET `/api/me`, который начался до reload и завершился abort/cancel; прочие
+CORS/network ошибки остаются отказами. Его регрессия прошла 10/10 на iPhone PWA
+и 3/3 на desktop WebKit, iPhone Safari и iPhone PWA. Код и заметка о CI 1827
+опубликованы коммитом `8664786`; старый CI не подтверждает текущий SHA.
 
 Branch preview `fix-durable-outbox` на кодовой ревизии `1ea3f72` прошёл read-only
 smoke: **8/8 GET-only** проверок, Service Worker активен, а
