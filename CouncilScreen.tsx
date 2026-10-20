@@ -26,6 +26,7 @@ type CouncilScreenProps = {
   councilStage: 'idle' | 'router' | 'experts' | 'review' | 'chairman';
   councilError: string | null;
   councilMessages: CouncilChatMsg[];
+  canClearHistory: boolean;
   expandedCouncilThoughtIds: Record<string, boolean>;
   setExpandedCouncilThoughtIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   councilScrollRef: React.RefObject<HTMLDivElement | null>;
@@ -40,6 +41,7 @@ export default function CouncilScreen({
   councilStage,
   councilError,
   councilMessages,
+  canClearHistory,
   expandedCouncilThoughtIds,
   setExpandedCouncilThoughtIds,
   councilScrollRef,
@@ -67,7 +69,9 @@ export default function CouncilScreen({
           <button
             type="button"
             onClick={onClearHistory}
-            className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all"
+            disabled={!canClearHistory}
+            title={canClearHistory ? undefined : 'Ожидается подтверждение активной сессии'}
+            className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={14} /> Очистить
           </button>

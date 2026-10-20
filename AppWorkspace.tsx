@@ -95,7 +95,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   const { favoriteRecipes, addFavoriteRecipe, updateFavoriteRecipe, removeFavoriteRecipe, clearFavoriteRecipes } = content;
   const { measurementsHistory, progressPhotos, wearableProvider, wearableEnabled, wearableConnectedAt, wearableLastSyncAt, wearableStepsToday, wearableActiveMinutesToday, wearableSleepHoursLastNight, wearableMetricsDayKey, wearableMetricsUpdatedAt, onPatchUser, syncState, isCurrentSession: isCurrentAccountSession } = progress;
   const { cloudFamilyMembers, cloudFamilyLoading, cloudFamilyError, setCloudFamilyError, familyInviteCode, familyJoinCode, familyNameDraft, setFamilyJoinCode, setFamilyNameDraft, loadCloudFamily, createFamilyCloud, joinFamilyCloud, makeInviteCode, generateFamilyMenuNow, updateMyFamilyGoal } = family;
-  const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
+  const { councilInput, setCouncilInput, councilLoading, councilStage, councilError, councilMessages, canClearCouncilHistory, expandedCouncilThoughtIds, setExpandedCouncilThoughtIds, councilScrollRef, handleCouncilSubmit, clearCouncilHistory } = council;
   const { courseLibrary, lessons, setCurrentLesson, setIsLessonViewOpen, settings, setSettings, closeLessonView, handleMarkLessonRead, handleStartLessonQuiz } = content;
   // Ephemeral screen drafts belong to the active IndexedDB session. The login guard
   // captured by this tab can become stale when another tab accepts a new session.
@@ -432,6 +432,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             councilStage={councilStage}
             councilError={councilError}
             councilMessages={councilMessages}
+            canClearHistory={canClearCouncilHistory}
             expandedCouncilThoughtIds={expandedCouncilThoughtIds}
             setExpandedCouncilThoughtIds={setExpandedCouncilThoughtIds}
             councilScrollRef={councilScrollRef}

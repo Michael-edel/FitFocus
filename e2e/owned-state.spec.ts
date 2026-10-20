@@ -14,14 +14,15 @@ async function state(page: Page, suffix: string) {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error); });
     const tx = db.transaction(['values', 'outbox', 'outbox_meta'], 'readonly');
     const read = <T,>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-    const [value, operations, keyState] = await Promise.all([
+    const [value, operations, keyState, activeSession] = await Promise.all([
       read(tx.objectStore('values').get(key)),
       read(tx.objectStore('outbox').getAll()),
       read(tx.objectStore('outbox_meta').get(`key:${JSON.stringify([account, key])}`)),
+      read(tx.objectStore('outbox_meta').get('active-session')),
     ]);
     db.close();
     return { value: value?.value ?? null, operations: operations.filter((operation) => operation.key === key),
-      confirmedVersion: keyState?.confirmedVersion, source: localStorage.getItem(sourceKey) };
+      confirmedVersion: keyState?.confirmedVersion, activeSession, source: localStorage.getItem(sourceKey) };
   }, { account, key: `fitfocus_data_${account}_${suffix}`, sourceKey });
 }
 
@@ -75,7 +76,9 @@ test('cleared council history stays deleted despite a stale localStorage copy', 
   await expect(page).toHaveURL(/#council$/); await expect(page).toHaveTitle(/FitFocus/);
   await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
   expect((await state(page, 'council_history')).operations).toEqual([]);
-  await page.getByRole('button', { name: 'Очистить', exact: true }).click();
+  const clearHistory = page.getByRole('button', { name: 'Очистить', exact: true });
+  await expect(clearHistory).toBeEnabled({ timeout: 20_000 });
+  await clearHistory.click();
   await expect.poll(async () => (await state(page, 'council_history')).operations[0]?.type).toBe('delete');
   await expect(page.getByText(oldMessage.text, { exact: true })).toHaveCount(0);
   await page.evaluate(({ key, message }) => localStorage.setItem(key, JSON.stringify([message])), { key: historyKey, message: oldMessage });
@@ -106,7 +109,9 @@ test('council history delete conflict and server snapshot survive reload', async
 
   await openApp(page, '/#council');
   await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Очистить', exact: true }).click();
+  const clearHistory = page.getByRole('button', { name: 'Очистить', exact: true });
+  await expect(clearHistory).toBeEnabled({ timeout: 20_000 });
+  await clearHistory.click();
   await expect.poll(async () => (await state(page, 'council_history')).operations.length).toBe(1);
   await expect.poll(async () => deleteRequests.length).toBe(1);
   await expect.poll(async () => (await state(page, 'council_history')).operations[0]?.status).toBe('conflicted');
@@ -159,17 +164,29 @@ test('council history delete conflict and server snapshot survive reload', async
 
 test('failed council deletion keeps the visible history and reports a storage error', async ({ page }) => {
   const errors = await setup(page, true);
+  const failureMarkerKey = 'owned-state-council-delete-failure-injected';
   await openApp(page, '/#council');
   await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
-  await page.evaluate((historyKey) => {
+  await expect.poll(async () => {
+    const activeSession = (await state(page, 'council_history')).activeSession;
+    return activeSession?.accountId === account && activeSession.serverSessionId === 'a'.repeat(64);
+  }).toBe(true);
+  await expect(page.locator('[data-state-notice-region]')).toBeVisible();
+  await page.evaluate(({ historyKey, failureMarkerKey }) => {
     const add = IDBObjectStore.prototype.add;
     IDBObjectStore.prototype.add = function (...args: Parameters<typeof add>) {
       const record = args[0] as { key?: unknown } | null;
-      if (this.name === 'outbox' && record?.key === historyKey) throw new DOMException('Injected quota failure', 'QuotaExceededError');
+      if (this.name === 'outbox' && record?.key === historyKey) {
+        localStorage.setItem(failureMarkerKey, 'hit');
+        throw new DOMException('Injected quota failure', 'QuotaExceededError');
+      }
       return add.apply(this, args);
     };
-  }, historyKey);
-  await page.getByRole('button', { name: 'Очистить', exact: true }).click();
+  }, { historyKey, failureMarkerKey });
+  const clearHistory = page.getByRole('button', { name: 'Очистить', exact: true });
+  await expect(clearHistory).toBeEnabled({ timeout: 20_000 });
+  await clearHistory.click();
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), failureMarkerKey)).toBe('hit');
   await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить' })).toBeVisible();
   await expect(page.getByText(oldMessage.text, { exact: true })).toBeVisible();
   expect((await state(page, 'council_history')).operations).toEqual([]);

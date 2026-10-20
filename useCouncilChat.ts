@@ -61,6 +61,8 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
   const { value: councilError, setValue: setCouncilError } = useAccountScopedUiState<string | null>(sessionScopeKey, null);
   const history = useOwnedState(currentUser?.id, 'council_history', [], councilCodec);
   const councilMessages = history.value;
+  const canClearCouncilHistory = Boolean(sessionScopeKey && currentUser && loginGuard
+    && loginGuard.accountId === currentUser.id);
   const requestGeneration = useRef(0);
   const scope = useMemo(() => new AiActionScope(() => Boolean(sessionScopeKey && loginGuard
     && loginGuard.accountId === currentUser?.id && isCurrentSession())),
@@ -226,6 +228,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
     councilStage,
     councilError,
     councilMessages,
+    canClearCouncilHistory,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,
     councilScrollRef,
