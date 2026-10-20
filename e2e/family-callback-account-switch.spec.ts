@@ -1836,6 +1836,172 @@ test('a delayed support ticket detail and attachment from a retired same-account
   }
 });
 
+test('a delayed support ticket creation from a retired same-account session does not report success after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const reauthenticated: Account = { ...accountA, sid: '6'.repeat(64) };
+  const held = deferred();
+  const createSessions: string[] = [];
+  let releasedCreates = 0;
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  await page.route('**/api/support/feedback', async route => {
+    const request = route.request();
+    if (request.method() !== 'POST') return route.fallback();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+    createSessions.push(request.headers()['x-fitfocus-state-session'] ?? '');
+    await held.promise;
+    releasedCreates += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({ ok: true, id: 'retired-session-created-ticket' }),
+    });
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Например: кнопка не нажимается после сохранения рецепта').fill('Тема из прежней сессии');
+  await page.getByPlaceholder('Что произошло, что вы ожидали увидеть и что увидели на самом деле').fill('Описание из прежней сессии');
+  await page.getByRole('button', { name: 'Отправить обращение' }).click();
+  await expect.poll(() => createSessions.length).toBe(1);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const successMessage = 'Обращение отправлено. Оно появится в админке и будет доступно для проверки.';
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    await expect(renewedPage.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+    await expect(renewedPage.getByText(successMessage, { exact: true })).toHaveCount(0);
+
+    held.release();
+    await expect.poll(() => releasedCreates).toBe(1);
+    expect(createSessions).toEqual([accountA.sid]);
+    await expect(page.getByText(successMessage, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(successMessage, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByRole('heading', { name: 'Тема из прежней сессии', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
+test('a delayed support reply from a retired same-account session does not refresh the ticket after reauthentication', async ({ page, context }) => {
+  const errors: string[] = [], renewedErrors: string[] = [];
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+  };
+  const reauthenticated: Account = { ...accountA, sid: '7'.repeat(64) };
+  const held = deferred();
+  const replySessions: string[] = [];
+  const supportReadSessions: string[] = [];
+  let releasedReplies = 0;
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state, false, errors);
+  await page.route('**/api/support/feedback/my*', async route => {
+    const request = route.request();
+    const sessionId = request.headers()['x-fitfocus-state-session'] ?? '';
+    if (request.method() === 'GET') supportReadSessions.push(sessionId);
+    if (request.method() !== 'POST') return route.fallback();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(sessionId).toBe(accountA.sid);
+    replySessions.push(sessionId);
+    await held.promise;
+    releasedReplies += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(accountA),
+      body: JSON.stringify({
+        ok: true,
+        ticket: {
+          id: `ticket-${accountA.id}`,
+          messages: [{ id: 'retired-reply', author_role: 'user', author_user_id: accountA.id,
+            message: 'Ответ из завершённой сессии', created_at: 3, attachment_count: 0 }],
+        },
+      }),
+    });
+  });
+
+  await openApp(page, '/#support');
+  await expect(page.getByRole('heading', { name: 'Мои обращения', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Обращение A', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Добавьте уточнение, новые шаги или скриншот').fill('Ответ из завершённой сессии');
+  await page.getByRole('button', { name: 'Отправить ответ' }).click();
+  await expect.poll(() => replySessions.length).toBe(1);
+
+  const previousSession = await activeSessionIdentity(page);
+  expect(previousSession?.serverSessionId).toBe(accountA.sid);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => renewedErrors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) renewedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, renewedErrors);
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#support');
+    await expect.poll(async () => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    await expect(renewedPage.getByText(`Секретное обращение ${accountA.id}`, { exact: true })).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+    const readsBeforeRelease = supportReadSessions.length;
+
+    held.release();
+    await expect.poll(() => releasedReplies).toBe(1);
+    expect(replySessions).toEqual([accountA.sid]);
+    expect(supportReadSessions.slice(readsBeforeRelease)).toEqual([]);
+    await expect(page.getByText('Ответ из завершённой сессии', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('Ответ из завершённой сессии', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(`Секретное обращение ${accountA.id}`, { exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+    expect(renewedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
 test('loads support ticket and reply attachments with the captured session proof', async ({ page }) => {
   const errors: string[] = [];
   const state: FixtureState = {

@@ -7959,3 +7959,13 @@ clipboard, а также отсутствие ошибок и error overlay. С�
 desktop/mobile/PWA профилей при `workers=1,retries=0`; `npm run typecheck` и
 `git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
 запускается после push.
+
+## P0.5 — поздние Support create/reply после same-account reauthentication, 20.10.2026
+
+Добавлены две browser acceptance для Support-мутаций. Удержанный create response
+после повторного входа с новым SID не показывает success и не добавляет старый
+тикет в текущий экран. Удержанный reply response не очищает актуальный экран и
+не запускает дополнительное чтение детали/списка. Оба сценария прошли 14/14
+совокупно на семи desktop/mobile/PWA профилях при `workers=1,retries=0`;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI этого follow-up запускается после публикации.

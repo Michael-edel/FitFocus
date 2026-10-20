@@ -1504,6 +1504,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     приватного вложения не выполняется. Два E2E сценария прошли 14/14 на семи
     desktop/mobile/PWA профилях без retries; root typecheck и diff check прошли.
     Точный CI этого follow-up запускается после push.
+  - [x] Удержать создание Support-обращения и ответ на тикет от старой server
+    session после повторного входа того же аккаунта. Старый create не показывает
+    success и не добавляет тикет; поздний reply не обновляет экран повторным GET.
+    Два сценария прошли 14/14 на семи desktop/mobile/PWA профилях без retries;
+    root typecheck и diff check прошли. Точный CI проверяется после push.
 - [x] Привязать фотоанализ дневника и рецепта к исходной AI-сессии и lifecycle;
   guarded diary/history commit, profile usage и успешный UI только для текущей
   попытки. `d93ff53`: unit 11/11, typecheck прошёл; delayed-response тесты прошли
