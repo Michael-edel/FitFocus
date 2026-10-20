@@ -8340,5 +8340,9 @@ Advisory затрагивает `launch-editor` на Windows при специа
 
 Исправленная версия по advisory — Vite `6.4.4`. Прямой диапазон в `package.json`
 и зафиксированная запись в `package-lock.json` подняты до `^6.4.4` / `6.4.4`;
-tarball integrity сверена с метаданными npm для точной версии. Полный CI для
-этого обновления требуется.
+tarball integrity сверена с метаданными npm для точной версии. Точный CI
+[#1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880)
+для commit `4ed1d27` завершился success: npm audit — **0 уязвимостей**, 1469 unit
+tests / 216 файлов, 1627 browser passed / 74 skipped, native Chrome BFCache —
+1/1, rollback/CAS HTTP — 23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).

@@ -7,6 +7,14 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
+Последняя проверенная ревизия Draft PR #93 —
+`4ed1d27a495f1eb7934864eb5808dae538dce520`; точный
+[CI #1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880)
+завершился success: npm audit — 0 уязвимостей, 1469 unit tests / 216 файлов,
+1627 browser passed / 74 skipped, native Chrome BFCache — 1/1, rollback/CAS HTTP —
+23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
+
 Последняя проверенная ревизия тестового follow-up в Draft PR #93 —
 `58f4d309f7a8359c4233905cacdb49d6adb6f430`. Точный
 [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
@@ -23,7 +31,7 @@ CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
 на docs-only `d1ea3af` остановился на `npm audit`: advisory
 [GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
 затрагивает Vite `<=6.4.3`. Текущий follow-up поднимает Vite и lockfile до
-исправленной `6.4.4`; точный CI исправления ещё требуется.
+исправленной `6.4.4`; изменение опубликовано в `4ed1d27` и подтверждено CI #1834.
 Более ранний точный
 [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 на code-bearing commit `16305bedbee49fdeb611fa69e9c0ad9625bf7b91` завершился

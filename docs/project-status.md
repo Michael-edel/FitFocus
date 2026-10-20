@@ -25,12 +25,19 @@ HTTP — 23/23; audit, guards, три typecheck и build прошли. Сохр�
 [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
 
+Последнее изменение проекта — dependency fix `4ed1d27` с Vite `6.4.4`.
+Точный [CI #1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880)
+прошёл полностью: npm audit — 0 уязвимостей, 1469 unit tests / 216 файлов,
+1627 browser passed / 74 skipped, native Chrome BFCache — 1/1 и rollback/CAS HTTP —
+23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
+
 CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
 на docs-only `d1ea3af` завершился отказом `npm audit`: новая умеренная advisory
 [GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
 затрагивает Vite `<=6.4.3`. Исправление повышает прямую dev-зависимость и lockfile
-до Vite `6.4.4`; production-код не затрагивался. Точный CI исправления ещё
-требуется.
+до Vite `6.4.4`; production-код не затрагивался. Это исправление подтверждено
+полным CI #1834 на `4ed1d27`.
 
 Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 для этого SHA завершился success: **1627 browser passed / 74 skipped**, native
