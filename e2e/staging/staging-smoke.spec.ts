@@ -50,6 +50,83 @@ test('staging serves FitFocus on the configured origin using GET requests only',
   expect(pageErrors).toEqual([]);
 });
 
+test('staging activates its same-origin Service Worker using GET requests only', async ({ browser }) => {
+  const context = await browser.newContext({ serviceWorkers: 'allow' });
+  const violations: string[] = [];
+  const pageErrors: string[] = [];
+  const unexpectedConsoleMessages: string[] = [];
+  const knownAmbientLightPolicyWarnings: string[] = [];
+
+  await context.route('**/*', async (route) => {
+    const request = route.request();
+    const requestUrl = new URL(request.url());
+
+    if (requestUrl.origin !== stagingOrigin || request.method() !== 'GET') {
+      violations.push(`${request.method()} ${request.url()}`);
+      await route.abort('blockedbyclient');
+      return;
+    }
+
+    await route.continue();
+  });
+
+  try {
+    const page = await context.newPage();
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() !== 'error' && message.type() !== 'warning') return;
+
+      const text = message.text();
+      if (
+        message.type() === 'warning' &&
+        text === "Error with Permissions-Policy header: Unrecognized feature: 'ambient-light-sensor'."
+      ) {
+        knownAmbientLightPolicyWarnings.push(text);
+        return;
+      }
+
+      unexpectedConsoleMessages.push(`${message.type()}: ${text}`);
+    });
+
+    const documentResponse = await page.goto('/', { waitUntil: 'domcontentloaded' });
+    expect(documentResponse?.headers()['permissions-policy']).toContain('ambient-light-sensor=()');
+    await expect(page).toHaveTitle(/FitFocus/i);
+    await page.evaluate(async () => await navigator.serviceWorker.ready);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+
+    const worker = await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.ready;
+      return {
+        origin: location.origin,
+        controller: navigator.serviceWorker.controller?.scriptURL ?? null,
+        scope: registration.scope,
+        activeScript: registration.active?.scriptURL ?? null,
+        activeState: registration.active?.state ?? null,
+      };
+    });
+
+    expect(worker).toEqual({
+      origin: stagingOrigin,
+      controller: `${stagingOrigin}/sw.js`,
+      scope: `${stagingOrigin}/`,
+      activeScript: `${stagingOrigin}/sw.js`,
+      activeState: 'activated',
+    });
+    expect(violations).toEqual([]);
+    expect(pageErrors).toEqual([]);
+    expect(unexpectedConsoleMessages).toEqual([]);
+    if (knownAmbientLightPolicyWarnings.length > 0) {
+      test.info().annotations.push({
+        type: 'known browser warning',
+        description: `Chromium does not implement ambient-light-sensor without a flag; the policy remains in the response header for browsers that support it (${knownAmbientLightPolicyWarnings.length} warning(s)).`,
+      });
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 test('GET /api/env is served as JSON on staging', async ({ request }) => {
   const response = await request.get('/api/env', { maxRedirects: 0 });
 

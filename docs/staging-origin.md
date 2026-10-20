@@ -7,11 +7,19 @@
 ### Read-only branch-preview smoke: `045f934`, 20.10.2026
 
 На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен
-`npm run test:e2e:staging`: **7/7 GET-only** проверок. Страница, `/api/env` и
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Страница, `/api/env` и
 анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`,
 `/api/state` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`.
 Загруженный asset `/assets/index-xMHVwOhL.js` содержит полный SHA
 `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`.
+
+Дополнительный Chromium smoke подтвердил, что same-origin `/sw.js` активируется,
+имеет область `/` и контролирует страницу после reload. Запросы ограничены тем же
+HTTPS origin и методом GET. Ответ продолжает включать
+`ambient-light-sensor=()` в `Permissions-Policy`; Chromium сообщает только точное
+известное предупреждение, поскольку поддержка этой стандартизованной директивы
+в Chrome включается флагом. Остальные page/console errors и warnings завершают
+проверку ошибкой.
 
 Это подтверждает опубликованный branch preview, не отдельный staging origin.
 OAuth, авторизованные действия, D1, APP_URL, edge-правила, миграции и выпуск

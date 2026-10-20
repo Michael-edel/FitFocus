@@ -8078,3 +8078,21 @@ page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
 В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
 Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
 retries. Точный CI текущего коммита ожидает следующей публикации.
+
+## P0 — branch-preview Service Worker smoke, 20.10.2026
+
+В `e2e/staging/staging-smoke.spec.ts` добавлена GET-only проверка реального
+branch preview: same-origin `/sw.js` активируется, получает scope `/` и
+контролирует страницу после reload. Тест проверяет `Permissions-Policy` и
+разрешает только точное известное предупреждение Chromium для
+`ambient-light-sensor`; прочие page/console ошибки и предупреждения остаются
+ошибками. W3C сохраняет эту стандартизованную директиву, а реестр браузерной
+поддержки указывает Chrome за флагом. Из-за этого production header не ослаблен.
+
+`npm run test:e2e:staging` прошёл **8/8** на
+`https://fix-durable-outbox.fitfocus.pages.dev/`, загруженный bundle содержит
+точный SHA `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`; `npm run typecheck` и
+`git diff --check` прошли. Это ограниченный read-only smoke branch preview, а не
+отдельное staging-окружение; OAuth, D1 и авторизованные записи не проверялись.
+Полный CI #1817 для `045f934` ещё выполняется; новая staging-спека не входит в
+него и будет опубликована отдельным follow-up после завершения текущего CI.

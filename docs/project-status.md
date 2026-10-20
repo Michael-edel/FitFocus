@@ -20,11 +20,17 @@ access-control warning при переключении аккаунта в со�
 для `045f934` выполняет полный browser E2E; результат пока не получен.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
-`npm run test:e2e:staging` прошёл 7/7 GET-only проверок, а загруженный
+`npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный
 `/assets/index-xMHVwOhL.js` содержит полный SHA текущего коммита. Страница,
 `/api/env` и анонимный `/api/me` отвечают 200; защищённые bootstrap/profile/
 state/push-status — 401 без redirect и `Set-Cookie`. Это не отдельный staging и
 не подтверждает OAuth, авторизованные записи или D1.
+
+В дополнительном read-only browser smoke проверены регистрация/активация
+same-origin Service Worker, его scope `/` и контроль страницы после reload.
+Chromium выдаёт только известное предупреждение для стандартизованной директивы
+`ambient-light-sensor`, которую Chrome поддерживает за флагом; заголовок
+сохранён и проверяется. Остальные console/page errors и warnings не допускаются.
 
 Тестовый follow-up [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f)
 проверяет поздний Stripe Checkout URL после повторной авторизации того же
