@@ -90,8 +90,10 @@ SHA `4630689` выполнялся и не включает этот тест; �
 проверка после выделения общего gate повторно прошла 7/7. Добавлен same-account
 reauthentication acceptance открытого paywall: после смены `sessionEpoch` окно
 скрыто в обеих вкладках, сценарий прошёл 7/7 на desktop/mobile/PWA профилях.
-Матрица теперь — 73 сценария и 292 мобильных запуска. Root typecheck и diff check прошли;
-тест добавлен в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Profile-sync и adaptation notices также проверены после same-account
+reauthentication: оба старых notice исчезают, каждый сценарий прошёл 7/7.
+Матрица теперь — 75 сценариев и 300 мобильных запусков. Root typecheck и diff check прошли;
+paywall-сценарий добавлен в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496), а проверки notices — в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
 Реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)

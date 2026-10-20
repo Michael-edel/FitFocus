@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4/P0.6 — notices скрываются после повторной авторизации, 20.10.2026
+
+Добавлены same-account reauthentication сценарии для profile-sync и adaptation
+notices. В старой вкладке notice предварительно подтверждается; соседняя вкладка
+входит в тот же аккаунт с новым `serverSessionId`, и IndexedDB принимает новую
+`sessionEpoch`. После этого старый notice скрыт и не появляется в новой вкладке.
+Оба теста прошли 7/7 на desktop Chromium/Firefox/WebKit, Android Chrome/PWA и
+iPhone Safari/PWA (`workers=1,retries=0`). Первая версия adaptation fixture
+ошибочно требовала фоновый `wis_text` в новой вкладке; существующий недельный
+снимок не запускал этот запрос, поэтому это предусловие удалено. Проверки
+sessionEpoch и notice сохранены. Profile-sync и adaptation используют mock API;
+production-код не менялся. Account/session матрица выросла до 75 сценариев и
+300 мобильных запусков.
+Тесты добавлены в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
+
 ## P0.4/P0.6 — paywall скрывается после повторной авторизации, 20.10.2026
 
 Добавлен account/session E2E для уже открытого paywall: та же учётная запись
