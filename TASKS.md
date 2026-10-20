@@ -738,6 +738,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     acceptance прошёл 7/7 desktop/mobile/PWA профилей (`workers=1,retries=0`);
     root typecheck и diff check прошли. Production-код не менялся; общий пункт
     остаётся открытым для остальных callbacks и cache.
+  - [x] Поздний `PUT /api/profile` старой сессии того же аккаунта не завершает
+    reclaimed operation: `opId` сохраняется, `attemptId` и `sessionEpoch`
+    меняются, ответ старого SID игнорируется, а новый ack завершает запись.
+    Browser acceptance прошёл 7/7 профилей без retries; профильный unit — 9/9,
+    root typecheck и diff check прошли. Тест [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33);
+    точный CI follow-up ожидает завершения #1822.
   - [x] Привязать содержимое root overlays и черновик регистрации к владельцу:
     фоторазбор, редактор блюда, камера, scanning status, меню, paywall,
     profile-sync/adaptation notices и медицинские данные формы регистрации не

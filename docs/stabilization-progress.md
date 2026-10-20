@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4 — поздний profile ack не завершает операцию новой сессии, [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33), 20.10.2026
+
+Добавлен E2E для ответа `PUT /api/profile`, удержанного со старой server
+session. Пока он ожидает, другая вкладка повторно входит в тот же аккаунт и
+повторно отправляет ту же durable operation с новым `attemptId` и `sessionEpoch`.
+Поздний HTTP 200 старого SID не завершает reclaimed operation и не меняет её
+локальное значение; операция завершается только после ответа нового SID.
+Проверка прошла 7/7 desktop/mobile/PWA профилей (`workers=2,retries=0`),
+профильный unit guard — 9/9, root typecheck и `git diff --check` прошли. Это
+mock API acceptance; production-код не менялся.
+
+Текущий CI #1822 проверяет предыдущий SHA `e33fb78` и остаётся активным; этот
+коммит в run не входит. Публикация последует после терминального результата,
+поскольку новый push отменил бы текущий workflow через `cancel-in-progress`.
+
 ## P0.5 — сравнение и архив прогресса не экспортируют PDF из старой сессии, [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0), 20.10.2026
 
 Добавлены browser acceptance для двух оставшихся PDF-экспортёров. Тест удерживает

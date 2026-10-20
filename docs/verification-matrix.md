@@ -19,6 +19,12 @@ run.
 экспортёров — 6/6, root typecheck и diff check прошли. `75b59b0` не входит в
 CI #1822; его точный workflow будет проверен после публикации.
 
+Локальный [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33)
+проверяет поздний ответ `PUT /api/profile` после reauthentication того же
+аккаунта. Старый `200` не завершает повторно захваченную операцию; новый ответ
+завершает её. Семь browser/PWA профилей прошли без retries, профильный unit —
+9/9, root typecheck и diff check прошли. Exact CI этой ревизии ожидает публикации.
+
 Точный PR CI #1618 для опубликованного `66e8c19` завершился success, включая
 browser mock matrix и rollback/CAS gate. Локальный follow-up `1271dfe` проверяет
 валидатор staging origin; локальные проверки прошли, точный CI ещё не запускался.

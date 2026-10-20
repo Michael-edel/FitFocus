@@ -52,6 +52,13 @@ Android Chrome и iPhone Safari. Три typecheck, admin guards и `git diff --c
 6/6 и `git diff --check` прошли. Это mock API-проверка, production-код не менялся.
 Коммит не входит в CI #1822; точный workflow запустится после публикации.
 
+Локальный коммит [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33)
+добавляет E2E гонку позднего `PUT /api/profile`: после повторного входа того же
+аккаунта старая сессия получает HTTP 200, но не завершает заново захваченную
+операцию; её завершает только ответ новой сессии. Проверка прошла 7/7
+desktop/mobile/PWA профилей без retries; root typecheck, profile session guard
+unit (9/9) и `git diff --check` прошли. Коммит не входит в CI #1822.
+
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный
 `/assets/index-xMHVwOhL.js` содержит полный SHA текущего коммита. Страница,
