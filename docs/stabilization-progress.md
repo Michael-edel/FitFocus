@@ -8029,3 +8029,18 @@ iPhone Safari и iPhone PWA (`workers=1,retries=0`). Root typecheck и
 предыдущему SHA `561ee93` и не включает это изменение; его точный CI ожидает
 публикации. Общий CORS-фильтр не добавлялся. Диагностика остальных исторических
 reload источников остаётся открытой.
+
+## P0.8/P0.9 — строгая проверка weekly-menu reload без WebKit исключений, 20.10.2026
+
+В `e2e/weekly-menu-durability.spec.ts` убраны допуски для WebKit access-control
+сообщений `/api/me` и `/api/achievements/check` во время reload. Вместо
+ограничения числа warning тест теперь требует их полного отсутствия; сама
+обработка pageerror/console осталась включённой. Полная спека прошла **24/24**.
+В `pwa-update.spec.ts` такой же строгий запрет применён к `/api/me`; обе проверки
+обновления Service Worker прошли **6/6**. В `pwa-rollback.spec.ts` удалён допуск
+`/api/me` page/console warnings; pending и conflicted сценарии прошли **6/6**.
+В сумме все три спеки прошли без retries на desktop WebKit, iPhone Safari и
+iPhone PWA с нулём таких предупреждений. Rollback по-прежнему отдельно проверяет
+точные `requestfailed` отмены. Root typecheck и `git diff --check` запускаются
+для этих локальных правок. Точный CI #1813 проверяет родительский `50592e5`;
+новые strict assertions ожидают следующей публикации.

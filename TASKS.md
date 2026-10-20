@@ -369,11 +369,18 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   отменён отдельно и ожидаемо. В `useWeeklyAiReport` сигнал запроса теперь
   инвалидируется на `beforeunload`. Native HTTP acceptance подтверждает cancel
   GET `/api/profile`, доступность локального профиля и отсутствие page/console
-  errors. В текущем follow-up assertion ужесточён до нуля WebKit `/api/ai`
+  errors. В `pwa-update.spec.ts` assertion ужесточён до нуля WebKit `/api/ai`
   warnings; desktop WebKit, iPhone Safari и iPhone PWA прошли 3/3
-  (`workers=1,retries=0`). CI #1812 относится к родительскому SHA `561ee93` и
-  не включает это ужесточение; точный CI нового SHA ещё нужен. Оставить пункт
-  открытым до его CI и сверки остальных исторических Safari reload сообщений.
+  (`workers=1,retries=0`), точный CI #1813 для `50592e5` выполняется.
+  В `pwa-update.spec.ts` снят ещё один `/api/me` допуск; вся спека прошла 6/6.
+  В `weekly-menu-durability.spec.ts` удалены допуски для `/api/me` и
+  `/api/achievements/check`; спека прошла 24/24. В `pwa-rollback.spec.ts`
+  удалён `/api/me` page/console допуск, при этом сохранена проверка точных
+  ожидаемых request cancellations; pending/conflicted матрица прошла 6/6.
+  Все три спеки прошли без retries на desktop WebKit, iPhone Safari и iPhone PWA;
+  page/console warning не возник. Эти изменения пока локальные; точный CI нового
+  SHA ещё нужен. Оставить пункт
+  открытым до него и сверки остальных исторических Safari reload сообщений.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,
   846 unit-тестов, 144 browser passed / 1 flaky / 9 skips.

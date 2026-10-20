@@ -153,8 +153,7 @@ async function settings(page: Page) {
 async function healthy(page: Page, errors: string[], expectedWebKitReloadWarnings: string[] = []) {
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
-  expect(expectedWebKitReloadWarnings.filter(warning => warning.includes('/api/me?')).length).toBeLessThanOrEqual(2);
-  expect(expectedWebKitReloadWarnings.filter(warning => warning.includes('/api/achievements/check')).length).toBeLessThanOrEqual(1);
+  expect(expectedWebKitReloadWarnings).toEqual([]);
 }
 
 test('weekly menu and shopping intent are delivered by one durable scoped profile operation', async ({ page }, info) => {
