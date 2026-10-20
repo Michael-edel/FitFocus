@@ -11,19 +11,21 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Актуальный удалённый HEAD Draft PR #93 — `bd488efd0a62a2275ea2b97f50da1569c376a395`.
-Точный [CI #1826](https://github.com/Michael-edel/FitFocus/actions/runs/39444462553)
-выполняет browser matrix; audit, schema/privacy/auth/API guards, unit, три
-typecheck и production build прошли. Предшествующий [CI #1825](https://github.com/Michael-edel/FitFocus/actions/runs/39443043426)
-был superseded при публикации нового коммита; его browser job отменён. В
-`bd488ef` добавлен E2E поздней ошибки удаления после повторного входа того же
-аккаунта с новым `serverSessionId`: 7/7 desktop/mobile/PWA профилей без retries;
-`authSession_logout` — 10/10, root typecheck и diff check прошли. PR #90 всё ещё
-ожидает одобряющего ревью, необходимого для интеграции защищённой `main`.
-На branch preview этого SHA выполнен read-only smoke: **8/8 GET-only** проверок,
-Service Worker активен, `/assets/index-ut6thhBx.js` содержит полный SHA `bd488ef`.
-Отдельный изолированный staging и авторизованные интеграции этой проверкой не
+Актуальный удалённый HEAD Draft PR #93 —
+`1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`. Точный
+[CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
+ещё выполняет browser matrix; audit, schema/privacy/auth/API guards, unit, три
+typecheck и production build прошли. Предшествующий CI для старого SHA не
+переносится на эту ревизию. На branch preview `fix-durable-outbox` выполнен
+read-only smoke: **8/8 GET-only** проверок, Service Worker активен, а
+`/assets/index-DlluKGhC.js` содержит полный SHA `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`.
+Изолированный staging, авторизованные запросы, OAuth и D1 этой проверкой не
 подтверждены.
+
+PR #90 в защищённую `main` пока заблокирован обязательным одобряющим ревью;
+текущий список reviews пуст. Пользователь сообщил, что может получить это
+одобрение. Текущий кодовый PR #93 остаётся draft и зависит от PR #94, который,
+в свою очередь, зависит от PR #90.
 
 Предыдущий точный
 [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)

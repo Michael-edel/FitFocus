@@ -2338,6 +2338,11 @@ legacy-ключ не используется для новой очереди �
 
 ### P0.9 — приёмка жизненного цикла
 
+- [x] Проверить точный branch preview текущего HEAD `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`:
+  read-only smoke прошёл 8/8 GET-only проверок, Service Worker активен, основной
+  bundle содержит полный SHA. Это проверка публичного preview, не отдельного
+  staging и не авторизованных интеграций; точный [CI #1827](https://github.com/Michael-edel/FitFocus/actions/runs/39454343773)
+  ещё выполняет browser matrix.
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
   - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
     поздний scoped-ответ A не подтверждает операцию A после смены active session;
