@@ -8,11 +8,19 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
 export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+  cacheControl?: string;
+  bfcacheProbePath?: string;
   profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let directory = resolve(previous);
   const api = createPwaApiFixture(options);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
+    if (options.bfcacheProbePath && url.pathname === options.bfcacheProbePath && request.method === 'GET') {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': options.cacheControl ?? 'no-store' });
+      response.end('<!doctype html><html><head><title>BFCache probe</title></head><body>BFCache probe</body></html>');
+      return;
+    }
     if (url.pathname.startsWith('/api/')) {
       try { await api.respond(request, response, url); }
       catch {
@@ -27,7 +35,7 @@ export async function startPwaReleaseServer(previous: string, current: string, o
     try {
       if (!(await stat(path)).isFile()) throw new Error('not a file');
       response.writeHead(200, { 'Content-Type': mime[extname(path)] ?? 'application/octet-stream',
-        'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' });
+        'Cache-Control': options.cacheControl ?? 'no-store', 'Service-Worker-Allowed': '/' });
       response.end(await readFile(path));
     } catch { response.writeHead(404); response.end(); }
   });

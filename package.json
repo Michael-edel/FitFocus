@@ -14,6 +14,7 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:mock": "playwright test",
+    "test:e2e:bfcache": "playwright test --config=playwright.bfcache.config.ts --grep \"real browser BFCache\"",
     "test:e2e:staging": "playwright test --config=playwright.staging.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",

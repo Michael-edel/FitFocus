@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps chromium firefox webkit chrome
 
       - name: Dependency audit
         run: npm audit
@@ -73,6 +73,9 @@ jobs:
         env:
           FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-98d4910
         run: npm run test:e2e:mock
+
+      - name: Native BFCache browser acceptance
+        run: npm run test:e2e:bfcache
 
       - name: Retain browser diagnostics
         if: always()
