@@ -17,8 +17,9 @@
 
 Полный `e2e/owned-state.spec.ts` прошёл **42/42** на семи desktop/mobile/PWA
 профилях, проблемный Firefox сценарий — **10/10** повторов. `npm run typecheck`,
-полный `npm run test:unit` (**1466/1466**) и `git diff --check` прошли. Fix ещё
-локальный; точный CI нового SHA будет запущен после публикации.
+полный `npm run test:unit` (**1466/1466**) и `git diff --check` прошли. Fix
+опубликован в `5f92da1`; точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+прошёл audit, guards, unit, typecheck и build и сейчас выполняет browser matrix.
 
 ## P0.4 — поздний profile ack не завершает операцию новой сессии, [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33), 20.10.2026
 
@@ -32,8 +33,8 @@ session. Пока он ожидает, другая вкладка повтор�
 mock API acceptance; production-код не менялся.
 
 CI #1822 проверял предыдущий SHA `e33fb78`; он завершился одной ошибкой в
-Council history, которая разобрана в верхней записи. Этот коммит в run не входит;
-точный follow-up CI будет запущен после push.
+Council history, которая разобрана в верхней записи. Этот коммит проверяется в
+follow-up CI #1823.
 
 ## P0.5 — сравнение и архив прогресса не экспортируют PDF из старой сессии, [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0), 20.10.2026
 
@@ -47,8 +48,8 @@ desktop/mobile/PWA проектах (`workers=2,retries=0`). Короткий и
 `git diff --check` прошли. Production-код не менялся; используется mock API.
 
 CI #1822 для предыдущего удалённого SHA `e33fb78` завершился одной ошибкой в
-Council history, которая разобрана в верхней записи. Этот коммит в run не входит;
-точный follow-up CI будет запущен после push.
+Council history, которая разобрана в верхней записи. Этот коммит проверяется в
+follow-up CI #1823.
 
 ## P0.5 — убрать последнее исключение WebKit при переключении аккаунта, 20.10.2026
 

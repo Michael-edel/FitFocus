@@ -7,9 +7,9 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Удалённый HEAD PR #93 — `e33fb7880f5bf4946abef4f2d91e3c2d0bef5d13`.
+Удалённый HEAD PR #93 — `5f92da16632b27b5bace86783757748f42764188`.
 Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-завершился: audit, guards, unit, три typecheck и build прошли; browser matrix —
+для предыдущего SHA завершился: audit, guards, unit, три typecheck и build прошли; browser matrix —
 1584 passed / 67 skipped / 1 failed. Единственный отказ — Firefox E2E
 `owned-state.spec.ts`: очистка истории была доступна до передачи в экран признака
 готовой сессии и молча ничего не делала. Локальный follow-up
@@ -17,7 +17,9 @@
 этот признак через `App.tsx` и отключает кнопку до подтверждения login guard;
 тест теперь доказывает, что инъекция quota failure действительно сработала. Полный
 `owned-state` прошёл 42/42 на семи профилях, проблемный Firefox сценарий — 10/10,
-typecheck и полный unit suite — 1466/1466. Этот follow-up ещё не опубликован.
+typecheck и полный unit suite — 1466/1466. Исправление опубликовано; новый
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+прошёл все проверки до browser matrix и сейчас выполняет её.
 Предыдущий точный
 [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
 завершился с 1568 browser tests passed, 67 skipped и 3 failed. Диагностика
@@ -37,8 +39,8 @@ failure-only диагностика добавлена в `44b6356`.
 добавляет same-account reauthentication E2E для PDF сравнения замеров и архива
 прогресса. Обе проверки прошли на всех семи desktop/mobile/PWA проектах без
 retries (14/14); root typecheck, admin guards, PDF unit tests (6/6) и
-`git diff --check` прошли. Эти тесты не входили в CI #1822; follow-up теперь
-будет проверен отдельным точным workflow.
+`git diff --check` прошли. Эти тесты не входили в CI #1822, но входят в
+опубликованный SHA `5f92da1`, который сейчас проверяется в CI #1823.
 
 Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
 точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
@@ -753,7 +755,7 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Browser acceptance прошёл 7/7 профилей без retries; профильный unit — 9/9,
     root typecheck и diff check прошли. Тест [`9315e33`](https://github.com/Michael-edel/FitFocus/commit/9315e33);
     CI #1822 для предшествующего SHA завершился одной несвязанной ошибкой в Council history;
-    точный CI follow-up ожидает публикации.
+    follow-up опубликован в `5f92da1`; точный CI #1823 выполняет browser matrix.
   - [x] Привязать содержимое root overlays и черновик регистрации к владельцу:
     фоторазбор, редактор блюда, камера, scanning status, меню, paywall,
     profile-sync/adaptation notices и медицинские данные формы регистрации не
@@ -1190,7 +1192,7 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     desktop/mobile/PWA профилях (`workers=1,retries=0`). Unit guard покрывает
     все пять экспортёров (6/6). Сравнение и архив добавлены в [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0);
     root typecheck и diff check прошли. Production-код не менялся; exact CI этого
-    follow-up ожидает публикации после завершившегося run #1822.
+    follow-up опубликован в `5f92da1` и проверяется в CI #1823.
   - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
     устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
     idle-страница не удерживает listener. Недельный отчёт оставляет уже
