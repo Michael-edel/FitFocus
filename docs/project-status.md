@@ -11,11 +11,12 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Удалённый HEAD Draft PR #93 — `fca954d18f1d6b902a0c5f3c3641934a317ed2a6`.
-Точный [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-завершился с 1568 browser tests passed, 67 skipped и 3 failed; dependency audit,
-guards, unit tests, три typecheck и production build прошли. Run #1819 был
-отменён следующим push из-за настройки `cancel-in-progress: true`.
+Удалённый HEAD Draft PR #93 — `e33fb7880f5bf4946abef4f2d91e3c2d0bef5d13`.
+Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+ещё выполняет browser matrix; dependency audit, guards, unit tests, три typecheck
+и production build прошли. Предыдущий [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
+завершился с 1568 browser tests passed, 67 skipped и 3 failed. Все три отказа
+исправлены и опубликованы в `e33fb78`; текущий workflow проверяет точный этот SHA.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA
@@ -37,14 +38,19 @@ family-menu E2E отфильтровывает только не более дв
 сообщений, сохраняя остальные ошибки. Fence unit прошёл 11/11; объединённая
 матрица затронутых сценариев прошла 8/8 и 24/24 (`workers=2,retries=0`) на
 Android Chrome и iPhone Safari. Три typecheck, admin guards и `git diff --check`
-прошли. Этот follow-up ещё не опубликован и требует точного CI.
+прошли. Исправления опубликованы в `e33fb78`; точный CI #1822 пока выполняется.
 
-Локальный коммит [`5cfb820`](https://github.com/Michael-edel/FitFocus/commit/5cfb8200691ba6ba6bf482cd5c448d6b29c4f1a9)
-добавляет две browser-проверки state outbox: поздний ответ A после входа B и
-после повторного входа A с новой server session. Каждая прошла 7/7
-desktop/mobile/PWA профилей без retries; root typecheck и `git diff --check`
-прошли. Коммит пока не опубликован и не входит в CI #1820; его exact CI запустится
-после push исправлений.
+Коммит [`5cfb820`](https://github.com/Michael-edel/FitFocus/commit/5cfb8200691ba6ba6bf482cd5c448d6b29c4f1a9)
+добавил две browser-проверки state outbox: поздний ответ A после входа B и после
+повторного входа A с новой server session. Каждая прошла 7/7 desktop/mobile/PWA
+профилей без retries; оба сценария вошли в `e33fb78` и проверяются в CI #1822.
+
+Локальный коммит [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0)
+добавляет same-account reauthentication acceptance для PDF сравнения замеров и
+архива прогресса. Оба сценария прошли 14/14 на семи desktop/mobile/PWA профилях
+(`workers=2,retries=0`); root typecheck, admin guards, профильные PDF unit tests
+6/6 и `git diff --check` прошли. Это mock API-проверка, production-код не менялся.
+Коммит не входит в CI #1822; точный workflow запустится после публикации.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный
@@ -106,15 +112,13 @@ diff check прошли. Production-код не менялся; точный CI 
 desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
 Production-код не менялся; точный CI этой ревизии проверяется после push.
 
-Для P0.5 проверяется same-account reauthentication во время экспорта краткого и
-подробного PDF: запрос шрифта удерживается, затем тот же аккаунт входит с новым
-SID. Старый экспорт не скачивает файл и не вызывает achievement check. Краткий
-PDF прошёл 7/7; новый подробный PDF прошёл 7/7 desktop/mobile/PWA профилей при
-`workers=1,retries=0`. Прямые unit-проверки session guard теперь покрывают все
-пять PDF-экспортёров: 6/6 тестов, включая успешный экспорт при текущей сессии.
-`npm run typecheck` прошёл. Production-код не менялся. CI #1811 проверяет SHA
-`87171fe` и не включает новые unit cases; полный exact CI объединённого SHA
-запускается после публикации.
+P0.5 same-account reauthentication acceptance теперь покрывает четыре browser
+экспорта: краткий и подробный health report, сравнение замеров и архив прогресса.
+Во всех случаях запрос шрифта удерживается до принятия новой session epoch, после
+чего старый экспорт не скачивает файл. Browser matrix прошла 28/28 по семи
+desktop/mobile/PWA профилям (`workers=1,retries=0`); прямой unit guard покрывает
+пять экспортёров (6/6). Сравнение и архив добавлены в [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0);
+production-код не менялся. Его точный CI ещё не запущен.
 
 В Safari reload acceptance уточнён источник исторической ошибки CI #1603 по
 сохранённому trace: предупреждение `/api/ai` пришло от отдельного фонового

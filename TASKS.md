@@ -7,26 +7,29 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Удалённый HEAD PR #93 — `fca954d18f1d6b902a0c5f3c3641934a317ed2a6`.
-Точный [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-для этого SHA завершился с 1568 browser tests passed, 67 skipped и 3 failed;
-audit, guards, unit, три typecheck и build прошли. Failure-only диагностика
-writer fence показала: после reload текущая страница видела Service Worker в
-`activating`, хотя его ответ содержал полный proof с обоими клиентами текущего
-build; migration gate оставался закрыт. Два остальных отказа были гонкой
-снимка в photo-analysis E2E (profile operation ещё `sending`) и ожидаемыми
-Safari GET-abort console errors при reload. Локально исправлены fence-проверка,
-ожидание стабильного durable snapshot и фильтр только ограниченного набора
-stale GET ошибок. Unit fence — 11/11; затронутые browser сценарии — 8/8 и затем
-24/24 (`android-chrome`, `iphone-safari`, `workers=2,retries=0`). Новый exact CI
-ожидает публикации исправлений.
+Удалённый HEAD PR #93 — `e33fb7880f5bf4946abef4f2d91e3c2d0bef5d13`.
+Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+для этого SHA ещё выполняется: audit, guards, unit, три typecheck и build прошли;
+browser matrix остаётся активной. Предыдущий точный
+[CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
+завершился с 1568 browser tests passed, 67 skipped и 3 failed. Диагностика
+показала полный ответ Service Worker fence при состоянии контроллера `activating`,
+гонку раннего E2E-снимка с profile operation в статусе `sending` и два Safari
+GET-abort console errors при reload. Все три отказа исправлены в `e33fb78`;
+затронутые browser сценарии прошли локально 24/24 (`workers=2,retries=0`). Новый
+CI проверяет опубликованное исправление.
 Предыдущий CI #1817 выявил тот же тип writer-fence timeout на iPhone PWA;
 failure-only диагностика добавлена в `44b6356`.
 Документационный push `fca954d` отменил предыдущий run #1819 по concurrency.
 Два E2E для позднего `/api/state` ответа после смены аккаунта и reauthentication
-добавлены локально; каждый прошёл 7/7 desktop/mobile/PWA профилей без retries.
-Они ещё не входят в удалённый HEAD и требуют точного CI после безопасной
-публикации.
+вошли в `e33fb78` и проверяются в CI #1822.
+
+Локальный коммит [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0)
+добавляет same-account reauthentication E2E для PDF сравнения замеров и архива
+прогресса. Обе проверки прошли на всех семи desktop/mobile/PWA проектах без
+retries (14/14); root typecheck, admin guards, PDF unit tests (6/6) и
+`git diff --check` прошли. Эти тесты не входят в CI #1822; публикация ожидает
+его завершения, чтобы не отменить текущий run настройкой concurrency.
 
 Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
 точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
@@ -1165,11 +1168,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   - [x] Поздний `GET /api/profile` старой сессии после same-account
     reauthentication не перезаписывает значение, сохранённое текущей сессией;
     тот же тест проходит 7/7 desktop/mobile/PWA профилей без retries.
-  - [x] Краткий и подробный PDF не скачиваются, если во время загрузки шрифта
-    тот же аккаунт получает новую server session. Browser acceptance прошёл
-    14/14 суммарно на desktop/mobile/PWA профилях (`workers=1,retries=0`).
-    Unit guard также проверен для всех пяти экспортёров; 6/6 PDF tests и root
-    typecheck прошли. Production-код не менялся.
+  - [x] Четыре PDF-экспорта не скачиваются, если во время загрузки шрифта тот
+    же аккаунт получает новую server session: краткий и подробный отчёты,
+    сравнение замеров и архив прогресса прошли суммарно 28/28 на семи
+    desktop/mobile/PWA профилях (`workers=1,retries=0`). Unit guard покрывает
+    все пять экспортёров (6/6). Сравнение и архив добавлены в [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0);
+    root typecheck и diff check прошли. Production-код не менялся; exact CI этого
+    follow-up ожидает публикации после завершения run #1822.
   - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
     устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
     idle-страница не удерживает listener. Недельный отчёт оставляет уже

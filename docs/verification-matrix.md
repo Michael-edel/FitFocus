@@ -4,16 +4,20 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Текущая удалённая ревизия PR #93 — `fca954d`; её точный
-[CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
-прошёл статические проверки, но завершился с 1568 browser tests passed, 67
-skipped и 3 failed. Локальный follow-up
-`5cfb820` добавляет два state-outbox сценария переключения аккаунта и
-reauthentication; оба прошли 7/7 профилей без retries, но не входят в этот CI.
-Исправления трёх точных отказов #1820 прошли локально: fence unit 11/11, целевые
-browser проверки 8/8 и stress rerun 24/24 по Android Chrome/iPhone Safari при
-`workers=2,retries=0`; все три typecheck и admin guards прошли. Исправления и
-сценарии не входят в удалённый SHA; exact CI нового SHA ожидает push.
+Текущая удалённая ревизия PR #93 — `e33fb78`; точный
+[CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+ещё выполняет browser matrix, остальные шаги прошли. Предыдущий CI #1820
+завершился с 1568 browser tests passed, 67 skipped и 3 failed; эти отказы
+исправлены и опубликованы в `e33fb78`. Два state-outbox сценария позднего ответа
+после account switch и same-account reauthentication из `5cfb820` входят в этот
+run.
+
+Локальный коммит [`75b59b0`](https://github.com/Michael-edel/FitFocus/commit/75b59b0)
+покрывает same-account reauthentication во время PDF сравнения замеров и архива
+прогресса. Вместе с коротким и подробным отчётами все четыре browser acceptance
+прошли 28/28 по семи desktop/mobile/PWA профилям без retries; unit guard пяти
+экспортёров — 6/6, root typecheck и diff check прошли. `75b59b0` не входит в
+CI #1822; его точный workflow будет проверен после публикации.
 
 Точный PR CI #1618 для опубликованного `66e8c19` завершился success, включая
 browser mock matrix и rollback/CAS gate. Локальный follow-up `1271dfe` проверяет
