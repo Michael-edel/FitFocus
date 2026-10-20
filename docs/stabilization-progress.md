@@ -7969,3 +7969,12 @@ desktop/mobile/PWA профилей при `workers=1,retries=0`; `npm run typec
 совокупно на семи desktop/mobile/PWA профилях при `workers=1,retries=0`;
 `npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
 точный CI этого follow-up запускается после публикации.
+
+## P0.4/P0.5 — profile refresh после same-account reauthentication, 20.10.2026
+
+Добавлена browser acceptance для удержанного `GET /api/profile` старой server
+session. После повторного входа того же аккаунта с новым SID профиль меняется и
+сохраняется из текущей сессии; освобождённый старый ответ не заменяет значение в
+IndexedDB или поле настроек. Проверка прошла 7/7 desktop/mobile/PWA профилей при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся; точный CI этой ревизии проверяется после push.

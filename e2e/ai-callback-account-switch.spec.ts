@@ -4372,6 +4372,97 @@ test('a late profile refresh from account A cannot hydrate after account B signs
   }
 });
 
+test('a late profile refresh from a retired same-account session cannot replace the profile after reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [], reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  let started!: () => void;
+  const refreshStarted = new Promise<void>(resolve => { started = resolve; });
+  const releaseRefresh = deferred();
+  state.holdProfileRead = {
+    active: true,
+    started,
+    wait: releaseRefresh.promise,
+    profile: { ...state.profile },
+  };
+
+  try {
+    await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+    await refreshStarted;
+
+    const reauthenticated = { id: accountA.id, sid: '8'.repeat(64) };
+    const currentProfileName = 'Профиль новой сессии A';
+    state.current = reauthenticated;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#settings');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    const currentSession = await readDurableSnapshot(reauthenticatedPage);
+    expect(currentSession.activeSession?.accountId).toBe(accountA.id);
+    expect(currentSession.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    const currentProfileValue = rawValue(currentSession, profileKey(accountA.id));
+    expect(currentProfileValue).not.toBeNull();
+    expect(JSON.parse(currentProfileValue!).name).toBe('Профиль A');
+    const currentProfileInput = reauthenticatedPage.getByPlaceholder('Как к вам обращаться');
+    await expect(currentProfileInput).toHaveValue('Профиль A');
+    await currentProfileInput.fill(currentProfileName);
+    await reauthenticatedPage.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
+    await expect.poll(async () => {
+      const value = rawValue(await readDurableSnapshot(reauthenticatedPage), profileKey(accountA.id));
+      return value ? JSON.parse(value).name : null;
+    }).toBe(currentProfileName);
+    await expect(currentProfileInput).toHaveValue(currentProfileName);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    const lateProfileResponse = page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/profile'
+      && response.request().method() === 'GET'
+      && response.request().headers()['x-fitfocus-state-session'] === accountA.sid);
+    releaseRefresh.release();
+    const response = await lateProfileResponse;
+    expect(response.status()).toBe(200);
+    expect(response.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(response.headers()['x-fitfocus-state-session']).toBe(accountA.sid);
+    expect((await response.json()).profile.name).toBe('Профиль A');
+
+    const afterLateResponse = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterLateResponse.activeSession?.accountId).toBe(accountA.id);
+    expect(afterLateResponse.activeSession?.serverSessionId).toBe(reauthenticated.sid);
+    expect(JSON.parse(rawValue(afterLateResponse, profileKey(accountA.id))!).name).toBe(currentProfileName);
+    expect(operationsFor(afterLateResponse, accountA)).toEqual([]);
+    await expect(currentProfileInput).toHaveValue(currentProfileName);
+    await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+    await expect(reauthenticatedPage.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+    expect(rawValue(afterLateResponse, profileKey(accountA.id))).not.toBe(profileBefore);
+    expect(errors).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+    await reauthenticatedPage.screenshot({ path: info.outputPath('late-profile-refresh-same-account-reauth.png') });
+  } finally {
+    releaseRefresh.release();
+  }
+});
+
 test('pending account A outbox resumes after reload with the same operation and a fresh session', async ({ page }, info) => {
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];

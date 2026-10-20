@@ -696,6 +696,11 @@ P0.1 остаётся открытым до интеграции в GitHub main;
 - [x] В этих путях не заменять локальный снимок и не менять baseVersion только потому,
   что пришла более новая облачная версия.
 - [ ] Проверить остальные cloud callbacks и cache приложения по тем же гарантиям.
+  - [x] Удержанный `GET /api/profile` старой сессии не заменяет профиль,
+    сохранённый после повторного входа того же аккаунта с новым SID. Browser
+    acceptance прошёл 7/7 desktop/mobile/PWA профилей (`workers=1,retries=0`);
+    root typecheck и diff check прошли. Production-код не менялся; общий пункт
+    остаётся открытым для остальных callbacks и cache.
   - [x] Привязать содержимое root overlays и черновик регистрации к владельцу:
     фоторазбор, редактор блюда, камера, scanning status, меню, paywall,
     profile-sync/adaptation notices и медицинские данные формы регистрации не
@@ -1123,6 +1128,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   `3abb374` вводит обязательный серверный proof для всех `/api/state` и
   `/api/profile` handlers; `4edeb0a` закрыл такой же legacy-путь в
   `GET /api/export`, а `a396a30` добавил proof для чтения вложений поддержки.
+  - [x] Поздний `GET /api/profile` старой сессии после same-account
+    reauthentication не перезаписывает значение, сохранённое текущей сессией;
+    тот же тест проходит 7/7 desktop/mobile/PWA профилей без retries.
   - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
     устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
     idle-страница не удерживает listener. Недельный отчёт оставляет уже
