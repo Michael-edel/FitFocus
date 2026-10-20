@@ -2785,6 +2785,60 @@ test('an open food insight from account A is hidden after another tab activates 
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
+test('an open food insight and editor from a retired session are hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'meal.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Корректировать', exact: true }).click();
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const diaryBefore = rawValue(beforeReauthentication, diaryKey(accountA.id));
+
+  const renewedAccountA = { id: accountA.id, sid: 'b'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#nutrition');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+  expect(rawValue(afterReauthentication, diaryKey(accountA.id))).toBe(diaryBefore);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Корректировать блюдо', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-food-insight-hidden.png') });
+});
+
 test('an open camera dialog from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   test.skip(!info.project.name.startsWith('desktop-'), 'Mobile profiles use a native capture input instead of the in-app camera dialog.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
