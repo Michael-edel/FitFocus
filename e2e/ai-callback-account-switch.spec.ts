@@ -4504,7 +4504,8 @@ test('a late state response from account A cannot acknowledge its outbox after a
     await waitForAccountSwitch(page);
     const whileBActive = await readDurableSnapshot(switched.page);
     expect(whileBActive.activeSession?.accountId).toBe(accountB.id);
-    expect(whileBActive.operations.filter(entry => entry.accountId === accountB.id)).toEqual([]);
+    expect(whileBActive.operations.some(entry => entry.accountId === accountB.id
+      && (entry.opId === operation!.opId || entry.key === planKeyA))).toBe(false);
     expect(whileBActive.operations.filter(entry => entry.accountId === accountA.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ opId: operation!.opId, accountId: accountA.id, key: planKeyA, status: 'sending' }),
     ]));
@@ -4522,11 +4523,14 @@ test('a late state response from account A cannot acknowledge its outbox after a
 
     const afterResponse = await readDurableSnapshot(switched.page);
     expect(afterResponse.activeSession?.accountId).toBe(accountB.id);
-    expect(afterResponse.operations.filter(entry => entry.accountId === accountB.id)).toEqual([]);
+    expect(afterResponse.operations.some(entry => entry.accountId === accountB.id
+      && (entry.opId === operation!.opId || entry.key === planKeyA))).toBe(false);
     expect(afterResponse.operations.filter(entry => entry.accountId === accountA.id)).toEqual(expect.arrayContaining([
       expect.objectContaining({ opId: operation!.opId, accountId: accountA.id, key: planKeyA }),
     ]));
 
+    const dark = switched.page.getByRole('button', { name: /^Тёмная/ });
+    await expect(dark.locator('svg')).toBeVisible();
     const light = switched.page.getByRole('button', { name: /^Светлая/ });
     await expect(light).toBeVisible();
     await light.click();

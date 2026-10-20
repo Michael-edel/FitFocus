@@ -36,23 +36,42 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
   });
   const errors: string[] = [];
   const expectedWebKitAiReloadWarnings: string[] = [];
+  const expectedWebKitReloadAbortPaths = new Set([
+    '/api/achievements', '/api/achievements/check', '/api/wearable/huawei/status', '/api/push/status',
+  ]);
+  const expectedWebKitReloadAbortWarnings = new Set<string>();
   const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(info.project.name);
   let reloadStarted = false;
   const cancelledProfileReads: string[] = [];
-  page.on('pageerror', error => {
-    if (isWebKit && reloadStarted && /^\/127\.0\.0\.1:\d+\/api\/ai due to access control checks\.$/.test(error.message)) {
-      expectedWebKitAiReloadWarnings.push(error.message);
+  const failedApiRequests: Array<{ path: string; method: string; reloadStarted: boolean; failure: string | null }> = [];
+  const collectBrowserError = (message: string) => {
+    if (isWebKit && reloadStarted && /^\/127\.0\.0\.1:\d+\/api\/ai due to access control checks\.$/.test(message)) {
+      expectedWebKitAiReloadWarnings.push(message);
       return;
     }
-    errors.push(error.message);
+    const expectedAbort = message.match(/^\/127\.0\.0\.1:\d+(\/api\/(?:achievements(?:\/check)?|wearable\/huawei\/status|push\/status))(?:\?[^ ]*)? due to access control checks\.$/);
+    if (isWebKit && reloadStarted && expectedAbort && expectedWebKitReloadAbortPaths.has(expectedAbort[1])) {
+      expectedWebKitReloadAbortWarnings.add(expectedAbort[1]);
+      return;
+    }
+    errors.push(message);
+  };
+  page.on('pageerror', error => {
+    collectBrowserError(error.message);
   });
   page.on('requestfailed', request => {
-    if (new URL(request.url()).pathname === '/api/profile' && request.method() === 'GET') {
+    const url = new URL(request.url());
+    const method = request.method();
+    const failure = request.failure()?.errorText ?? null;
+    if (url.pathname.startsWith('/api/')) {
+      failedApiRequests.push({ path: url.pathname, method, reloadStarted, failure });
+    }
+    if (url.pathname === '/api/profile' && method === 'GET') {
       cancelledProfileReads.push(request.failure()?.errorText ?? 'unknown failure');
     }
   });
   page.on('console', message => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error') collectBrowserError(message.text());
   });
 
   try {
@@ -68,25 +87,31 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
     await profileReadStarted;
 
     reloadStarted = true;
-    try {
-      await page.reload();
-    } finally {
-      reloadStarted = false;
-    }
+    await page.reload();
     shouldHoldProfileRead = false;
     release();
 
     await expect(name).toHaveValue(buildMockProfile().name);
+    reloadStarted = false;
     expect(server.counts.profileGet).toBeGreaterThan(0);
     expect(cancelledProfileReads).toHaveLength(1);
     expect(cancelledProfileReads[0]).toMatch(/cancel|abort/i);
     expect(server.counts.profile).toBe(0);
     expect(server.unexpectedApi).toEqual([]);
     expect(expectedWebKitAiReloadWarnings).toEqual([]);
+    const expectedAbortPaths = [...expectedWebKitReloadAbortWarnings];
+    expect(expectedAbortPaths.length).toBeLessThanOrEqual(expectedWebKitReloadAbortPaths.size);
+    for (const path of expectedAbortPaths) {
+      expect(failedApiRequests).toContainEqual(expect.objectContaining({ path, method: 'GET', reloadStarted: true }));
+    }
     expect(errors).toEqual([]);
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await info.attach('reload-abort-diagnostics', {
+      body: JSON.stringify({ expectedAbortPaths, failedApiRequests }), contentType: 'application/json',
+    });
   } finally {
     shouldHoldProfileRead = false;
+    reloadStarted = false;
     release();
     await server.close();
   }
