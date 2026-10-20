@@ -11,15 +11,19 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Опубликованный HEAD draft PR #93 —
-`13f425d1636dadb29d107dbe7e38acdfdcac4137`; последний code-bearing commit
+Последняя проверенная ревизия тестового follow-up draft PR #93 —
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`; последний production-code commit
 `16305bedbee49fdeb611fa69e9c0ad9625bf7b91` добавляет отдельную проверку
 реального Chrome BFCache: браузер должен восстановить сохранённый документ с
 `pageshow.persisted=true`, после чего FitFocus повторно запрашивает `/api/env`.
 Проверка прошла 1/1 локально в Chrome; обычные lifecycle E2E — 2/2, root
-typecheck и `git diff --check` прошли. CI #1829 для code-bearing commit завершился
-success. CI #1831 проверяет прежний опубликованный HEAD `13f425d` и не включает
-новый Firefox diagnostic follow-up; ему требуется точный CI.
+typecheck и `git diff --check` прошли. CI #1829 для production-code commit
+завершился success. Точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для ревизии `58f4d30` завершился success: 1469 unit tests / 216 файлов,
+1627 browser passed / 74 skipped, native Chrome BFCache — 1/1, rollback/CAS
+HTTP — 23/23; audit, guards, три typecheck и build прошли. Сохранены
+[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
 
 Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 для этого SHA завершился success: **1627 browser passed / 74 skipped**, native
@@ -43,8 +47,11 @@ probe, но не объясняет задержку Firefox и не доказ�
 Локальное тестовое изменение повторно использует connection приложения и
 завершается понятной ошибкой, если connection не захвачен. Целевые повторы прошли
 3/3, полный `pwa-update.spec.ts` — 10 passed / 4 skipped без retries, typecheck
-прошёл. Точный CI нового Firefox diagnostic follow-up ещё требуется; P0.9
-остаётся открытым.
+прошёл. Точный CI #1832 завершился success: полная browser matrix прошла
+1627/1627 без отказов (74 явных skip); native BFCache — 1/1. Это подтверждает
+follow-up на текущем SHA, но не устанавливает первопричину прежней задержки
+Firefox. P0.9 остаётся открытым до завершения остальных lifecycle, staging и
+release критериев.
 
 Предыдущий follow-up `a560c6c` связывает точное WebKit reload warning с тем же
 GET `/api/me`, который начался до reload и завершился abort/cancel; прочие
@@ -52,9 +59,10 @@ CORS/network ошибки остаются отказами. Его регрес
 и 3/3 на desktop WebKit, iPhone Safari и iPhone PWA. Код и заметка о CI 1827
 опубликованы коммитом `8664786`; старый CI не подтверждает текущий SHA.
 
-Branch preview `fix-durable-outbox` на кодовой ревизии `1ea3f72` прошёл read-only
+Branch preview `fix-durable-outbox` на кодовой ревизии `58f4d30` прошёл read-only
 smoke: **8/8 GET-only** проверок, Service Worker активен, а
-`/assets/index-DlluKGhC.js` содержит полный SHA `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`.
+`/assets/index-6mWogxmq.js` содержит полный SHA
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`.
 Изолированный staging, авторизованные запросы, OAuth и D1 этой проверкой не
 подтверждены.
 

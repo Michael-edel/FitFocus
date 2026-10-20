@@ -8309,6 +8309,21 @@ PWA update acceptance теперь требует захвата connection у �
 до чтения состояния. Это test-only изменение, production-код не затронут.
 Сценарий прошёл **3/3** целевых повторов desktop Firefox; полная
 `pwa-update.spec.ts` — **10 passed / 4 skipped** без retries. `npm run typecheck`
-и `git diff --check` прошли. Follow-up подготовлен поверх `13f425d`; его должен
-подтвердить точный CI. Историческая причина stall не доказана, поэтому P0.9
-остаётся открыт.
+и `git diff --check` прошли. Точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для `58f4d30` завершился success: audit, guards, 1469 unit tests / 216 файлов,
+три typecheck, build, browser matrix **1627 passed / 74 skipped**, native Chrome
+BFCache **1/1**, rollback/CAS HTTP **23/23**. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
+Историческая причина stall не доказана, поэтому P0.9 остаётся открыт.
+
+## P0.9 — GET-only branch-preview smoke на текущем SHA, 21.10.2026
+
+Публичный branch preview `https://fix-durable-outbox.fitfocus.pages.dev/`
+проверен командой `npm run test:e2e:staging`: **8/8 GET-only** сценариев.
+Документ, `/api/env` и анонимный `/api/me` ответили 200; защищённые bootstrap,
+profile, state и push/status — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload. Bundle
+`/assets/index-6mWogxmq.js` содержит точный SHA
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`. Это подтверждает только branch
+preview и анонимное поведение; отдельный staging, OAuth, D1 и авторизованные
+записи не проверялись.

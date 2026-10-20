@@ -7,15 +7,24 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Опубликованный HEAD Draft PR #93 —
-`16305bedbee49fdeb611fa69e9c0ad9625bf7b91`. Точный
+Последняя проверенная ревизия тестового follow-up в Draft PR #93 —
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`. Точный
+[CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для этого SHA завершился success: 1469 unit tests / 216 файлов, audit,
+schema/privacy/auth/API guards, три typecheck и build; browser matrix —
+1627 passed / 74 skipped, native Chrome BFCache — 1/1, rollback/CAS HTTP —
+23/23. Артефакты: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
+Локально Firefox PWA recheck прошёл 3/3, вся `pwa-update.spec.ts` — 10 passed /
+4 skipped без retries. Предыдущий CI #1831 отменён concurrency policy после
+продвижения PR-ветки.
+Более ранний точный
 [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
-для него завершился success: 1627 browser passed / 74 skipped, native Chrome
-BFCache — 1/1, rollback/CAS HTTP — 23/23; audit, guards, unit, три typecheck,
-build и сохранение артефактов также прошли. Артефакты: [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12292299978)
+на code-bearing commit `16305bedbee49fdeb611fa69e9c0ad9625bf7b91` завершился
+success: 1627 browser passed / 74 skipped, native Chrome BFCache — 1/1,
+rollback/CAS HTTP — 23/23, audit, guards, unit, три typecheck и build прошли.
+Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12292299978)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016/artifacts/12293138406).
-После обновления ветки предыдущий run #1828 отменён concurrency policy.
-Локально Chrome BFCache acceptance прошёл 1/1, обычный lifecycle E2E — 2/2.
 
 Предыдущий точный
 [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
@@ -28,12 +37,12 @@ snapshot теста ожидали пустую очередь B, хотя B н�
 принимает только точные reload warnings, совпавшие с failed GET; локальные
 сценарии прошли 7/7 и 3/3 без retries.
 
-Локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
+Follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e)
 повторно проверяет исходную сессию перед alert о позднем HTTP/network отказе
 удаления аккаунта. Дефект воспроизведён на 7/7 browser-профилях; после фикса
 сценарии успешного удаления и позднего отказа прошли 14/14, целевой unit —
-10/10, полный unit — 1469/1469, typecheck и diff check прошли. Коммит ещё не
-опубликован; CI для `b5a493e` ожидает публикации после завершения #1824.
+10/10, полный unit — 1469/1469. Исправление опубликовано в `030e10e` и входит
+в CI #1829 и последующие ревизии.
 
 Ранее точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
 для предыдущего SHA завершился с 1584 passed / 67 skipped / 1 failed. Отказ
@@ -60,16 +69,18 @@ failure-only диагностика добавлена в `44b6356`.
 добавляет same-account reauthentication E2E для PDF сравнения замеров и архива
 прогресса. Обе проверки прошли на всех семи desktop/mobile/PWA проектах без
 retries (14/14); root typecheck, admin guards, PDF unit tests (6/6) и
-`git diff --check` прошли. Эти тесты не входили в CI #1822, но входят в
-опубликованный SHA `5f92da1`, который сейчас проверяется в CI #1823.
+`git diff --check` прошли. Эти тесты вошли в опубликованный SHA `5f92da1`;
+CI #1823 для него завершился тремя E2E сбоями, разобранными выше. Последующие
+исправления вошли в текущую ветку и проверяются в CI #1832.
 
-Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
-точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
+Проверенный branch preview `https://fix-durable-outbox.fitfocus.pages.dev/`
+отдавал bundle с точным SHA проверенной ревизии
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`.
+Read-only preview suite прошёл **8/8 GET-only** проверок:
 публичные маршруты отвечают 200, закрытые API — 401 без redirect/cookie;
 Service Worker активируется, scope `/`, после reload контролирует страницу.
-Это preview, а не отдельная staging-среда; OAuth, D1 и авторизованные записи не
-подтверждены. `npm run typecheck` и `git diff --check` для локального follow-up
-прошли.
+Загруженный `/assets/index-6mWogxmq.js` содержит тот же полный SHA. Это preview,
+а не отдельная staging-среда; OAuth, D1 и авторизованные записи не подтверждены.
 
 PR #90 остаётся открыт; одобряющего review пока нет. Вы подтвердили, что
 сможете получить необходимое одобрение. Требование защищённой `main` пока не
@@ -230,7 +241,7 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
-  Branch preview текущего SHA `045f934` подтверждён: GET-only smoke 8/8,
+  Branch preview текущего SHA `58f4d30` подтверждён: GET-only smoke 8/8,
   загруженный bundle содержит полный SHA, а Service Worker активируется и
   контролирует страницу; отдельный staging, D1, APP_URL, OAuth и реальные
   edge-правила остаются непроверенными.
@@ -2364,17 +2375,19 @@ legacy-ключ не используется для новой очереди �
 
 ### P0.9 — приёмка жизненного цикла
 
-- [x] Проверить точный branch preview текущего HEAD `1ea3f7256d855178611776b1a1a0ecbbc0b89d8e`:
-  read-only smoke прошёл 8/8 GET-only проверок, Service Worker активен, основной
-  bundle содержит полный SHA. Это проверка публичного preview, не отдельного
-  staging и не авторизованных интеграций.
-- [ ] Подтвердить точный CI локального follow-up `a560c6c`:
-  CI #1827 на `1ea3f72` завершился с 1626 browser passed / 67 skipped / 1 failed.
-  В iPhone PWA WebKit сообщил об access-control warning для `/api/me` после
-  reload. Follow-up допускает только warning, связанный с тем же GET, начатым
-  до reload и завершившимся abort/cancel; другие ошибки по-прежнему валят тест.
-  Локально: iPhone PWA 10/10, три WebKit профиля 3/3, TypeScript и diff check
-  прошли. Точный CI — следующий gate после публикации.
+- [x] Проверить branch preview для проверенной ревизии
+  `58f4d309f7a8359c4233905cacdb49d6adb6f430`: read-only smoke прошёл 8/8
+  GET-only проверок, Service Worker активен, основной bundle содержит полный
+  SHA. Это проверка публичного preview, не отдельного staging и не авторизованных
+  интеграций.
+- [ ] Завершить точный CI текущего P0.9 follow-up `58f4d30`:
+  [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+  прошёл audit, guards, unit, три typecheck и build; browser matrix ещё выполняется.
+  Локально целевой Firefox сценарий прошёл 3/3, весь `pwa-update.spec.ts` —
+  10 passed / 4 skipped без retries. Исторический CI #1827 на `1ea3f72`
+  завершился с одним WebKit warning после reload; follow-up `a560c6c` связывает
+  допустимый warning с тем же GET `/api/me`, начатым до reload и завершившимся
+  abort/cancel. Этот пункт закрывается только после завершения CI #1832.
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
   - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
     поздний scoped-ответ A не подтверждает операцию A после смены active session;

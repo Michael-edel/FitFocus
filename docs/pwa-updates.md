@@ -225,10 +225,11 @@ Trace из `outputs/pwa-firefox-repeat3-076` удалось разобрать �
 чтения состояния; failure diagnostic helper использует то же правило. Целевые
 Firefox-повторы прошли **3/3**, вся `pwa-update.spec.ts` — **10 passed / 4
 skipped**, без retries; `npm run typecheck` и `git diff --check` прошли.
-Production-код не менялся. Follow-up базируется на опубликованном `13f425d`; его
-должен подтвердить точный CI. P0.9 остаётся открытым, поскольку устранена
-возможность зависнуть на независимом test probe, но первопричина исторической
-задержки не установлена.
+Production-код не менялся. Точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для `58f4d30` завершился success: 1469 unit tests / 216 файлов, 1627 browser
+passed / 74 skipped, native Chrome BFCache 1/1 и rollback/CAS HTTP 23/23; audit,
+guards, три typecheck и build также прошли. Историческая причина прежней задержки
+Firefox не доказана, поэтому P0.9 остаётся открытым.
 
 На рабочей ветке `47da77c` desktop Firefox сценарий дополнительно прошёл
 3/3 и 8/8 с IDB-логами (`workers=1/retries=0`). Для сравнения без влияния
