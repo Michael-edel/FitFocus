@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Route } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
@@ -22,7 +22,12 @@ function headers(account: typeof accountA) {
   };
 }
 
-async function installIdentityApi(page: Page, account: typeof accountA, existingProfile = false) {
+async function installIdentityApi(
+  page: Page,
+  account: typeof accountA,
+  existingProfile = false,
+  options: { onAccountDelete?: (route: Route) => Promise<void>; logoutCalls?: string[] } = {},
+) {
   await mockApp(page, { session: 'app' });
   const profile = existingProfile
     ? { ...buildMockProfile(), id: account.id, googleSub: account.id, name: 'Профиль B', version: 1 }
@@ -66,7 +71,23 @@ async function installIdentityApi(page: Page, account: typeof accountA, existing
     if (url.pathname === '/api/achievements' || url.pathname === '/api/achievements/check') {
       return json({ enabled: false, catalog: [], unlocked: [], newlyUnlocked: [] });
     }
-    if (url.pathname === '/api/logout') return json({ ok: true });
+    if (url.pathname === '/api/logout') {
+      options.logoutCalls?.push(account.id);
+      return json({ ok: true });
+    }
+    if (url.pathname === '/api/account/delete' && method === 'POST') {
+      if (options.onAccountDelete) return options.onAccountDelete(route);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: {
+          ...headers(account),
+          'X-FitFocus-Account-Delete-Protocol': '1',
+          'X-FitFocus-Account-Delete-Guard': '1',
+        },
+        body: JSON.stringify({ ok: true }),
+      });
+    }
     return route.fallback();
   });
 }
@@ -131,4 +152,56 @@ test('a registration draft is hidden when another tab activates a different Goog
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(accountBPage.locator('vite-error-overlay')).toHaveCount(0);
   await accountBPage.screenshot({ path: info.outputPath('registration-draft-hidden-after-account-switch.png') });
+});
+
+test('a delayed account deletion response clears its owner without logging out the new account', async ({ page, context }) => {
+  let releaseDeleteResponse: () => void = () => {};
+  let markDeleteStarted: () => void = () => {};
+  const deleteStarted = new Promise<void>(resolve => { markDeleteStarted = resolve; });
+  const waitForDeleteResponse = new Promise<void>(resolve => { releaseDeleteResponse = resolve; });
+  let deleteScope: { account?: string; session?: string } = {};
+  const logoutCalls: string[] = [];
+
+  await installIdentityApi(page, accountA, true, {
+    logoutCalls,
+    onAccountDelete: async route => {
+      const requestHeaders = route.request().headers();
+      deleteScope = {
+        account: requestHeaders['x-fitfocus-state-account'],
+        session: requestHeaders['x-fitfocus-state-session'],
+      };
+      markDeleteStarted();
+      await waitForDeleteResponse;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: {
+          ...headers(accountA),
+          'X-FitFocus-Account-Delete-Protocol': '1',
+          'X-FitFocus-Account-Delete-Guard': '1',
+        },
+        body: JSON.stringify({ ok: true }),
+      });
+    },
+  });
+
+  await openApp(page, '/#settings');
+  await expect.poll(() => activeAccount(page)).toBe(accountA.id);
+  const deleteButton = page.getByRole('button', { name: /Удалить аккаунт/ });
+  await expect(deleteButton).toBeVisible();
+  page.on('dialog', async dialog => { await dialog.accept('DELETE'); });
+  await deleteButton.click();
+  await deleteStarted;
+
+  const accountBPage = await context.newPage();
+  await installIdentityApi(accountBPage, accountB, true);
+  await openApp(accountBPage, '/#dashboard');
+  await expect.poll(() => activeAccount(accountBPage)).toBe(accountB.id);
+
+  releaseDeleteResponse();
+
+  await expect.poll(() => activeAccount(page)).toBe(accountB.id);
+  await expect.poll(() => activeAccount(accountBPage)).toBe(accountB.id);
+  expect(deleteScope).toEqual({ account: accountA.id, session: accountA.sid });
+  expect(logoutCalls).toEqual([]);
 });
