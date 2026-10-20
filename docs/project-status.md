@@ -32,12 +32,31 @@ HTTP — 23/23; audit, guards, три typecheck и build прошли. Сохр�
 23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
 
+Документационный follow-up `be3ebe8` записывает результат #1834. Точный
+[CI #1835](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870)
+для этого docs-only SHA завершился success: audit — 0 уязвимостей, schema parity —
+23 миграции / 32 таблицы, privacy coverage — 29 пользовательских таблиц,
+auth/API guards, 1469 unit tests / 216 файлов, три typecheck, build, 1627 browser
+passed / 74 skipped, native BFCache — 1/1 и rollback/CAS HTTP — 23/23.
+Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870/artifacts/12308427637)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870/artifacts/12310035761).
+
 CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
 на docs-only `d1ea3af` завершился отказом `npm audit`: новая умеренная advisory
 [GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
 затрагивает Vite `<=6.4.3`. Исправление повышает прямую dev-зависимость и lockfile
 до Vite `6.4.4`; production-код не затрагивался. Это исправление подтверждено
 полным CI #1834 на `4ed1d27`.
+
+Та же уязвимая версия оставалась в базовом для PR #94 ветвлении PR #90. Чтобы
+слияние prerequisite не вернуло её в `main`, исправление `package.json` и
+`package-lock.json` опубликовано в его ветку коммитом
+[`5786ea1`](https://github.com/Michael-edel/FitFocus/commit/5786ea12376be559c7fa0e210eabfe2ad54bc3e2).
+Точный PR CI [#1837](https://github.com/Michael-edel/FitFocus/actions/runs/39511072023)
+на этот SHA прошёл audit, schema/privacy/auth/API guards, 1469 unit tests / 216
+файлов, три typecheck, build и E2E.
+Дублирующий push run #1836 остановлен обычной concurrency policy. PR #90 не слит:
+GitHub требует одобряющее review.
 
 Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 для этого SHA завершился success: **1627 browser passed / 74 skipped**, native

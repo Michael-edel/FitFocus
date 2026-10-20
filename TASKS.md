@@ -15,6 +15,12 @@
 23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
 
+Документационный HEAD `be3ebe8` прошёл точный
+[CI #1835](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870):
+1469 unit tests / 216 файлов, 1627 browser passed / 74 skipped, native BFCache
+1/1, rollback/CAS HTTP 23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870/artifacts/12308427637)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39510320870/artifacts/12310035761).
+
 Последняя проверенная ревизия тестового follow-up в Draft PR #93 —
 `58f4d309f7a8359c4233905cacdb49d6adb6f430`. Точный
 [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
@@ -100,9 +106,9 @@ PR #90 остаётся открыт; одобряющего review пока н�
 сможете получить необходимое одобрение. Требование защищённой `main` пока не
 выполнено, merge не сделан.
 
-В плане **29 незакрытых пунктов**: 16 в P0, 7 в P1 и 6 в подготовительных и
-компонентных разделах. Ни один P0 не закрыт целиком. Остались другие writers и
-lifecycle callbacks, полная матрица, UI разрешения конфликтов, отдельная
+В плане **28 незакрытых пунктов верхнего уровня**: 16 в P0, 7 в P1 и 5 в
+подготовительных и компонентных разделах. Ни один P0 не закрыт целиком. Остались другие
+writers и lifecycle callbacks, полная матрица, UI разрешения конфликтов, отдельная
 staging-среда с OAuth и D1, совместимость старых/новых bundles, rollback/release
 checklist и интеграция через защищённую `main`.
 
@@ -2394,14 +2400,17 @@ legacy-ключ не используется для новой очереди �
   GET-only проверок, Service Worker активен, основной bundle содержит полный
   SHA. Это проверка публичного preview, не отдельного staging и не авторизованных
   интеграций.
-- [ ] Завершить точный CI текущего P0.9 follow-up `58f4d30`:
+- [x] Завершить точный CI P0.9 follow-up `58f4d30`:
   [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
-  прошёл audit, guards, unit, три typecheck и build; browser matrix ещё выполняется.
-  Локально целевой Firefox сценарий прошёл 3/3, весь `pwa-update.spec.ts` —
-  10 passed / 4 skipped без retries. Исторический CI #1827 на `1ea3f72`
-  завершился с одним WebKit warning после reload; follow-up `a560c6c` связывает
-  допустимый warning с тем же GET `/api/me`, начатым до reload и завершившимся
-  abort/cancel. Этот пункт закрывается только после завершения CI #1832.
+  завершился success: audit, guards, 1469 unit tests / 216 файлов, три typecheck,
+  build, browser matrix 1627 passed / 74 explicit skips, native Chrome BFCache
+  1/1 и rollback/CAS HTTP 23/23. Артефакты диагностики и проверенного rollback
+  сохранены. Локально целевой Firefox сценарий прошёл 3/3, весь
+  `pwa-update.spec.ts` — 10 passed / 4 skipped без retries. Исторический CI #1827
+  на `1ea3f72` завершился с одним WebKit warning после reload; follow-up `a560c6c`
+  связывает допустимый warning с тем же GET `/api/me`, начатым до reload и
+  завершившимся abort/cancel. Причина прежнего Firefox timeout остаётся
+  недоказанной; успешный повтор не объявляется доказательством её устранения.
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
   - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
     поздний scoped-ответ A не подтверждает операцию A после смены active session;
