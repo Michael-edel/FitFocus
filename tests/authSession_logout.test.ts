@@ -138,6 +138,52 @@ describe('deleteAccountSession', () => {
     expect(onLogout).not.toHaveBeenCalled();
   });
 
+  it('clears only the deleted account when the session changes while the server response is pending', async () => {
+    let resolveDeletion: (response: Response) => void = () => {};
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => {
+      resolveDeletion = resolve;
+    }));
+    const assertCurrentSession = vi.fn<() => Promise<void>>()
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new Error('LOGIN_SESSION_CHANGED'));
+    const clearLocalData = vi.fn();
+    const onLogout = vi.fn();
+
+    const deletion = deleteAccountSession({
+      googleSub: 'user-1',
+      loginGuard: guard,
+      assertCurrentSession,
+      confirmFn: () => 'DELETE',
+      fetchImpl,
+      clearLocalData,
+      onLogout,
+    });
+
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+    expect(fetchImpl).toHaveBeenCalledWith('/api/account/delete', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({
+        'X-FitFocus-State-Account': guard.accountId,
+        'X-FitFocus-State-Session': guard.serverSessionId,
+      }),
+    }));
+
+    // The server confirms deletion for the captured account after another
+    // session has become active in this tab.
+    resolveDeletion(new Response(null, { status: 200, headers: {
+      'X-FitFocus-Account-Delete-Protocol': '1',
+      'X-FitFocus-Account-Delete-Guard': '1',
+      'X-FitFocus-State-Account': guard.accountId,
+      'X-FitFocus-State-Session': guard.serverSessionId,
+    } }));
+    await deletion;
+
+    expect(assertCurrentSession).toHaveBeenCalledTimes(3);
+    expect(clearLocalData).toHaveBeenCalledOnce();
+    expect(onLogout).not.toHaveBeenCalled();
+  });
+
   it('waits for scoped logout before finishing durable local cleanup', async () => {
     const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 200, headers: {
       'X-FitFocus-Account-Delete-Protocol': '1',
