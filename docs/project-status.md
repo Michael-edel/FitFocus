@@ -23,6 +23,14 @@ desktop/mobile/PWA профилей без retries; root typecheck и diff check
 Draft PR #93 остаётся в P0-приёмке. Слияние через PR #90 в защищённую `main`
 ожидает обязательного одобряющего review; пользователь сообщил, что получит его.
 
+Следующий тестовый follow-up [`4cea2bd`](https://github.com/Michael-edel/FitFocus/commit/4cea2bdeb2513307d11b33785a7ee444da82a5b5)
+проверяет удержанный `/api/admin/stats` после повторного входа того же аккаунта:
+после смены `sessionEpoch` новая вкладка сохраняет свою статистику, а результат
+старого входа не появляется ни в одной вкладке. Проверка прошла 7/7 на всех
+desktop/mobile/PWA профилях; typecheck и diff check прошли. Для этого SHA создан
+[точный CI #1803](https://github.com/Michael-edel/FitFocus/actions/runs/39373658102).
+Production-код не менялся.
+
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и

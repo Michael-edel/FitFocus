@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.5 — поздняя статистика Admin отбрасывается после same-account reauthentication, [`4cea2bd`](https://github.com/Michael-edel/FitFocus/commit/4cea2bdeb2513307d11b33785a7ee444da82a5b5), 20.10.2026
+
+Добавлен held-response E2E для `/api/admin/stats`: после повторного входа в тот
+же аккаунт с новым `serverSessionId` и `sessionEpoch` тест освобождает ответ
+старого AdminSession. Маркер актуальной статистики остаётся в новой вкладке,
+устаревший не появляется ни в старой, ни в новой. Сценарий прошёл 7/7
+desktop/mobile/PWA профилей (`workers=1,retries=0`); root typecheck и
+`git diff --check` прошли. Используется mock API, production-код не менялся.
+Точный [CI #1803](https://github.com/Michael-edel/FitFocus/actions/runs/39373658102)
+создан для `4cea2bd`.
+
+```text
+npm run test:e2e:mock -- e2e/admin-session.spec.ts --grep "delayed admin stats response from a previous same-account session is discarded after reauthentication" --workers=1 --retries=0
+```
+
 ## P0.5 — поздний Checkout URL блокируется после same-account reauthentication, [`04bcde8`](https://github.com/Michael-edel/FitFocus/commit/04bcde897769aff0acf9b41fe43735e7fbfd219f), 20.10.2026
 
 Добавлен held-response E2E для Stripe Checkout: account A начинает оплату,

@@ -2325,7 +2325,12 @@ legacy-ключ не используется для новой очереди �
     browser navigation с удержанным `/api/admin/stats` прошла 7/7 desktop/mobile/
     PWA проектов без retries на `8f75731`: `beforeunload` отменил scoped fetch,
     исходный proof записан, same-origin probe прочитал маркеры после перехода.
-    BFCache и физическое устройство остаются отдельной проверкой.
+    BFCache и физическое устройство остаются отдельной проверкой. Дополнительно
+    поздний `/api/admin/stats` освобождён после повторного входа того же аккаунта
+    с новым SID: новая статистика остаётся видна, старый marker не попадает ни
+    в одну вкладку. E2E прошёл 7/7 desktop/mobile/PWA профилей; root typecheck и
+    diff check прошли. Тест [`4cea2bd`](https://github.com/Michael-edel/FitFocus/commit/4cea2bdeb2513307d11b33785a7ee444da82a5b5),
+    точный CI #1803 создан для этого SHA.
 - [x] Добавить route-level acceptance `delete → recreate → stale update` для
   `/api/state`: проверяются 200/409, tombstone generation и сохранность новой
   версии после старого PUT. `tests/state_generation_route.test.ts` вызывает
