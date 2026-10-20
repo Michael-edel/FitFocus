@@ -34,6 +34,14 @@ Android, Android PWA, iPhone Safari and iPhone PWA; the mobile extension passed
 4/4 with retries disabled. Exact-head CI is checked after push; real-device and
 staging verification remain open.
 
+The same-account reauthentication acceptance also holds a token response from
+the retired session until the account has signed in again with a new session ID.
+The old token is neither displayed nor copied, while the new session's token
+remains visible and is the only clipboard value. The scenario passed all seven
+desktop/mobile/PWA profiles with retries disabled; exact-head CI is checked
+after push. This uses a mock API and does not replace real-device or staging
+verification.
+
 ## Required transport
 
 - Authenticated session cookie from FitFocus, or `Authorization: Bearer <token>` from `POST /api/mobile/token`

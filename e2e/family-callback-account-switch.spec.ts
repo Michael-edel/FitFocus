@@ -1908,6 +1908,99 @@ test('a delayed mobile token from account A is neither shown nor copied after ac
   }
 });
 
+test('a delayed mobile token from a retired same-account session is neither shown nor copied after reauthentication', async ({ page, context }) => {
+  const errorsA: string[] = [], errorsReauthenticated: string[] = [];
+  const reauthenticated: Account = { ...accountA, sid: 'f'.repeat(64) };
+  const state: FixtureState = {
+    current: accountA, inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
+    shoppingCheckRequests: 0, shoppingCheckAccounts: [], releasedShoppingChecks: 0,
+    personalShoppingListRequests: 0, personalShoppingListAccounts: [], releasedPersonalShoppingLists: 0,
+    rejectedPersonalShoppingLists: 0, personalShoppingCheckRequests: 0, personalShoppingCheckAccounts: [],
+    rejectedPersonalShoppingChecks: 0, shoppingAchievements: [], memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
+    mobileTokenAccounts: [], releasedMobileTokens: 0,
+  };
+  const fixtureA = await installAccountApi(page, state, false, errorsA,
+    false, false, false, false, false, false, false, false, false, true);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => activeSessionIdentity(page)).toMatchObject({
+    accountId: accountA.id,
+    serverSessionId: accountA.sid,
+  });
+  const previousSession = await activeSessionIdentity(page);
+  await page.getByRole('button', { name: 'Сгенерировать token' }).click();
+  await expect.poll(() => state.mobileTokenAccounts?.length).toBe(1);
+  expect(state.mobileTokenAccounts).toEqual([accountA.id]);
+
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => errorsReauthenticated.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsReauthenticated.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state, false, errorsReauthenticated);
+  await renewedPage.addInitScript(() => {
+    const target = window as Window & { __fitfocusClipboardWrites?: string[] };
+    target.__fitfocusClipboardWrites = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value: string) => { target.__fitfocusClipboardWrites?.push(value); } },
+    });
+  });
+  const renewedToken = 'current-session-mobile-token';
+  const renewedTokenSessions: string[] = [];
+  await renewedPage.route('**/api/mobile/token', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    renewedTokenSessions.push(request.headers()['x-fitfocus-state-session'] ?? '');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ token: renewedToken, expiresAt: Date.now() + 60_000 }),
+    });
+  });
+
+  try {
+    state.current = reauthenticated;
+    await openApp(renewedPage, '/#settings');
+    await expect.poll(() => activeSessionIdentity(renewedPage)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    const currentSession = await activeSessionIdentity(renewedPage);
+    expect(currentSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
+    const createToken = renewedPage.getByRole('button', { name: 'Сгенерировать token' });
+    await expect(createToken).toBeEnabled();
+    await createToken.click();
+    const currentToken = renewedPage.getByText(renewedToken, { exact: true });
+    await expect(currentToken).toBeVisible();
+    await expect.poll(() => renewedPage.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([renewedToken]);
+    await expect.poll(async () => activeSessionIdentity(page)).toMatchObject({
+      accountId: accountA.id,
+      serverSessionId: reauthenticated.sid,
+    });
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+
+    fixtureA.releaseMobileToken();
+    await expect.poll(() => state.releasedMobileTokens).toBe(1);
+    await expect(page.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText('account-a-mobile-token-secret', { exact: true })).toHaveCount(0);
+    await expect(currentToken).toBeVisible();
+    await expect.poll(() => renewedPage.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([renewedToken]);
+    await expect.poll(() => page.evaluate(() =>
+      (window as Window & { __fitfocusClipboardWrites?: string[] }).__fitfocusClipboardWrites ?? [])).toEqual([]);
+    expect(renewedTokenSessions).toEqual([reauthenticated.sid]);
+    expect(errorsA).toEqual([]);
+    expect(errorsReauthenticated).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    fixtureA.releaseMobileToken();
+  }
+});
+
 test('a delayed push status from account A cannot update Settings after account B signs in', async ({ page, context }, info) => {
   const errorsA: string[] = [], errorsB: string[] = [];
   const state: FixtureState = {

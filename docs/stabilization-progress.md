@@ -7948,3 +7948,14 @@ Mobile account/session matrix составляет 68 сценариев и 272 
 desktop/mobile/PWA профилях без retries; `npm run typecheck` и
 `git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
 запускается после публикации.
+
+## P0.5 — mobile bearer token после same-account reauthentication, 20.10.2026
+
+Добавлен E2E для удержанного `POST /api/mobile/token` старой сессии. Тот же
+аккаунт повторно входит с новым SID и получает новый token; старый ответ после
+освобождения не показывается ни в одной вкладке и не копируется. Проверяются
+свежие account/session headers, смена `sessionEpoch`, сохранность нового token и
+clipboard, а также отсутствие ошибок и error overlay. Сценарий прошёл 7/7
+desktop/mobile/PWA профилей при `workers=1,retries=0`; `npm run typecheck` и
+`git diff --check` прошли. Production-код не менялся; точный CI этого follow-up
+запускается после push.

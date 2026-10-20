@@ -867,6 +867,12 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     push status/account reauthentication, checkout URL и две shopping write-race
     проверки. Мобильная часть прошла 40/40 без retries; точный CI объединённой
     матрицы проверяется на актуальном HEAD.
+  - [x] Удержать ответ `POST /api/mobile/token` старой server session после
+    повторного входа того же аккаунта с новым SID. Старый bearer token не
+    появляется в UI и не копируется; token новой сессии остаётся видимым и
+    является единственным значением в clipboard. E2E прошёл 7/7 desktop/mobile/
+    PWA профилей без retries; root typecheck и `git diff --check` прошли.
+    Точный CI follow-up проверяется после push.
   - [x] В account-switch acceptance dashboard проверить оба поля общего cache-hook:
     восстановление настройки «Детально: лог еды» после reload, её скрытие для B
     и сохранность ключа A. E2E прошёл в точном [CI #1708](https://github.com/Michael-edel/FitFocus/actions/runs/39211847952).
