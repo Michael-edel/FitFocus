@@ -7927,3 +7927,13 @@ iPhone Safari/PWA; прежний gallery path после выделения о�
 подаёт synthetic file в capture input и не запускает системную камеру.
 Mobile account/session matrix составляет 68 сценариев и 272 запуска. Точный CI
 этого коммита ожидает push; staging и физическое устройство не проверялись.
+
+## P0.5 — achievement check после same-account reauthentication, 20.10.2026
+
+Добавлен E2E для позднего `POST /api/achievements/check` с unlock от `app_open`:
+ответ старой сессии удерживается, тот же аккаунт повторно входит с новым SID, а
+новая сессия получает собственное достижение. После освобождения старого ответа
+устаревший unlock не появляется ни в одной вкладке, а новое достижение остаётся
+видимым. Сценарий прошёл 7/7 desktop/mobile/PWA профилей без retries;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI этого follow-up запускается после push.

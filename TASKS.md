@@ -1427,6 +1427,12 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     сначала воспроизвела очистку; после проверки актуальности guard целевые
     achievement unit/transport tests прошли 30/30 и typecheck прошёл. Точный CI
     новой ревизии ожидается после push.
+  - [x] Удержать POST `/api/achievements/check` с unlock от `app_open`, затем
+    повторно войти в тот же account с новым server session. Поздний unlock не
+    публикуется в старой или новой вкладке, а достижение новой сессии остаётся
+    видимым. E2E прошёл 7/7 desktop/mobile/PWA профилей без retries; root
+    typecheck и `git diff --check` прошли. Точный CI этого follow-up запускается
+    после push; production-код не менялся.
 - [x] Закрепить invite и member mutations за явным `familyId`: `/api/me`
   объявляет `familySync.target`; старый сервер без capability блокируется до
   запроса. Сервер проверяет точное членство/владельца, UI отбрасывает поздний

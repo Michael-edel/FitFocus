@@ -3892,6 +3892,110 @@ test('a held achievement unlock from account A is ignored after another tab sign
     held.release();
   }
 });
+
+test('a held achievement unlock from a retired same-account session is ignored after reauthentication', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(page, state);
+
+  const held = deferred();
+  const oldAchievement = {
+    key: 'retired-session-unlock', title: 'Достижение прежней сессии',
+    description: 'Поздний ответ не должен публиковаться', tier: 'bronze', category: 'profile',
+  };
+  let heldChecks = 0;
+  let releasedChecks = 0;
+  await page.route('**/api/achievements', async route => route.fulfill({
+    contentType: 'application/json',
+    headers: scopedHeaders(accountA),
+    body: JSON.stringify({ enabled: true, catalog: [], unlocked: [] }),
+  }));
+  await page.route('**/api/achievements/check', async route => {
+    const request = route.request();
+    const body = request.postDataJSON() as { context?: { source?: string } };
+    if (request.headers()['x-fitfocus-state-session'] === accountA.sid && body.context?.source === 'app_open') {
+      expect(request.headers()['x-fitfocus-state-account']).toBe(accountA.id);
+      heldChecks += 1;
+      await held.promise;
+      await route.fulfill({
+        contentType: 'application/json',
+        headers: scopedHeaders(accountA),
+        body: JSON.stringify({ enabled: true, newlyUnlocked: [oldAchievement] }),
+      });
+      releasedChecks += 1;
+      return;
+    }
+    await route.fallback();
+  });
+
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+  await expect.poll(() => heldChecks).toBe(1);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const previousEpoch = beforeReauthentication.activeSession?.sessionEpoch;
+
+  const reauthenticated: Account = { id: accountA.id, sid: 'f'.repeat(64) };
+  state.current = reauthenticated;
+  state.profile = profileFor(accountA.id);
+  const renewedPage = await context.newPage();
+  renewedPage.on('pageerror', error => errors.push(error.message));
+  renewedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(renewedPage, state);
+  const currentAchievement = {
+    key: 'renewed-session-unlock', title: 'Достижение новой сессии',
+    description: 'Текущий ответ остаётся виден', tier: 'silver', category: 'profile',
+  };
+  let renewedChecks = 0;
+  await renewedPage.route('**/api/achievements', async route => {
+    expect(route.request().headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ enabled: true, catalog: [currentAchievement], unlocked: [] }),
+    });
+  });
+  await renewedPage.route('**/api/achievements/check', async route => {
+    const request = route.request();
+    expect(request.headers()['x-fitfocus-state-session']).toBe(reauthenticated.sid);
+    renewedChecks += 1;
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: scopedHeaders(reauthenticated),
+      body: JSON.stringify({ enabled: true, catalog: [currentAchievement], newlyUnlocked: [currentAchievement] }),
+    });
+  });
+
+  try {
+    await openApp(renewedPage, '/#dashboard');
+    await expect.poll(async () => (await readDurableSnapshot(renewedPage)).activeSession?.serverSessionId)
+      .toBe(reauthenticated.sid);
+    const renewedSnapshot = await readDurableSnapshot(renewedPage);
+    expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+    expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(previousEpoch);
+    await expect.poll(() => renewedChecks).toBeGreaterThan(0);
+    await expect(renewedPage.getByText(currentAchievement.title, { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.')).toBeVisible();
+
+    held.release();
+    await expect.poll(() => releasedChecks).toBe(1);
+    await expect(page.getByText(oldAchievement.title, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(oldAchievement.title, { exact: true })).toHaveCount(0);
+    await expect(renewedPage.getByText(currentAchievement.title, { exact: true }).first()).toBeVisible();
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(renewedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    held.release();
+  }
+});
+
 test('pending account A outbox stays scoped while B signs in and resumes with a fresh A session', async ({ page, context }, info) => {
   const planKeyA = 'fitfocus_data_' + accountA.id + '_plan_task_done';
   const stateWrites: StateWriteAttempt[] = [];

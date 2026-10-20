@@ -31,6 +31,13 @@ desktop/mobile/PWA профилях; typecheck и diff check прошли. Дл�
 [точный CI #1803](https://github.com/Michael-edel/FitFocus/actions/runs/39373658102).
 Production-код не менялся.
 
+Расширена P0.5-приёмка achievement callback: ответ старого запроса
+`/api/achievements/check` того же аккаунта освобождается после повторного входа
+с новым SID. Устаревший unlock не появляется ни в одной
+вкладке, а достижение текущей сессии остаётся видимым. Проверка прошла 7/7
+desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
+Точный CI для опубликованного follow-up запускается после push.
+
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и
