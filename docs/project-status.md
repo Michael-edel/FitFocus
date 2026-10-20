@@ -58,6 +58,12 @@ diff check прошли. Production-код не менялся; точный CI 
 desktop/mobile/PWA профилей без retries; root typecheck и diff check прошли.
 Production-код не менялся; точный CI этой ревизии проверяется после push.
 
+Для P0.5 добавлена same-account reauthentication проверка PDF callback: запрос
+шрифта удерживается во время экспорта, затем тот же аккаунт входит с новым SID.
+Старый экспорт не инициирует download. Сценарий прошёл 7/7 desktop/mobile/PWA
+профилей без retries; typecheck и diff check прошли. Production-код не менялся;
+точный CI проверяется после публикации.
+
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 
 Следующее расширение добавило ещё 10 account-switch сценариев черновиков и

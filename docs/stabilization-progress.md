@@ -7978,3 +7978,13 @@ session. После повторного входа того же аккаунт
 IndexedDB или поле настроек. Проверка прошла 7/7 desktop/mobile/PWA профилей при
 `workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
 Production-код не менялся; точный CI этой ревизии проверяется после push.
+
+## P0.5 — health report PDF после same-account reauthentication, 20.10.2026
+
+Добавлена browser acceptance для отложенного `Краткий PDF`: запрос Noto Sans
+удерживается во время подготовки документа, затем та же учётная запись входит
+с новым SID. После освобождения шрифта старый экспорт не начинает browser
+download, не запускает новую achievement-проверку и не показывает runtime error.
+Сценарий прошёл 7/7 desktop/mobile/PWA профилей при `workers=1,retries=0`;
+`npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
+точный CI новой ревизии проверяется после push.

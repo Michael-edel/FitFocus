@@ -1131,6 +1131,9 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
   - [x] Поздний `GET /api/profile` старой сессии после same-account
     reauthentication не перезаписывает значение, сохранённое текущей сессией;
     тот же тест проходит 7/7 desktop/mobile/PWA профилей без retries.
+  - [x] Краткий PDF не скачивается, если во время загрузки шрифта тот же аккаунт
+    получает новую server session. Browser acceptance прошёл 7/7
+    desktop/mobile/PWA профилей (`workers=1,retries=0`); typecheck прошёл.
   - [x] Привязать раннюю отмену AI-запросов к `AiActionScope`: активный scope
     устанавливает временный `beforeunload`, завершение/инвалидация его снимает;
     idle-страница не удерживает listener. Недельный отчёт оставляет уже
