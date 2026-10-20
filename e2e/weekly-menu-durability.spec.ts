@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, type Request } from '@playwright/test';
 import { test } from './support/mockTest';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 import type { WeeklyMenu } from '../types';
@@ -14,6 +14,7 @@ const scope = {
   'X-FitFocus-Weekly-Menu-Protocol': '1', 'X-FitFocus-Weekly-Menu-Guard': '1',
   'X-FitFocus-Achievements-Protocol': '1', 'X-FitFocus-Achievements-Guard': '1',
 };
+type FailedApiRequest = { url: string; method: string; errorText: string | null; startedBeforeReload: boolean };
 async function saved(page: Page) {
   return page.evaluate(async key => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
@@ -39,11 +40,23 @@ function gate() { let release!: () => void;
 async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-offline' | 'old-profile-server' = 'normal') {
   const errors: string[] = []; const counts = { ai: 0, items: 0, fulfilled: 0, profileAttempts: 0, profileFailures: 0, profileSuccesses: 0, recovered: 0 };
   const expectedWebKitReloadWarnings: string[] = [];
+  const failedApiRequests: FailedApiRequest[] = [];
+  const requestStartedBeforeReload = new WeakMap<Request, boolean>();
   let pageReloadInProgress = false;
   const isWebKit = await page.evaluate(() => /AppleWebKit/i.test(navigator.userAgent) && !/(Chrome|Chromium|Edg)/i.test(navigator.userAgent));
   const isExpectedWebKitReloadWarning = (text: string) => mode === 'profile-offline' && isWebKit && pageReloadInProgress
-    && (/^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(text)
-      || /^\/127\.0\.0\.1:\d+\/api\/achievements\/check due to access control checks\.$/.test(text));
+    && /^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(text);
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) {
+      requestStartedBeforeReload.set(request, !pageReloadInProgress);
+    }
+  });
+  page.on('requestfailed', request => {
+    const url = new URL(request.url());
+    if (!url.pathname.startsWith('/api/')) return;
+    failedApiRequests.push({ url: request.url(), method: request.method(), errorText: request.failure()?.errorText ?? null,
+      startedBeforeReload: requestStartedBeforeReload.get(request) ?? false });
+  });
   const held = gate(), recoveredProfile = gate(); let active = true, cloudAvailable = mode !== 'profile-offline';
   let profile: ReturnType<typeof buildMockProfile> & { version: number; aiPlan: { weeklyMenu?: WeeklyMenu } } = { ...buildMockProfile(), version: 2 };
   page.on('pageerror', error => {
@@ -135,7 +148,7 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   });
   await openApp(page, '/#plan'); await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#plan$/);
   await expect(page.getByRole('button', { name: 'Обновить план', exact: true })).toBeEnabled();
-  return { errors, expectedWebKitReloadWarnings, setPageReloadInProgress: (value: boolean) => { pageReloadInProgress = value; },
+  return { errors, expectedWebKitReloadWarnings, failedApiRequests, setPageReloadInProgress: (value: boolean) => { pageReloadInProgress = value; },
     counts, release: held.release, close: () => { active = false; },
     restoreCloud: () => { cloudAvailable = true; }, releaseProfile: recoveredProfile.release, cloudProfile: () => profile };
 }
@@ -150,10 +163,23 @@ async function settings(page: Page) {
   await button.click();
   await expect(page.getByPlaceholder('Как к вам обращаться')).toBeVisible();
 }
-async function healthy(page: Page, errors: string[], expectedWebKitReloadWarnings: string[] = []) {
+async function healthy(page: Page, errors: string[], expectedWebKitReloadWarnings: string[] = [], failedApiRequests: FailedApiRequest[] = []) {
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   expect(errors).toEqual([]);
-  expect(expectedWebKitReloadWarnings).toEqual([]);
+  for (const warning of expectedWebKitReloadWarnings) {
+    const pathAndQuery = warning.match(/^\/127\.0\.0\.1:\d+(\/api\/me\?t=\d+) due to access control checks\.$/)?.[1];
+    expect(pathAndQuery, `Unexpected WebKit reload warning: ${warning}`).toBeTruthy();
+    const matchingCanceledRequest = failedApiRequests.find(request => {
+      const url = new URL(request.url);
+      return request.method === 'GET'
+        && `${url.pathname}${url.search}` === pathAndQuery
+        && request.startedBeforeReload
+        && /abort|cancel|interrupt/i.test(request.errorText ?? '');
+    });
+    expect(matchingCanceledRequest, `Warning must match an in-flight /api/me GET canceled by reload: ${JSON.stringify({ warning, failedApiRequests })}`)
+      .toBeTruthy();
+  }
+  expect(new Set(expectedWebKitReloadWarnings).size).toBeLessThanOrEqual(1);
 }
 
 test('weekly menu and shopping intent are delivered by one durable scoped profile operation', async ({ page }, info) => {
@@ -208,7 +234,7 @@ test('weekly menu preserves an independent profile edit made while AI is pending
   } finally { release(); }
 });
 test('weekly menu resumes the same durable profile operation after a cloud failure and reload', async ({ page }, info) => {
-  const { errors, expectedWebKitReloadWarnings, setPageReloadInProgress, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
+  const { errors, expectedWebKitReloadWarnings, failedApiRequests, setPageReloadInProgress, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
   const failedProfileResponse = page.waitForResponse(response => {
     const request = response.request();
     return new URL(response.url()).pathname === '/api/profile'
@@ -223,7 +249,7 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     const response = await failedProfileResponse;
     await response.finished();
     setPageReloadInProgress(true);
-    try { await page.reload(); } finally { setPageReloadInProgress(false); }
+    await page.reload();
     await expect.poll(async () => (await saved(page)).profile?.aiPlan?.weeklyMenu?.days.length).toBe(7);
     expect((await saved(page)).operations.map(op => op.opId)).toEqual([opId]);
     restoreCloud(); await page.evaluate(() => window.dispatchEvent(new Event('online')));
@@ -233,9 +259,10 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     await expect.poll(async () => (await saved(page)).generated).toBe(0);
     expect(cloudProfile().aiPlan?.weeklyMenu?.days).toHaveLength(7); expect(counts.items).toBe(0);
     const breakfast = page.getByText(/Проверенная овсянка/).first();
-    await breakfast.scrollIntoViewIfNeeded(); await expect(breakfast).toBeInViewport(); await healthy(page, errors, expectedWebKitReloadWarnings);
+    await breakfast.scrollIntoViewIfNeeded(); await expect(breakfast).toBeInViewport();
+    await healthy(page, errors, expectedWebKitReloadWarnings, failedApiRequests);
     await page.screenshot({ path: info.outputPath('weekly-menu-recovered.png') });
-  } finally { releaseProfile(); }
+  } finally { setPageReloadInProgress(false); releaseProfile(); }
 });
 
 test('weekly menu refuses generation before AI when the profile projection capability is missing', async ({ page }, info) => {
