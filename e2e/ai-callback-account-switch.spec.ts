@@ -2904,6 +2904,53 @@ test('a profile sync notice from account A is hidden after another tab activates
   await switched.page.screenshot({ path: info.outputPath('profile-sync-notice-hidden-after-account-switch.png') });
 });
 
+test('a profile sync notice from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#settings');
+  await expect(page).toHaveTitle(/FitFocus/);
+  const profileName = page.getByPlaceholder('Как к вам обращаться');
+  await expect(profileName).toHaveValue('Профиль A');
+  await waitForAccountOutboxIdle(page, accountA);
+
+  state.profile = { ...profileFor(accountA.id), name: 'Облачный профиль A', version: 5 };
+  await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+  await expect(profileName).toHaveValue('Облачный профиль A');
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+  const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
+
+  const renewedAccountA = { id: accountA.id, sid: 'd'.repeat(64) };
+  state.current = renewedAccountA;
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(message.text());
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#settings');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const renewedSnapshot = await readDurableSnapshot(reauthenticatedPage);
+  expect(renewedSnapshot.activeSession?.accountId).toBe(accountA.id);
+  expect(renewedSnapshot.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+  expect(rawValue(renewedSnapshot, profileKey(accountA.id))).toBe(profileBefore);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText('Профиль обновлён из облака.', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-profile-sync-notice-hidden.png') });
+});
+
 test('a progress photo decode released after account switch cannot update account B profile', async ({ page, context }) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
@@ -3041,6 +3088,54 @@ test('an adaptation notice from account A is hidden after another tab activates 
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   await switched.page.screenshot({ path: info.outputPath('adaptation-notice-hidden-after-account-switch.png') });
+});
+
+test('an adaptation notice from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+
+  const accountANotice = 'Тестовая интерпретация недели для аккаунта A.';
+  await page.getByRole('button', { name: 'Объяснить', exact: true }).click();
+  await expect.poll(() => fixtureA.counts.aiRequests).toContainEqual({
+    feature: 'plateau', account: accountA.id, session: accountA.sid,
+  });
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('plateau');
+  await expect(page.getByText(accountANotice, { exact: true }).first()).toBeVisible();
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  const renewedAccountA = { id: accountA.id, sid: 'e'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id, true);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByText(accountANotice, { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-adaptation-notice-hidden.png') });
 });
 
 test('an open mobile navigation menu from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
