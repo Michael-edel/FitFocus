@@ -2834,6 +2834,48 @@ test('an open paywall from account A is hidden after another tab activates accou
   await switched.page.screenshot({ path: info.outputPath('paywall-hidden-after-account-switch.png') });
 });
 
+test('an open paywall from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await installAccountApi(page, state);
+  await openApp(page, '/#pro');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+
+  await page.getByRole('button', { name: 'Выбрать тарифный план', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+
+  const renewedAccountA = { id: accountA.id, sid: 'c'.repeat(64) };
+  state.current = renewedAccountA;
+  state.profile = profileFor(accountA.id);
+  const reauthenticatedPage = await context.newPage();
+  const reauthenticatedErrors: string[] = [];
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(message.text());
+  });
+  await installAccountApi(reauthenticatedPage, state);
+  await openApp(reauthenticatedPage, '/#pro');
+  await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+  await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+    .toBe(renewedAccountA.sid);
+  const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+  expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+  expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  await expect(reauthenticatedPage.getByRole('heading', { name: 'Тарифы', exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  expect(reauthenticatedErrors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-paywall-hidden-after-reauthentication.png') });
+});
+
 test('a profile sync notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
