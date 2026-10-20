@@ -25,6 +25,13 @@ HTTP — 23/23; audit, guards, три typecheck и build прошли. Сохр�
 [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
 
+CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
+на docs-only `d1ea3af` завершился отказом `npm audit`: новая умеренная advisory
+[GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+затрагивает Vite `<=6.4.3`. Исправление повышает прямую dev-зависимость и lockfile
+до Vite `6.4.4`; production-код не затрагивался. Точный CI исправления ещё
+требуется.
+
 Точный [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 для этого SHA завершился success: **1627 browser passed / 74 skipped**, native
 Chrome BFCache acceptance — **1/1**, а rollback/CAS HTTP-проверка — **23/23**.

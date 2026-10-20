@@ -18,6 +18,12 @@ schema/privacy/auth/API guards, три typecheck и build; browser matrix —
 Локально Firefox PWA recheck прошёл 3/3, вся `pwa-update.spec.ts` — 10 passed /
 4 skipped без retries. Предыдущий CI #1831 отменён concurrency policy после
 продвижения PR-ветки.
+
+CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
+на docs-only `d1ea3af` остановился на `npm audit`: advisory
+[GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+затрагивает Vite `<=6.4.3`. Текущий follow-up поднимает Vite и lockfile до
+исправленной `6.4.4`; точный CI исправления ещё требуется.
 Более ранний точный
 [CI #1829](https://github.com/Michael-edel/FitFocus/actions/runs/39476078016)
 на code-bearing commit `16305bedbee49fdeb611fa69e9c0ad9625bf7b91` завершился

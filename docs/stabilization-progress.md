@@ -8327,3 +8327,18 @@ Service Worker активировался и контролировал стра
 `58f4d309f7a8359c4233905cacdb49d6adb6f430`. Это подтверждает только branch
 preview и анонимное поведение; отдельный staging, OAuth, D1 и авторизованные
 записи не проверялись.
+
+## Dependency audit — Vite advisory, 21.10.2026
+
+После успешного CI #1832 новая умеренная advisory
+[GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+появилась в базе GitHub/npm; CI [#1833](https://github.com/Michael-edel/FitFocus/actions/runs/39500144954)
+на docs-only SHA `d1ea3af` завершился отказом `npm audit` для Vite `6.4.3`.
+Advisory затрагивает `launch-editor` на Windows при специальных условиях
+создания вредоносного файла и влияния на environment. Vite является dev-
+зависимостью, поэтому production bundle этим исправлением не меняется.
+
+Исправленная версия по advisory — Vite `6.4.4`. Прямой диапазон в `package.json`
+и зафиксированная запись в `package-lock.json` подняты до `^6.4.4` / `6.4.4`;
+tarball integrity сверена с метаданными npm для точной версии. Полный CI для
+этого обновления требуется.
