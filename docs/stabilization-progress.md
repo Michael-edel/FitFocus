@@ -1,5 +1,16 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4/P0.6 — камера-диалог скрывается после повторной авторизации, 20.10.2026
+
+Добавлен same-account reauthentication сценарий открытого in-app camera dialog.
+После входа в тот же аккаунт с новым `serverSessionId` меняется `sessionEpoch`,
+старая вкладка показывает session-change notice, а camera dialog скрыт и в старой,
+и в новой вкладке. Desktop Chromium/Firefox/WebKit прошли 3/3 без retries;
+четыре mobile/PWA профиля штатно пропущены, поскольку используют native capture
+input вместо in-app dialog. Root typecheck и `git diff --check` прошли; mock API,
+production-код не менялся. Матрица — 76 сценариев и 300 мобильных запусков.
+Тест добавлен в [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854).
+
 ## P0.4/P0.6 — notices скрываются после повторной авторизации, 20.10.2026
 
 Добавлены same-account reauthentication сценарии для profile-sync и adaptation

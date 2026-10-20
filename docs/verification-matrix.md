@@ -381,9 +381,11 @@ WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
 IndexedDB `sessionEpoch` меняется, старая вкладка показывает session-change
 notice, а paywall скрывается в обеих вкладках. E2E прошёл 7/7 desktop/mobile/PWA
 профилей без retries. Аналогичные same-account проверки profile-sync и adaptation
-notices прошли по 7/7 каждая. Накопленная матрица — 75 сценариев и 300 мобильных запусков.
+notices прошли по 7/7 каждая. Camera dialog после same-account reauthentication
+прошёл 3/3 desktop engines; четыре mobile/PWA профиля штатно пропущены, потому что
+используют native capture input. Накопленная матрица — 76 сценариев и 300 мобильных запусков.
 Тест находится в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
-Проверки notices добавлены в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
+Проверки notices добавлены в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f), camera dialog — в [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854).
 Это mock API, физический billing flow и staging не проверялись.
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
