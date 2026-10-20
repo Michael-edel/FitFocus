@@ -13,7 +13,7 @@ legacy migration 60 секунд не получил `writersStopped=true` и `s
 Причина пока не установлена. В локальном follow-up добавлена failure-only
 диагностика progress и полного ответа Service Worker fence; после изменения
 целевой iPhone PWA тест прошёл 3/3 повторов, root typecheck прошёл. Follow-up
-ещё не опубликован и не проверен новым CI.
+опубликован в `44b6356`; точный CI #1819 запущен, итог ещё не получен.
 
 В связанном `family-menu-durable.spec.ts` убран допуск четырёх WebKit
 `/api/me`/family reload warnings; переход A→B и same-account reauthentication
@@ -8101,4 +8101,4 @@ branch preview: same-origin `/sw.js` активируется, получает 
 отдельное staging-окружение; OAuth, D1 и авторизованные записи не проверялись.
 Новая staging-спека не входит в CI #1817. Этот workflow завершился одним
 сбоем legacy writer fence в iPhone PWA; подробная причина пока неизвестна.
-Локальная failure-only диагностика ожидает публикации и отдельного CI.
+Failure-only диагностика опубликована в `44b6356`, точный CI #1819 запущен.

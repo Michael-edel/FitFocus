@@ -22,7 +22,7 @@ browser-тестом. Сбой: iPhone PWA legacy migration не открыл wr
 60 секунд; оба флага `writersStopped` и `sendAllowed` оставались `false`.
 Root cause пока не установлен. Локально добавлена failure-only диагностика
 снимка миграции и сырого ответа worker; проблемный сценарий прошёл 3/3 раз.
-Изменение ещё не опубликовано и не проверено новым CI.
+Follow-up опубликован в `44b6356`; точный CI #1819 запущен, итог ещё не получен.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный
