@@ -4350,6 +4350,101 @@ test('detailed health report PDF is not downloaded after same-account reauthenti
   }
 });
 
+async function expectProgressPdfDiscardedAfterReauthentication(
+  page: Page,
+  context: BrowserContext,
+  screen: 'comparison' | 'archive',
+) {
+  const profile = {
+    ...profileFor(accountA.id),
+    measurementsHistory: [
+      { date: '2026-10-01T12:00:00.000Z', weight: 73 },
+      { date: '2026-10-19T12:00:00.000Z', weight: 72 },
+    ],
+  };
+  const state: FixtureState = { current: accountA, profile };
+  const errors: string[] = [];
+  const reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errors.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fontRequestStarted = deferred();
+  const releaseFontRequest = deferred();
+  await page.route('**/*NotoSans-Regular*', async route => {
+    fontRequestStarted.release();
+    await releaseFontRequest.promise;
+    await route.continue();
+  });
+
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#progress');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect(page.getByRole('heading', { name: 'Новый замер', exact: true })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
+  await expect.poll(() => fixture.counts.completedAiFeatures).toContain('wis_text');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), weeklyReportsKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
+
+  if (screen === 'archive') {
+    await page.getByRole('main').getByRole('button', { name: 'Архив', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Визуальная история тела', exact: true })).toBeVisible();
+  }
+
+  const exportButton = page.getByRole('button', { name: 'Экспорт PDF', exact: true });
+  await expect(exportButton).toBeEnabled();
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+
+  try {
+    await exportButton.click();
+    await fontRequestStarted.promise;
+
+    const nextSession: Account = { id: accountA.id, sid: '9'.repeat(64) };
+    state.current = nextSession;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+    expect(afterReauthentication.activeSession?.sessionEpoch)
+      .not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    releaseFontRequest.release();
+
+    expect(await downloadPromise).toBe(false);
+    expect(errors).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFontRequest.release();
+  }
+}
+
+test('progress comparison PDF is not downloaded after same-account reauthentication during font loading', async ({ page, context }) => {
+  await expectProgressPdfDiscardedAfterReauthentication(page, context, 'comparison');
+});
+
+test('progress archive PDF is not downloaded after same-account reauthentication during font loading', async ({ page, context }) => {
+  await expectProgressPdfDiscardedAfterReauthentication(page, context, 'archive');
+});
+
 test('a late state response from account A cannot acknowledge its outbox after account B signs in', async ({ page, context }, info) => {
   const planKeyA = `fitfocus_data_${accountA.id}_plan_task_done`;
   const stateWrites: StateWriteAttempt[] = [];
