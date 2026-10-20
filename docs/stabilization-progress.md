@@ -10,6 +10,17 @@ iPhone и PWA профилей (`workers=1,retries=0`). Root typecheck и diff c
 используется mock API, production-код не менялся. Матрица — 77 сценариев и 304
 мобильных запуска. Тест добавлен в [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099).
 
+## P0.4/P0.6 — мобильное меню скрывается после повторной авторизации, 20.10.2026
+
+Добавлен same-account reauthentication сценарий открытого меню «Ещё». После
+смены `sessionEpoch` старая вкладка закрывает меню, новая его не наследует.
+Android Chrome/PWA и iPhone Safari/PWA прошли 4/4 без retries; три desktop
+профиля штатно пропущены как неподдерживаемый мобильный UI. Первая версия
+фикстуры повторно использовала исходный SID; после замены на отдельный SID тест
+проверяет новую сессию. Root typecheck и `git diff --check` прошли; production-код
+не менялся. Матрица — 78 сценариев и 308 мобильных запусков. Тест добавлен в
+[`41c7467`](https://github.com/Michael-edel/FitFocus/commit/41c746729e4791e5aa05ca663eac2f3d63f95fce).
+
 ## P0.4/P0.6 — камера-диалог скрывается после повторной авторизации, 20.10.2026
 
 Добавлен same-account reauthentication сценарий открытого in-app camera dialog.
