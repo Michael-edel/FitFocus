@@ -372,7 +372,8 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   errors. В `pwa-update.spec.ts` assertion ужесточён до нуля WebKit `/api/ai`
   warnings; desktop WebKit, iPhone Safari и iPhone PWA прошли 3/3
   (`workers=1,retries=0`). CI #1813 для `50592e5` отменён после продвижения
-  ветки; точный CI #1814 для `6e37e8e` выполняет browser E2E.
+  ветки. CI #1814 для `6e37e8e` выполняет browser E2E; #1815 для `8ae5c0f`
+  ожидает своей очереди.
   В `pwa-update.spec.ts` снят ещё один `/api/me` допуск; вся спека прошла 6/6.
   В `weekly-menu-durability.spec.ts` удалены допуски для `/api/me` и
   `/api/achievements/check`; спека прошла 24/24. В `pwa-rollback.spec.ts`
@@ -381,8 +382,12 @@ writers/callbacks и приёмки. [CI `57f956d`](https://github.com/Michael-e
   Все три спеки прошли без retries на desktop WebKit, iPhone Safari и iPhone PWA;
   page/console warning не возник. В `pwa-offline-durability.spec.ts` снят допуск
   одного iPhone PWA `/api/me` warning при offline transition; сценарий прошёл
-  7/7 на всех browser/PWA профилях. Новое offline изменение локальное; точный CI
-  после публикации ещё нужен. Оставить пункт
+  7/7 на всех browser/PWA профилях; изменение опубликовано в `8ae5c0f`, CI #1815
+  ожидает запуска. В `family-menu-durable.spec.ts` снят cap на четыре
+  `/api/me`/family reload access-control errors: смена аккаунта и same-account
+  reauthentication прошли 6/6 на трёх WebKit/PWA профилях с нулём warnings.
+  Это изменение пока локальное; точный CI после следующей публикации нужен.
+  Оставить пункт
   открытым до него и сверки остальных исторических Safari reload сообщений.
   Общий CORS-фильтр не добавлять.
 - [x] Опубликовать компонент и проверить CI точного `ece4e7a`: success,

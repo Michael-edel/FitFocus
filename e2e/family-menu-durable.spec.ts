@@ -10,10 +10,8 @@ function filterReloadAccessControlAborts(errors: string[], projectName: string):
   if (!isWebKit) return errors;
   const staleReadAbort = /^\/127\.0\.0\.1:\d+\/api\/(?:family(?:\/menu(?:\/state)?)?|shopping\/list|me)(?:\?.*)? due to access control checks\.$/;
   const expectedAborts = errors.filter(error => staleReadAbort.test(error));
-  const abortKinds = expectedAborts.map(error => error.match(/\/api\/(family(?:\/menu(?:\/state)?)?|shopping\/list|me)(?:\?| due)/)?.[1]);
-  expect(expectedAborts.length).toBeLessThanOrEqual(4);
-  expect(abortKinds.every(kind => kind !== undefined)).toBe(true);
-  return errors.filter(error => !expectedAborts.includes(error));
+  expect(expectedAborts).toEqual([]);
+  return errors;
 }
 
 async function openSwitchAccount(page: Page, identity = switchAccount) {

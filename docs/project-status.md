@@ -73,17 +73,20 @@ PDF прошёл 7/7; новый подробный PDF прошёл 7/7 desktop
 weekly-AI запроса через 21 мс после начала reload; удержанный `/api/profile`
 запрос отменился штатно. Тест теперь требует ноль таких `/api/ai` page errors.
 Строгая проверка прошла 3/3 на desktop WebKit, iPhone Safari и iPhone PWA при
-`workers=1,retries=0`; точный CI #1813 для `50592e5` выполняется. В
+`workers=1,retries=0`. В
 Из трёх WebKit/PWA reload E2E удалены прежние допуски для `/api/ai`, `/api/me`
 и `/api/achievements/check`. `pwa-update.spec.ts` прошёл 6/6, полный
 `weekly-menu-durability.spec.ts` — 24/24, pending/conflicted
 `pwa-rollback.spec.ts` — 6/6, все без retries и page/console warnings.
 Rollback по-прежнему проверяет точные ожидаемые request cancellations. Эти
-изменения опубликованы в `6e37e8e`; CI #1813 отменён после продвижения ветки,
-точный CI #1814 для этого SHA сейчас выполняет browser E2E. Отдельно снят
-iPhone PWA `/api/me` warning допуск при offline transition: `pwa-offline-
-durability.spec.ts` прошёл 7/7 всех browser/PWA профилей без warnings. Это
-последнее изменение пока локально и не включено в CI #1814.
+изменения опубликованы в `6e37e8e`; CI #1813 отменён, #1814 для этого SHA
+выполняет browser E2E. Offline PWA изменение затем опубликовано в `8ae5c0f`,
+точный CI #1815 ожидает своей очереди. В `pwa-offline-durability.spec.ts` снят
+iPhone PWA `/api/me` warning допуск при offline transition; проверка прошла 7/7
+всех browser/PWA профилей без warnings. Ещё убран cap на четыре семейных
+`/api/me`/family reload warnings; два сценария смены аккаунта и reauthentication
+прошли 6/6 на трёх WebKit/PWA профилях. Это последнее семейное изменение пока
+локально.
 
 Ветка также содержит функциональные изменения с [`d1809f4`](https://github.com/Michael-edel/FitFocus/commit/d1809f473cbbd335ee82d61a052acbdbf437ad65) и более поздний billing guard [`1b80734`](https://github.com/Michael-edel/FitFocus/commit/1b80734): первый профиль регистрации фиксируется с проверкой accountId и IndexedDB-сессии, а checkout/admin mutations требуют session proof. Для регистрации прошли unit 22/22, durability/account-switch E2E 28/28 на семи browser/PWA профилях, typecheck, storage-strict, auth-scope и production build. Сценарии семейных goal/member и shopping-race ранее расширялись на мобильные профили; их подробные результаты приведены ниже и в журнале. Следующий P0-этап — остальные callbacks/cache, staging и полный lifecycle.
 

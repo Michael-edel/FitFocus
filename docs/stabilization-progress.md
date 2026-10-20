@@ -8053,5 +8053,14 @@ access-control page error, который ранее объяснялся отм
 сохранение settings opId/payload/baseVersion и подтверждение после возврата сети
 остались неизменными. Строгий сценарий прошёл **7/7** desktop/mobile/PWA
 профилей без retries. Root typecheck, admin guards и `git diff --check` прошли.
-Точный CI #1814 проверяет родительский `6e37e8e`;
-offline assertion ожидает следующей публикации.
+Изменение опубликовано в `8ae5c0f`; точный CI #1815 ожидает своей очереди.
+
+## P0.8 — семейный menu-state reload без WebKit warning cap, 20.10.2026
+
+В `e2e/family-menu-durable.spec.ts` удалён лимит в четыре WebKit access-control
+page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
+`/api/family/menu/state`. Проверялись два held durable menu-state read: после
+входа другого аккаунта и после same-account reauthentication с новым SID.
+В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
+Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
+retries. Точный CI текущего коммита ожидает следующей публикации.
