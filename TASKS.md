@@ -750,6 +750,9 @@ P0.1 остаётся открытым до интеграции в GitHub main;
     Камера-проверка: [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854).
     Проверка фото-разбора: [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099).
     Проверка мобильного меню: [`41c7467`](https://github.com/Michael-edel/FitFocus/commit/41c746729e4791e5aa05ca663eac2f3d63f95fce).
+    Индикатор «Анализирую фото…» виден при удержанном запросе и исчезает после
+    A→B и same-account reauthentication; связанный набор — 18 passed / 3
+    ожидаемых desktop skips. Проверка: [`4f41c1a`](https://github.com/Michael-edel/FitFocus/commit/4f41c1a883aa663697f7a94d6114467f8dbc71b0).
     Follow-up [`35a2d30`](https://github.com/Michael-edel/FitFocus/commit/35a2d303cf26a8e88ca8a796a69fe1479c2e1240)
     расширил recipe-photo scoped-auth-refusal acceptance: 7/7 на семи
     desktop/mobile/PWA профилях, включая 4 мобильных запуска; обычная ошибка

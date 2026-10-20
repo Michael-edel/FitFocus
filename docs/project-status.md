@@ -101,6 +101,9 @@ Android/iPhone browser/PWA профилях. Матрица теперь — 78 
 запусков. Root typecheck и diff check прошли;
 paywall-сценарий добавлен в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496), а проверки notices — в [`a1e36ee`](https://github.com/Michael-edel/FitFocus/commit/a1e36ee8fd67e676266e098fd761593782185a0f).
 Камера-проверка добавлена в [`918e64c`](https://github.com/Michael-edel/FitFocus/commit/918e64cd47009c2596d9daf9d19e5c67ac342854), фото-разбор — в [`f71e783`](https://github.com/Michael-edel/FitFocus/commit/f71e78370c1e0a40caf23329c1a08b8f9b19d099), меню — в [`41c7467`](https://github.com/Michael-edel/FitFocus/commit/41c746729e4791e5aa05ca663eac2f3d63f95fce).
+Индикатор анализа фото проверен при A→B и same-account reauthentication:
+18 passed / 3 ожидаемых desktop skips; он появляется при удержанном запросе и
+исчезает после смены сессии. Проверка добавлена в [`4f41c1a`](https://github.com/Michael-edel/FitFocus/commit/4f41c1a883aa663697f7a94d6114467f8dbc71b0).
 Реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
