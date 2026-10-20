@@ -113,6 +113,29 @@ async function activeAccount(page: Page): Promise<string | null> {
   });
 }
 
+async function activeSession(page: Page): Promise<{ accountId: string; serverSessionId: string } | null> {
+  return page.evaluate(async () => {
+    const opening = indexedDB.open('fitfocus-user-state-v1');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      opening.onsuccess = () => resolve(opening.result);
+      opening.onerror = () => reject(opening.error);
+    });
+    try {
+      const tx = db.transaction('outbox_meta', 'readonly');
+      const active = await new Promise<{ accountId?: string; serverSessionId?: string } | undefined>((resolve, reject) => {
+        const request = tx.objectStore('outbox_meta').get('active-session');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return active?.accountId && active.serverSessionId
+        ? { accountId: active.accountId, serverSessionId: active.serverSessionId }
+        : null;
+    } finally {
+      db.close();
+    }
+  });
+}
+
 test('a registration draft is hidden when another tab activates a different Google account', async ({ page, context }, info) => {
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -262,4 +285,63 @@ test('a delayed account deletion error is not shown after another account become
   expect(staleDialogs).toEqual([]);
   await expect.poll(() => activeAccount(page)).toBe(accountB.id);
   await expect.poll(() => activeAccount(accountBPage)).toBe(accountB.id);
+});
+
+test('a delayed account deletion error is not shown after same-account reauthentication', async ({ page, context }) => {
+  const accountAReauthenticated = { ...accountA, sid: 'c'.repeat(64) };
+  let releaseDeleteResponse: () => void = () => {};
+  let markDeleteStarted: () => void = () => {};
+  const deleteStarted = new Promise<void>(resolve => { markDeleteStarted = resolve; });
+  const waitForDeleteResponse = new Promise<void>(resolve => { releaseDeleteResponse = resolve; });
+  const staleDialogs: string[] = [];
+
+  await installIdentityApi(page, accountA, true, {
+    onAccountDelete: async route => {
+      markDeleteStarted();
+      await waitForDeleteResponse;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'ACCOUNT_DELETE_FAILED' }),
+      });
+    },
+  });
+
+  await openApp(page, '/#settings');
+  await expect.poll(() => activeSession(page)).toEqual({ accountId: accountA.id, serverSessionId: accountA.sid });
+  await expect(page.getByRole('button', { name: /Удалить аккаунт/ })).toBeVisible();
+  page.on('dialog', async dialog => {
+    if (dialog.type() === 'prompt') {
+      await dialog.accept('DELETE');
+      return;
+    }
+    staleDialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.getByRole('button', { name: /Удалить аккаунт/ }).click();
+  await deleteStarted;
+
+  const reauthenticatedPage = await context.newPage();
+  await installIdentityApi(reauthenticatedPage, accountAReauthenticated, true);
+  await openApp(reauthenticatedPage, '/#dashboard');
+  const newSession = { accountId: accountA.id, serverSessionId: accountAReauthenticated.sid };
+  await expect.poll(() => activeSession(reauthenticatedPage)).toEqual(newSession);
+  await expect.poll(() => activeSession(page)).toEqual(newSession);
+
+  const deleteResponse = page.waitForResponse(response =>
+    response.url().includes('/api/account/delete') && response.status() === 500,
+  );
+  const unexpectedDialog = page.waitForEvent('dialog', { timeout: 1000 })
+    .then(async dialog => {
+      const message = dialog.message();
+      await dialog.dismiss();
+      return message;
+    })
+    .catch(() => null);
+  releaseDeleteResponse();
+  await deleteResponse;
+
+  expect(await unexpectedDialog).toBeNull();
+  expect(staleDialogs).toEqual([]);
+  await expect.poll(() => activeSession(reauthenticatedPage)).toEqual(newSession);
 });

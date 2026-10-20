@@ -1,6 +1,6 @@
 # Session guard выхода и удаления аккаунта
 
-Обновлено: 20.10.2026. Базовый кодовый компонент: [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3), ветка `fix/durable-outbox`; локальный follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e).
+Обновлено: 20.10.2026. Базовый кодовый компонент: [`956cf96`](https://github.com/Michael-edel/FitFocus/commit/956cf967c1d83c0c0d2092210cbb83b905eecee3), ветка `fix/durable-outbox`; error-guard follow-up [`b5a493e`](https://github.com/Michael-edel/FitFocus/commit/b5a493e) опубликован в SHA `030e10e`.
 
 ## Удаление аккаунта
 
@@ -66,9 +66,16 @@ typecheck, production build, privacy coverage и `git diff --check` прошли
 Префикс writer/cleanup вынесен в общий каталог ключей на локальном follow-up
 `5d3d5b1`; все указанные unit/typecheck/build проверки прошли на этом HEAD.
 
-В локальном follow-up `b5a493e` stale error regression сначала воспроизвела alert
-после account switch в 7/7 browser-профилях. После фикса целевой
+В follow-up `b5a493e` stale error regression сначала воспроизвела alert после
+account switch в 7/7 browser-профилях. После фикса целевой
 `authSession_logout` прошёл 10/10, два account-delete E2E — 14/14 по семи
 desktop/mobile/PWA профилям без retries, полный unit suite — 1469/1469,
-typecheck и `git diff --check` прошли. Этот follow-up ещё не опубликован и не
-проверен точным CI.
+typecheck и `git diff --check` прошли. Коммит опубликован в SHA `030e10e`,
+который сейчас проходит CI #1825.
+
+Дополнительный E2E удерживает HTTP 500 старого account-delete запроса, пока
+соседняя вкладка повторно входит в тот же аккаунт с новым `serverSessionId`.
+После активации новой сессии поздняя ошибка не показывает alert в исходной
+вкладке; targeted E2E прошёл 7/7 desktop/mobile/PWA профилей без retries,
+root typecheck и `git diff --check` прошли. Проверка пока локальная; exact CI
+следующей ревизии начнётся после push.
