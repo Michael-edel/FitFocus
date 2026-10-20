@@ -11,18 +11,25 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-В текущем follow-up удалено последнее исключение для WebKit `/api/ai`
-access-control warning при переключении аккаунта в соседней вкладке. Строгий
-тест прошёл 7/7 browser/PWA профилей; `npm run typecheck` и `git diff --check`
-прошли. В связанном семейном reload тесте снят допуск предупреждений, сценарии
-смены аккаунта и same-account reauthentication прошли 6/6 WebKit/PWA профилей.
-Полный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
-для `045f934` завершился с 1570 пройденными, 67 пропущенными и 1 упавшим
-browser-тестом. Сбой: iPhone PWA legacy migration не открыл writer fence за
-60 секунд; оба флага `writersStopped` и `sendAllowed` оставались `false`.
-Root cause пока не установлен. Локально добавлена failure-only диагностика
-снимка миграции и сырого ответа worker; проблемный сценарий прошёл 3/3 раз.
-Follow-up опубликован в `44b6356`; точный CI #1819 запущен, итог ещё не получен.
+Удалённый HEAD Draft PR #93 — `fca954d18f1d6b902a0c5f3c3641934a317ed2a6`.
+Точный [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
+прошёл dependency audit, guards, unit tests, три typecheck и production build;
+browser matrix всё ещё выполняется. Run #1819 был отменён следующим push из-за
+настройки `cancel-in-progress: true`.
+
+Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA
+legacy migration не открыл writer fence за 60 секунд, `writersStopped` и
+`sendAllowed` оставались `false`. Причина не установлена. Failure-only
+диагностика добавлена в `44b6356` и вошла в текущий удалённый HEAD; проблемный
+сценарий локально прошёл 10/10 повторов.
+
+Локальный коммит [`5cfb820`](https://github.com/Michael-edel/FitFocus/commit/5cfb8200691ba6ba6bf482cd5c448d6b29c4f1a9)
+добавляет две browser-проверки state outbox: поздний ответ A после входа B и
+после повторного входа A с новой server session. Каждая прошла 7/7
+desktop/mobile/PWA профилей без retries; root typecheck и `git diff --check`
+прошли. Коммит пока не опубликован и не входит в CI #1820; его exact CI запустится
+после завершения текущего workflow и push.
 
 После push `045f934` опубликованный branch preview проверен read-only smoke:
 `npm run test:e2e:staging` прошёл 8/8 GET-only проверок, а загруженный

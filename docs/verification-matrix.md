@@ -4,6 +4,13 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+Текущая удалённая ревизия PR #93 — `fca954d`; её точный
+[CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
+прошёл статические проверки и выполняет browser matrix. Локальный follow-up
+`5cfb820` добавляет два state-outbox сценария переключения аккаунта и
+reauthentication; оба прошли 7/7 профилей без retries, но не входят в этот CI.
+Публикация ожидает окончания текущего workflow из-за `cancel-in-progress: true`.
+
 Точный PR CI #1618 для опубликованного `66e8c19` завершился success, включая
 browser mock matrix и rollback/CAS gate. Локальный follow-up `1271dfe` проверяет
 валидатор staging origin; локальные проверки прошли, точный CI ещё не запускался.
