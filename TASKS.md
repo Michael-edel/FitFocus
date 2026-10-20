@@ -1,46 +1,36 @@
 # Стабилизация и развитие FitFocus
 
 Обновлено: 20.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
-приёмка полного lifecycle**. Последняя опубликованная ветка — `durable-outbox`,
-Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →
-`fix/state-generations`; он зависит от открытых PR
+приёмка полного lifecycle**. Основной код реализуется в Draft PR
+[#93](https://github.com/Michael-edel/FitFocus/pull/93), ветка
+`fix/durable-outbox` → `fix/state-generations`; он зависит от открытых PR
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
-[#90](https://github.com/Michael-edel/FitFocus/pull/90). Последний полный
-зелёный прогон — [CI #1723](https://github.com/Michael-edel/FitFocus/actions/runs/39228647936)
-на предыдущем SHA `d23ceb9`. Более поздний CI #1793 для `4ed7f0b` прошёл
-зависимости, guards, unit, typecheck и build, но завершился 4 ошибками двух
-account-switch тестов (1441 passed / 60 skipped). Причины оказались в тестовых
-предположениях и синхронизации AI session; исправления локально прошли 14/14
-профилей и ожидают точного CI после публикации.
-Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
-выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
+[#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Локально добавлены P0.5 проверки краткого и подробного PDF после повторного
-входа того же аккаунта (14/14 browser profiles суммарно) и stale-session unit
-проверки всех пяти PDF exporters (6/6 tests с успешным кратким экспортом).
-`npm run typecheck` и `git diff --check` прошли. CI #1811 проверяет опубликованный
-SHA `87171fe`; он содержит подробный PDF E2E, но не новые unit cases.
+Удалённое состояние PR #93 — SHA `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`;
+точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
+проходит все статические проверки и unit suite, сейчас выполняет полный browser
+E2E. Локально после него создан follow-up `5a4ef58` и коммит `eac13af`; оба пока
+не отправлены, чтобы не отменить текущий прогон.
 
-Основные durable outbox, account/session guards, серверные поколения, семейный
-CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
-остаются открытыми. Дальше нужны полный lifecycle и callback acceptance,
-совместимость старых/новых bundles в целевом окружении, выделенный staging с
-реальными OAuth и D1, rollback/release checklist и интеграция через защищённую
-`main`.
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
+точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
+публичные маршруты отвечают 200, закрытые API — 401 без redirect/cookie;
+Service Worker активируется, scope `/`, после reload контролирует страницу.
+Это preview, а не отдельная staging-среда; OAuth, D1 и авторизованные записи не
+подтверждены. `npm run typecheck` и `git diff --check` для локального follow-up
+прошли.
 
-Реальный BFCache проверен отдельно в чистой Chrome-сессии на локальной сборке,
-чей build metadata содержит SHA `856e3f5`. При переходе назад наблюдатель
-зафиксировал `pagehide.persisted=true` и `pageshow.persisted=true`; локальный
-сервер записал повторный `/api/env` через 27 мс после восстановленного
-`pageshow`. Это подтверждает публичный конфигурационный callback на desktop
-Chrome. Playwright в CI по-прежнему отключает BFCache (`BackForwardCacheDisabledForDelegate`);
-проверка не закрывает остальные callbacks, устройства, OAuth или staging.
+PR #90 остаётся открыт; на момент последней проверки одобряющих review нет.
+Требование защищённой `main` не выполнено, merge не сделан.
 
-В плане 29 незакрытых чекбоксов: 16 в P0, 7 в P1, ещё 6 в подготовительных и
-компонентных разделах. Ни один P0 не закрыт целиком. Остаются другие writers и
-lifecycle callbacks, полная матрица, UI разрешения конфликтов, staging/OAuth/D1,
-release rollback и интеграция в защищённую `main`. Branch preview не равен
-staging; выпуск и merge в `main` не подтверждены.
+В плане **29 незакрытых пунктов**: 16 в P0, 7 в P1 и 6 в подготовительных и
+компонентных разделах. Ни один P0 не закрыт целиком. Остались другие writers и
+lifecycle callbacks, полная матрица, UI разрешения конфликтов, отдельная
+staging-среда с OAuth и D1, совместимость старых/новых bundles, rollback/release
+checklist и интеграция через защищённую `main`.
+
+## Исторические результаты предыдущих этапов
 
 Follow-up `dc38a51` закрывает найденную браузерную границу unload:
 `beforeunload` заранее отменяет активный AI fetch и registration action, а
@@ -141,7 +131,7 @@ tombstone и `serverSnapshot` версии 9 сохраняются в IndexedDB
 P0 не закрыт полностью. Staging, выпуск и интеграция в защищённую `main` не
 подтверждены. Подробные результаты — в [журнале](docs/stabilization-progress.md),
 [матрице](docs/verification-matrix.md) и [статусе проекта](docs/project-status.md).
-## Предыдущие результаты
+### Дополнительные подтверждённые результаты
 
 Mock-фикстура опубликована в `085fcc1` и проверена полным CI `aefc463`.
 Ранее подтверждённый [CI для tombstone-коммита `57e0a93`](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337):
@@ -189,9 +179,10 @@ bundle проверена на семи Playwright-проектах и прош�
   success, 1053 unit / 194 файла, 383 browser passed / 9 skips, 20,3 мин;
   23 HTTP/D1-запроса прошли.
 - [ ] Проверить фактический deployment, D1, APP_URL, OAuth и edge-правила.
-  Branch preview текущего SHA `045f934` подтверждён: GET-only smoke 7/7,
-  загруженный bundle содержит полный SHA; отдельный staging, D1, APP_URL, OAuth
-  и реальные edge-правила остаются непроверенными.
+  Branch preview текущего SHA `045f934` подтверждён: GET-only smoke 8/8,
+  загруженный bundle содержит полный SHA, а Service Worker активируется и
+  контролирует страницу; отдельный staging, D1, APP_URL, OAuth и реальные
+  edge-правила остаются непроверенными.
   - [x] Для current branch preview commit `bb94957` сверить успешный Cloudflare
     deploy, страницу и анонимные GET: root/env/me — 200, защищённые
     bootstrap/profile/state/push — 401 без redirect/cookie. Свежий Chromium
