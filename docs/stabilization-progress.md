@@ -7988,3 +7988,13 @@ download, не запускает новую achievement-проверку и н�
 Сценарий прошёл 7/7 desktop/mobile/PWA профилей при `workers=1,retries=0`;
 `npm run typecheck` и `git diff --check` прошли. Production-код не менялся;
 точный CI новой ревизии проверяется после push.
+
+## P0.5 — подробный PDF после same-account reauthentication, 20.10.2026
+
+Расширена browser acceptance для активного подробного health report PDF. Пока
+запрос Noto Sans удерживается, тот же аккаунт повторно входит с новым SID; после
+освобождения запроса старая вкладка не скачивает PDF и не запускает achievement
+check. Проверка прошла 7/7 desktop/mobile/PWA профилей при
+`workers=1,retries=0`; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся.
+CI #1810 проверяет предыдущий опубликованный SHA и не включает этот follow-up.

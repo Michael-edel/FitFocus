@@ -4272,6 +4272,75 @@ test('health report PDF is not downloaded after same-account reauthentication du
   }
 });
 
+test('detailed health report PDF is not downloaded after same-account reauthentication during font loading', async ({ page, context }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errorsA: string[] = [], reauthenticatedErrors: string[] = [];
+  page.on('pageerror', error => errorsA.push(error.message));
+  page.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) errorsA.push(`${message.type()}: ${message.text()}`);
+  });
+
+  const fontRequestStarted = deferred();
+  const releaseFontRequest = deferred();
+  await page.route('**/*NotoSans-Regular*', async route => {
+    fontRequestStarted.release();
+    await releaseFontRequest.promise;
+    await route.continue();
+  });
+
+  const fixtureA = await installAccountApi(page, state);
+  await openApp(page, '/#dashboard');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('wis_text');
+  await expect(page.getByRole('button', { name: 'Детальный PDF', exact: true })).toBeVisible();
+  await waitForAccountOutboxIdle(page, accountA);
+  const beforeReauthentication = await readDurableSnapshot(page);
+  expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
+  const achievementChecksBefore = fixtureA.counts.achievementChecks;
+
+  try {
+    await page.getByRole('button', { name: 'Детальный PDF', exact: true }).click();
+    await fontRequestStarted.promise;
+
+    const nextSession: Account = { id: accountA.id, sid: 'f'.repeat(64) };
+    state.current = nextSession;
+    const reauthenticatedPage = await context.newPage();
+    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+    reauthenticatedPage.on('console', message => {
+      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+    });
+    await installAccountApi(reauthenticatedPage, state);
+    await openApp(reauthenticatedPage, '/#dashboard');
+    await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
+    await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    await waitForAccountOutboxIdle(reauthenticatedPage, accountA);
+    const afterReauthentication = await readDurableSnapshot(reauthenticatedPage);
+    expect(afterReauthentication.activeSession?.accountId).toBe(accountA.id);
+    expect(afterReauthentication.activeSession?.sessionEpoch)
+      .not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
+    await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    releaseFontRequest.release();
+
+    expect(await downloadPromise).toBe(false);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId)
+      .toBe(nextSession.sid);
+    expect(fixtureA.counts.achievementChecks).toBe(achievementChecksBefore);
+    expect(errorsA).toEqual([]);
+    expect(reauthenticatedErrors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await expect(reauthenticatedPage.locator('vite-error-overlay')).toHaveCount(0);
+  } finally {
+    releaseFontRequest.release();
+  }
+});
+
 test('a late profile save from account A cannot acknowledge or overwrite after account B signs in', async ({ page, context }, info) => {
   let started!: () => void;
   const writeStarted = new Promise<void>(resolve => { started = resolve; });

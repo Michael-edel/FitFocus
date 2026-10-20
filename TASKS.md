@@ -15,6 +15,11 @@ account-switch тестов (1441 passed / 60 skipped). Причины оказ�
 Cloudflare branch preview `544f3f5` прошёл read-only smoke 7/7. Это не
 выделенный staging и не подтверждает OAuth или фактическую D1-конфигурацию.
 
+Локально добавлена P0.5 browser acceptance для подробного PDF после повторного
+входа того же аккаунта: 7/7 desktop/mobile/PWA профилей, `workers=1,retries=0`.
+CI #1810 проверяет опубликованный SHA `6f611b4` и не содержит новый тест; его
+итог отслеживается отдельно.
+
 Основные durable outbox, account/session guards, серверные поколения, семейный
 CAS, legacy migration и обновление PWA реализованы в PR #93, но P0/P0.8/P0.9
 остаются открытыми. Дальше нужны полный lifecycle и callback acceptance,
