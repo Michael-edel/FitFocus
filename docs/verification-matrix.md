@@ -4,22 +4,23 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
-Текущая удалённая ревизия PR #93 — `5f92da1`; точный
-[CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-для предыдущего SHA завершился с 1584 browser passed / 67 skipped / 1 failed; audit, guards, unit,
-три typecheck и build прошли. Единственный Firefox отказ — Council history
-delete тест вызвал кнопку до передачи `canClearCouncilHistory` через
-`App.tsx`, поэтому quota error не возникал. Коммит
-[`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1) добавил
-session-ready gate, проверку срабатывания injected failure и ожидание включённой
-кнопки в E2E. Вся `owned-state.spec.ts` прошла 42/42 на семи профилях,
-проблемный Firefox сценарий — 10/10, typecheck и unit — 1466/1466. Коммиты
-опубликованы в `5f92da1`; точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
-прошёл все gates до browser matrix, которая ещё выполняется. Предыдущий CI #1820
-завершился с 1568 browser tests passed, 67 skipped и 3 failed; эти отказы
-исправлены и опубликованы в `e33fb78`. Два state-outbox сценария позднего ответа
-после account switch и same-account reauthentication из `5cfb820` входят в этот
-run.
+Проверенная ревизия PR #93 для точного
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716) —
+`5f92da1`; run завершился с **1603 browser passed / 67 skipped / 3 failed**.
+Все предшествующие gates прошли. Safari/PWA state-outbox test неверно требовал
+пустую очередь B, хотя в неё могла независимо попасть `weekly_reports`; PWA
+reload test не учитывал точные WebKit сообщения об отмене GET-запросов во время
+навигации. Follow-up [`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a)
+ограничивает проверку отсутствием операции A у B, ждёт гидратации настроек и
+классифицирует только четыре точных reload warning при совпадении с failed GET.
+Account-switch сценарий прошёл 7/7, reload — 3/3 без retries; typecheck и полный
+unit suite 1467/1467 прошли. Exact CI combined candidate HEAD ожидается.
+
+Предыдущий [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+завершился с 1584 passed / 67 skipped / 1 failed: Firefox Council history delete.
+Коммит [`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1) добавил
+session-ready gate и проверку quota-failure marker. `owned-state.spec.ts` прошёл
+42/42 на семи профилях, проблемный Firefox сценарий — 10/10; unit — 1466/1466.
 
 Локальный follow-up [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508)
 проверяет подтверждённое сервером удаление аккаунта, когда ответ приходит уже

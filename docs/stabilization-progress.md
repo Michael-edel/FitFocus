@@ -1,5 +1,26 @@
 # Стабилизация: проверяемые изменения
 
+## P0.8/P0.9 — исправления трёх browser отказов точного CI #1823, 20.10.2026
+
+Точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+для `5f92da1` прошёл все gates до browser matrix, затем завершился с **1603
+passed / 67 skipped / 3 failed**. Один desktop WebKit reload
+сценарий получил четыре точных сообщения `due to access control checks` для
+GET `/api/achievements`, `/api/achievements/check`, `/api/wearable/huawei/status`
+и `/api/push/status` при принудительном page reload. Ещё два iPhone Safari/PWA
+падения утверждали, что очередь аккаунта B пуста; trace показал законный pending
+`weekly_reports` B, а durable operation аккаунта A оставалась на месте.
+
+В локальном follow-up [`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a)
+снят лишь некорректный запрет на независимые операции B: тест по-прежнему требует,
+чтобы `opId` и ключ A не переходили к B. Перед проверкой записи Settings тест
+ждёт загрузку исходной темы. В reload E2E разрешён только точный allowlist этих
+четырёх WebKit сообщений до стабилизации новой страницы; каждое должно совпасть
+с соответствующим неудавшимся GET во время reload. Account-switch E2E прошёл
+**7/7**, native reload — **3/3** (`workers=1,retries=0`), root typecheck прошёл.
+Полный unit suite ранее прошёл **1467/1467**. Exact CI combined candidate HEAD ещё
+не запускался.
+
 ## P0.5 — поздний ответ удаления аккаунта после смены сессии, [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508), 20.10.2026
 
 Добавлен регрессионный тест для подтверждённого `/api/account/delete`, ответ

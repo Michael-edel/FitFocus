@@ -12,12 +12,16 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
 Удалённый HEAD Draft PR #93 — `5f92da16632b27b5bace86783757748f42764188`.
-Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-для предыдущего SHA завершился с одним Firefox E2E отказом (1584 passed / 67
-skipped); причина исправлена в `11e1fd1` и опубликована. Новый точный
-[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
-прошёл dependency audit, guards, unit, три typecheck и production build; сейчас
-выполняет browser matrix.
+Точный [CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
+для этого SHA завершился с 1603 browser passed / 67 skipped / 3 failed; dependency
+audit, guards, unit, три typecheck и production build прошли. Все три browser
+падения (две причины) исправляются в локальном follow-up
+[`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a):
+ожидание очереди B допускает собственный `weekly_reports`, но блокирует операцию
+A; для принудительного Safari reload разрешены только четыре точных сообщения об
+отменённых GET при наличии соответствующего failed request. Сценарии прошли 7/7
+и 3/3 на затронутых профилях, root typecheck и полный unit 1467/1467 прошли.
+Точный CI follow-up combined HEAD ещё не запускался.
 
 Локальный follow-up [`5cb8508`](https://github.com/Michael-edel/FitFocus/commit/5cb8508)
 покрывает поздний успешный ответ удаления аккаунта после смены текущей сессии:
@@ -25,8 +29,8 @@ skipped); причина исправлена в `11e1fd1` и опубликов
 Точечный тест прошёл 8/8, полный unit — 1467/1467, typecheck и diff check
 прошли. Browser acceptance [`17db3b4`](https://github.com/Michael-edel/FitFocus/commit/17db3b4)
 прошла 14/14 на семи desktop/mobile/PWA профилях: позднее удаление аккаунта A
-не завершает новую сессию B. Коммиты не опубликованы и не входят в CI #1823;
-точный CI follow-up запускается после завершения текущей browser matrix.
+не завершает новую сессию B. Коммиты `5cb8508`, `816becd`, `17db3b4`, `59eb569`
+и `26e6b3a` составляют follow-up candidate; точного CI для него ещё нет.
 
 Предыдущий [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 для `045f934` завершился с 1570 passed, 67 skipped и одним падением: iPhone PWA

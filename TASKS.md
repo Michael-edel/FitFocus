@@ -7,19 +7,25 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Удалённый HEAD PR #93 — `5f92da16632b27b5bace86783757748f42764188`.
-Точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
-для предыдущего SHA завершился: audit, guards, unit, три typecheck и build прошли; browser matrix —
-1584 passed / 67 skipped / 1 failed. Единственный отказ — Firefox E2E
-`owned-state.spec.ts`: очистка истории была доступна до передачи в экран признака
-готовой сессии и молча ничего не делала. Локальный follow-up
-[`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1) передаёт
-этот признак через `App.tsx` и отключает кнопку до подтверждения login guard;
-тест теперь доказывает, что инъекция quota failure действительно сработала. Полный
-`owned-state` прошёл 42/42 на семи профилях, проблемный Firefox сценарий — 10/10,
-typecheck и полный unit suite — 1466/1466. Исправление опубликовано; новый
-[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716)
-прошёл все проверки до browser matrix и сейчас выполняет её.
+Проверенная ревизия PR #93 в точном
+[CI #1823](https://github.com/Michael-edel/FitFocus/actions/runs/39426977716) —
+`5f92da16632b27b5bace86783757748f42764188`. Все этапы до browser matrix прошли;
+browser matrix завершилась с **1603 passed / 67 skipped / 3 failed**. Три падения
+имели две причины: два iPhone Safari/PWA snapshot теста ожидали пустую очередь
+аккаунта B, хотя B независимо поставил `weekly_reports`; один desktop WebKit
+native PWA reload тест получил четыре ошибки отменённых GET во время принудительной перезагрузки. Follow-up
+[`26e6b3a`](https://github.com/Michael-edel/FitFocus/commit/26e6b3a) проверяет
+изоляцию конкретной операции A, ждёт гидратацию настроек B и принимает только
+точные WebKit reload warnings, совпавшие с неудавшимися GET. Account-switch E2E
+прошёл 7/7, PWA reload — 3/3 без retries; root typecheck и полный unit suite
+1467/1467 прошли. Точный CI ещё не запускался для combined follow-up HEAD.
+
+Ранее точный [CI #1822](https://github.com/Michael-edel/FitFocus/actions/runs/39413327068)
+для предыдущего SHA завершился с 1584 passed / 67 skipped / 1 failed. Отказ
+Firefox E2E `owned-state.spec.ts` исправлен в [`11e1fd1`](https://github.com/Michael-edel/FitFocus/commit/11e1fd1):
+Council clear disabled until session guard and quota-failure marker verified.
+Полный `owned-state` прошёл 42/42 на семи профилях, проблемный Firefox сценарий —
+10/10, typecheck и полный unit suite — 1466/1466.
 Предыдущий точный
 [CI #1820](https://github.com/Michael-edel/FitFocus/actions/runs/39403388251)
 завершился с 1568 browser tests passed, 67 skipped и 3 failed. Диагностика
