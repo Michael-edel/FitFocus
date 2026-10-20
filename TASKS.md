@@ -8,10 +8,9 @@
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
 Удалённое состояние PR #93 — SHA `045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`;
-точный [CI #1817](https://github.com/Michael-edel/FitFocus/actions/runs/39392542899)
 проходит все статические проверки и unit suite, сейчас выполняет полный browser
-E2E. Локально после него создан follow-up `5a4ef58` и коммит `eac13af`; оба пока
-не отправлены, чтобы не отменить текущий прогон.
+E2E. Последующие test/docs follow-ups проверены локально и закоммичены в рабочей
+ветке; push отложен до завершения текущего прогона.
 
 Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт bundle с
 точным SHA `045f934`. Read-only staging suite прошёл **8/8 GET-only** проверок:
@@ -2407,12 +2406,13 @@ legacy-ключ не используется для новой очереди �
   CI использует только локальную mock-матрицу. `test:e2e:staging` требует
   `FITFOCUS_STAGING_ORIGIN` и ограничен анонимными GET на одном HTTPS origin;
   `test:e2e:mock -- --list` обнаруживает 1337 сценариев / 24 файла и исключает
-  staging suite; staging config обнаруживает 7 тестов. Отдельный валидатор
-  покрыт unit-тестами на missing/non-HTTPS/credentials/path/query/fragment и
-  production hostname (включая регистр и завершающую точку). Полный локальный
-  unit suite — 1382/1382; typecheck и guards прошли. Follow-up `1271dfe` ожидает
-  точного CI; PR CI #1618 прошёл на предыдущем опубликованном `66e8c19`.
-  Staging origin не задан и реальные staging-запросы не выполнялись; полный
+  staging suite; staging config обнаруживает 8 тестов. Публичный branch preview
+  прошёл эти GET-only проверки 8/8, но отдельный изолированный staging-origin
+  не задан. Отдельный валидатор покрыт unit-тестами на missing/non-HTTPS/
+  credentials/path/query/fragment и production hostname (включая регистр и
+  завершающую точку). Полный локальный unit suite — 1382/1382; typecheck и guards
+  прошли. Follow-up `1271dfe` ожидает точного CI; PR CI #1618 прошёл на предыдущем
+  опубликованном `66e8c19`. Авторизованные staging-запросы не выполнялись; полный
   release checklist остаётся открытым gate.
 - [ ] Пройти [чек-лист выпуска](RELEASE_CHECKLIST.md) на точном release SHA.
 
