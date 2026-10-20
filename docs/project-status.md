@@ -87,9 +87,12 @@ SHA `4630689` выполнялся и не включает этот тест; �
 добавил P0.6-проверку того же фото-callback при повторном входе в account A с
 новым `serverSessionId`: `sessionEpoch` обновляется, а позднее декодирование не
 меняет профиль, state, outbox, API writes или UI. Она прошла 7/7; исходная A → B
-проверка после выделения общего gate повторно прошла 7/7. Матрица теперь —
-72 сценария и 288 мобильных запусков. Root typecheck и diff check прошли;
-реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
+проверка после выделения общего gate повторно прошла 7/7. Добавлен same-account
+reauthentication acceptance открытого paywall: после смены `sessionEpoch` окно
+скрыто в обеих вкладках, сценарий прошёл 7/7 на desktop/mobile/PWA профилях.
+Матрица теперь — 73 сценария и 292 мобильных запуска. Root typecheck и diff check прошли;
+тест добавлен в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Реальная камера/staging не проверялись. P0.6 lifecycle остаётся открытым.
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
 для `4ed7f0b` прошёл audit, guards, unit, три typecheck и build, но browser

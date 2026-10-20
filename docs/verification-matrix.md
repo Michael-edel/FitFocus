@@ -376,6 +376,14 @@ WebKit, Android Chrome/PWA и iPhone Safari/PWA (`workers=1`, `retries=0`).
 и `git diff --check` прошли. Используется mock API и SVG file fixture; физическая
 камера и staging не проверялись. Полный P0.4/P0.6 lifecycle остаётся открытым.
 
+Дополнительный same-account reauthentication сценарий открывает paywall в старой
+сессии и входит в тот же аккаунт с новым `serverSessionId` в соседней вкладке.
+IndexedDB `sessionEpoch` меняется, старая вкладка показывает session-change
+notice, а paywall скрывается в обеих вкладках. E2E прошёл 7/7 desktop/mobile/PWA
+профилей без retries; накопленная матрица — 73 сценария и 292 мобильных запуска.
+Тест находится в [`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Это mock API, физический billing flow и staging не проверялись.
+
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
 для `4ed7f0b` завершился browser failure: 1441 passed / 60 skipped, четыре
 отказа в двух account-switch тестах. Проверка AI activity теперь допускает

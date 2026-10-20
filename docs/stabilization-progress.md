@@ -1,5 +1,20 @@
 # Стабилизация: проверяемые изменения
 
+## P0.4/P0.6 — paywall скрывается после повторной авторизации, 20.10.2026
+
+Добавлен account/session E2E для уже открытого paywall: та же учётная запись
+входит в соседней вкладке с новым `serverSessionId`, IndexedDB принимает новую
+`sessionEpoch`, старая вкладка показывает уведомление о смене сессии, а paywall
+исчезает из обеих вкладок. Код теста сохранён в
+[`8afbd96`](https://github.com/Michael-edel/FitFocus/commit/8afbd96a2915c094f4f392d6b55d9b3f48c4a496).
+Проверка прошла 7/7 на desktop Chromium/Firefox/WebKit,
+Android Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). Первый прогон
+выявил слишком строгий тестовый assert, запрещавший штатную фоновую запись
+`weekly_reports`; после удаления этого несвязанного условия целевая матрица прошла
+полностью. Production-код не менялся. Общая account/session матрица — 73 сценария
+и 292 мобильных запуска. Используется mock API; реальный billing flow и staging
+не проверялись.
+
 ## P0.4/P0.6 — исправить CI-предположения в account-switch acceptance, 20.10.2026
 
 Точный [CI #1793](https://github.com/Michael-edel/FitFocus/actions/runs/39294298288)
