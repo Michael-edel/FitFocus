@@ -8,6 +8,7 @@ import { STATE_STORES, stateTransaction, indexedRequest, userStateDatabase } fro
 import { LegacyQueueMigration } from '../storage/legacyMigration';
 import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from '../storage/legacyQueue';
 import { clearLocalUserData } from '../storage/hybrid';
+import * as stateDatabase from '../storage/stateDatabase';
 
 function createLocalStorage(): Storage {
   const values = new Map<string, string>();
@@ -331,6 +332,47 @@ describe('browser backup', () => {
       releaseRestore();
       open.mockRestore();
     }
+  });
+
+  it('orders account rollback before deletion even when cleanup finishes after the marker read', async () => {
+    const accountId = 'delete-after-rollback-read';
+    const key = `fitfocus_data_${accountId}_diary`;
+    const siblingKey = `fitfocus_data_${accountId}-sibling_diary`;
+    const conflictKey = 'fitfocus_data_rollback-conflict_settings';
+    localStorage.setItem(key, 'previous private value');
+    localStorage.setItem(siblingKey, 'previous sibling value');
+    localStorage.setItem('fitfocus_restore_marker', 'previous global value');
+    await writeIndexedUserStateRaw(conflictKey, 'backup settings');
+    const backup = await createBackupPayload();
+    backup.localStorage[key] = 'imported private value';
+    backup.localStorage[siblingKey] = 'imported sibling value';
+    backup.localStorage.fitfocus_restore_marker = 'imported global value';
+    await writeIndexedUserStateRaw(conflictKey, 'current settings');
+
+    const transaction = stateDatabase.stateTransaction;
+    let markerReads = 0;
+    let cleanupComplete = false;
+    const observed = vi.spyOn(stateDatabase, 'stateTransaction').mockImplementation(async <T,>(
+      database: IDBDatabase, stores: stateDatabase.StateStore[], mode: IDBTransactionMode,
+      work: (tx: IDBTransaction) => T | Promise<T>,
+    ): Promise<T> => {
+      const result = await transaction(database, stores, mode, work);
+      if (mode === 'readonly' && stores.length === 1 && stores[0] === STATE_STORES.meta && ++markerReads === 2) {
+        // Model another tab completing deletion after the rollback guard's
+        // transaction finishes, before its consumer resumes. No fake markers.
+        const cleanup = await clearLocalUserData(accountId);
+        cleanupComplete = cleanup.complete;
+      }
+      return result;
+    });
+    try {
+      await expect(applyBackupPayload(backup)).resolves.toMatchObject({ ok: false, error: 'BACKUP_DURABLE_STATE_CONFLICT' });
+      expect(cleanupComplete).toBe(true);
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(localStorage.getItem(siblingKey)).toBe('previous sibling value');
+      expect(localStorage.getItem('fitfocus_restore_marker')).toBe('previous global value');
+      expect(await readIndexedUserStateRaw(conflictKey)).toBe('current settings');
+    } finally { observed.mockRestore(); }
   });
 
   it('aborts every IndexedDB store and rolls localStorage back when one durable key conflicts', async () => {

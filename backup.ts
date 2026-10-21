@@ -78,12 +78,13 @@ function backupDeletionMarkerIds(payload: BackupPayload): Set<string> {
     && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX) ? [row.id] : []));
 }
 
-async function deletedAccountsForBackup(
+async function withBackupDeletionGuard<T>(
   accountIds: readonly string[],
   payload: BackupPayload,
-): Promise<Set<string>> {
+  work: (deleted: Set<string>) => T,
+): Promise<T> {
   const uniqueAccountIds = [...new Set(accountIds)];
-  if (!uniqueAccountIds.length) return new Set();
+  if (!uniqueAccountIds.length) return work(new Set());
 
   const markerByAccount = new Map(await Promise.all(uniqueAccountIds.map(async (accountId) =>
     [accountId, await legacyDeletedAccountMetaId(accountId)] as const)));
@@ -92,20 +93,27 @@ async function deletedAccountsForBackup(
   const currentMarkerIds = uniqueAccountIds
     .filter((accountId) => !deleted.has(accountId))
     .map((accountId) => markerByAccount.get(accountId)!);
-  if (!currentMarkerIds.length) return deleted;
+  if (!currentMarkerIds.length) return work(deleted);
 
   const database = await userStateDatabase.open();
-  const currentMarkers = await stateTransaction(database, [STATE_STORES.meta], 'readonly', (tx) => {
+  return stateTransaction(database, [STATE_STORES.meta], 'readonly', (tx) => {
     const requests = currentMarkerIds.map((id) => tx.objectStore(STATE_STORES.meta).get(id));
-    return afterIndexedRequests(tx, requests, (results) => results);
+    return afterIndexedRequests(tx, requests, (results) => {
+      currentMarkerIds.forEach((id, index) => {
+        if (results[index]) {
+          const accountId = uniqueAccountIds.find((candidate) => markerByAccount.get(candidate) === id);
+          if (accountId) deleted.add(accountId);
+        }
+      });
+      // Keep synchronous rollback writes inside the marker read transaction.
+      // Account deletion's metadata write must finish before or after this work.
+      return work(deleted);
+    });
   });
-  currentMarkerIds.forEach((id, index) => {
-    if (currentMarkers[index]) {
-      const accountId = uniqueAccountIds.find((candidate) => markerByAccount.get(candidate) === id);
-      if (accountId) deleted.add(accountId);
-    }
-  });
-  return deleted;
+}
+
+function deletedAccountsForBackup(accountIds: readonly string[], payload: BackupPayload): Promise<Set<string>> {
+  return withBackupDeletionGuard(accountIds, payload, deleted => deleted);
 }
 
 export async function createBackupPayload(): Promise<BackupPayload> {
@@ -170,23 +178,25 @@ export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolea
     if (localStorageWasChanged) {
       // A concurrent deletion outranks rollback: restoring the previous local
       // snapshot would otherwise resurrect data already removed by cleanup.
-      const deleted = validatedPayload
-        ? await deletedAccountsForBackup([...accountByKey.values()], validatedPayload).catch(() => null)
-        : null;
-      for (const [key, previous] of localStorageBefore) {
-        try {
-          const accountId = accountByKey.get(key);
-          // If storage is unavailable, leave account keys as they are rather
-          // than assume a deletion marker is absent and restore private data.
-          if (accountId && deleted === null) continue;
-          if (accountId && deleted?.has(accountId)) {
-            if (localStorage.getItem(key) === validatedPayload?.localStorage[key]) localStorage.removeItem(key);
-            continue;
-          }
-          if (previous === null) localStorage.removeItem(key);
-          else localStorage.setItem(key, previous);
-        } catch { /* Report the original failure; the IDB restore itself is transactional. */ }
-      }
+      const rollback = (deleted: Set<string> | null) => {
+        for (const [key, previous] of localStorageBefore) {
+          try {
+            const accountId = accountByKey.get(key);
+            // If storage is unavailable, leave account keys as they are rather
+            // than assume a deletion marker is absent and restore private data.
+            if (accountId && deleted === null) continue;
+            if (accountId && deleted?.has(accountId)) {
+              if (localStorage.getItem(key) === validatedPayload?.localStorage[key]) localStorage.removeItem(key);
+              continue;
+            }
+            if (previous === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, previous);
+          } catch { /* Report the original failure; the IDB restore itself is transactional. */ }
+        }
+      };
+      if (validatedPayload) {
+        await withBackupDeletionGuard([...accountByKey.values()], validatedPayload, rollback).catch(() => rollback(null));
+      } else rollback(null);
     }
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to apply backup' };
   }
