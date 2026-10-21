@@ -77,6 +77,56 @@ describe('createLogoutSession', () => {
 });
 
 describe('deleteAccountSession', () => {
+  it.each(['http', 'protocol', 'network'] as const)(
+    'only shows a delayed %s failure while its captured session is current', async (failureKind) => {
+      for (const sessionChanges of [false, true]) {
+        let sessionCurrent = true;
+        let releaseResponse: () => void = () => {};
+        const responseHeld = new Promise<void>(resolve => { releaseResponse = resolve; });
+        const fetchImpl = vi.fn<typeof fetch>(async () => {
+          await responseHeld;
+          if (failureKind === 'network') throw new Error('synthetic network failure');
+          if (failureKind === 'http') return new Response(JSON.stringify({ error: 'ACCOUNT_DELETE_FAILED' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return new Response(null, { status: 200 }); // Missing deletion acknowledgement headers.
+        });
+        const assertCurrentSession = vi.fn(async () => {
+          if (!sessionCurrent) throw new Error('LOGIN_SESSION_CHANGED');
+        });
+        const clearLocalData = vi.fn();
+        const onLogout = vi.fn();
+        const alert = vi.fn();
+        const originalAlert = globalThis.alert;
+        globalThis.alert = alert;
+
+        try {
+          const deletion = deleteAccountSession({
+            googleSub: guard.accountId,
+            loginGuard: guard,
+            assertCurrentSession,
+            confirmFn: () => 'DELETE',
+            fetchImpl,
+            clearLocalData,
+            onLogout,
+          });
+          await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+          expect(alert).not.toHaveBeenCalled();
+          sessionCurrent = !sessionChanges;
+          releaseResponse();
+          await deletion;
+
+          expect(alert).toHaveBeenCalledTimes(sessionChanges ? 0 : 1);
+          expect(clearLocalData).not.toHaveBeenCalled();
+          expect(onLogout).not.toHaveBeenCalled();
+        } finally {
+          globalThis.alert = originalAlert;
+        }
+      }
+    },
+  );
+
   it('logs out the confirmed session before clearing its local account data', async () => {
     const fetchImpl = vi.fn<typeof fetch>(() => Promise.resolve(new Response(null, { status: 200, headers: {
       'X-FitFocus-Account-Delete-Protocol': '1',

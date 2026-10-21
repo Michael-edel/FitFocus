@@ -412,6 +412,15 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
   const typed = (confirmFn?.('Чтобы удалить аккаунт, введите слово DELETE (латиницей).') || '').trim().toUpperCase();
   if (typed !== 'DELETE') return;
 
+  const alertIfSessionCurrent = async (message: string) => {
+    try {
+      await assertCurrent();
+    } catch {
+      return;
+    }
+    alert(message);
+  };
+
   const fetchFn = params.fetchImpl ?? fetch;
   try {
     await assertCurrent();
@@ -429,7 +438,7 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
     if (!r.ok) {
       const j = await readJsonRecord(r);
       const error = typeof j?.error === 'string' ? j.error : null;
-      alert(error === 'UNAUTH'
+      await alertIfSessionCurrent(error === 'UNAUTH'
         ? 'Сессия изменилась или истекла. Войдите снова и повторите удаление аккаунта.'
         : error ? `Ошибка удаления: ${error}` : 'Не удалось удалить аккаунт.');
       return;
@@ -439,11 +448,11 @@ export async function deleteAccountSession(params: DeleteAccountParams): Promise
       || r.headers.get('X-FitFocus-Account-Delete-Guard') !== '1'
       || r.headers.get('X-FitFocus-State-Account') !== guard.accountId
       || r.headers.get('X-FitFocus-State-Session') !== guard.serverSessionId) {
-      alert('Сервер не подтвердил удаление в текущей сессии. Обновите страницу и проверьте состояние аккаунта.');
+      await alertIfSessionCurrent('Сервер не подтвердил удаление в текущей сессии. Обновите страницу и проверьте состояние аккаунта.');
       return;
     }
   } catch {
-    alert('Не удалось удалить аккаунт (network).');
+    await alertIfSessionCurrent('Не удалось удалить аккаунт (network).');
     return;
   }
 
