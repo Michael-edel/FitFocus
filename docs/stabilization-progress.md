@@ -8422,3 +8422,19 @@ tarball integrity сверена с метаданными npm для точно
 tests / 216 файлов, 1627 browser passed / 74 skipped, native Chrome BFCache —
 1/1, rollback/CAS HTTP — 23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
+
+## P0.5 — AI Council navigation response, 21.10.2026
+
+Коммит [`7989e88`](https://github.com/Michael-edel/FitFocus/commit/7989e88)
+добавляет browser acceptance удержанного `council_chairman` ответа. После
+сохранения вопроса переход страницы вызывает `beforeunload` и отменяет запрос;
+после возврата durable вопрос и operation не меняются, поздний ответ не
+появляется. Проверка прошла **7/7** на desktop Chromium/Firefox/WebKit, Android
+Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). `npm run typecheck` и
+`git diff --check` прошли; production-код не менялся.
+
+Это локальная проверка. CI [#1843](https://github.com/Michael-edel/FitFocus/actions/runs/39553819188)
+выполняется для родительского SHA `40642ae`, поэтому не подтверждает `7989e88`.
+Коммит ещё не опубликован: workflow отменяет предыдущий run при push той же
+ветки. Изолированного staging нет; общий P0.5 и интеграция в `main` остаются
+открыты.

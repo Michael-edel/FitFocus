@@ -25,8 +25,19 @@ unit, typechecks и build, но один browser тест `iphone-pwa` упал 
 готовности active session: условие могло считать отсутствие `active-session`
 готовностью. Ожидание исправлено, теперь оно требует серверную сессию. Целевой
 тест прошёл локально 3/3, весь migration spec на `iphone-pwa` — 7/7. Новый полный
-CI ещё не запущен.
+CI запущен на SHA `40642ae` как [run #1843](https://github.com/Michael-edel/FitFocus/actions/runs/39553819188):
+audit, guards, unit, typechecks и build завершились успешно; browser matrix ещё
+выполняется.
 Изолированного staging у проекта нет.
+
+Локальный HEAD продолжен коммитом `7989e88`: он добавляет browser acceptance
+AI Council при навигации и фиксирует результат в TASKS/контрактном журнале.
+Сценарий прошёл 7/7 desktop, Android, iPhone и PWA профилей без retries;
+root typecheck и diff check прошли. Это локальная проверка; она не включена в
+CI #1843, который проверяет родительский SHA `40642ae` и пока выполняет browser
+matrix. В workflow включён `cancel-in-progress`, поэтому публикация ветки до
+окончания #1843 прервёт этот run. После его завершения commit будет отправлен
+в PR #93 для точного CI нового HEAD. P0 и интеграция в `main` остаются открыты.
 
 Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
 для `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился отказом только в двух
