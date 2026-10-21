@@ -222,6 +222,11 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     expect(cloudProfile().aiPlan?.weeklyMenu).toBeUndefined();
     const response = await failedProfileResponse;
     await response.finished();
+    // A completed HTTP response does not mean the sender has durably finished
+    // its claim. Reload only after this failure is recorded as a retry.
+    await expect.poll(async () => (await saved(page)).operations.map(operation => ({
+      opId: operation.opId, status: operation.status, retried: operation.retryCount >= 1,
+    }))).toEqual([{ opId, status: 'pending', retried: true }]);
     setPageReloadInProgress(true);
     try { await page.reload(); } finally { setPageReloadInProgress(false); }
     await expect.poll(async () => (await saved(page)).profile?.aiPlan?.weeklyMenu?.days.length).toBe(7);
