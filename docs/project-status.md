@@ -11,9 +11,9 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Последняя опубликованная кодовая ревизия `7f534868584936067f12b0070adc874e5755be74`
-прошла полный точный [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883),
-а следующий docs HEAD `ed7100bbd50b15c2d2ede895ec59a1a99309ade8` прошёл
+Кодовый follow-up `7f534868584936067f12b0070adc874e5755be74` прошёл полный точный
+[CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883),
+а docs HEAD `ed7100bbd50b15c2d2ede895ec59a1a99309ade8` прошёл
 [CI #1841](https://github.com/Michael-edel/FitFocus/actions/runs/39537965299).
 На branch preview для `ed7100b` read-only smoke прошёл 8/8 GET-only проверок;
 проверка интерфейса обнаружила, что версия preview ошибочно называлась сборкой
@@ -36,7 +36,16 @@ Android, iPhone и PWA профилей без retries; root typecheck и diff c
 Предыдущий CI #1843 на родительском SHA `40642ae` отменён concurrency в ходе
 browser matrix после успешных audit, guards, unit, typechecks и build. Новый
 точный [CI #1844](https://github.com/Michael-edel/FitFocus/actions/runs/39558441889)
-на SHA `74d3121` создан и ожидает запуска. P0 и интеграция в `main` остаются открыты.
+на SHA `74d3121` запущен: audit, guards, unit tests, все typecheck и production
+build прошли; browser matrix выполняется. P0 и интеграция в `main` остаются открыты.
+
+В последующем P0.5 follow-up воспроизведена гонка AI Council: кнопка «Очистить»
+удаляла durable history, но не отменяла удержанный AI-запрос. Scope и общий
+generation guard теперь отменяют запрос и не дают позднему ответу или старой
+очистке перезаписать новое действие. E2E прошёл 7/7 desktop/mobile/PWA профилей;
+scope unit — 4/4; root/domain/storage typecheck и diff check прошли. Run #1844
+проверяет предыдущий SHA `74d3121` и не включает это исправление; точный CI новой
+ревизии ещё не подтверждён. Общий P0.5 остаётся открытым.
 
 Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
 для `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился отказом только в двух

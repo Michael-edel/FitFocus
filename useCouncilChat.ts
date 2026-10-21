@@ -64,7 +64,6 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
   const canClearCouncilHistory = Boolean(sessionScopeKey && currentUser && loginGuard
     && loginGuard.accountId === currentUser.id);
   const requestGeneration = useRef(0);
-  const clearHistoryGeneration = useRef(0);
   const scope = useMemo(() => new AiActionScope(() => Boolean(sessionScopeKey && loginGuard
     && loginGuard.accountId === currentUser?.id && isCurrentSession())),
   [currentUser?.id, isCurrentSession, loginGuard, sessionScopeKey]);
@@ -106,8 +105,11 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
 
   const clearCouncilHistory = useCallback(() => {
     if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
-    const generation = ++clearHistoryGeneration.current;
-    const isCurrent = () => generation === clearHistoryGeneration.current;
+    const generation = ++requestGeneration.current;
+    scope.invalidate();
+    scope.activate();
+    const isCurrent = () => generation === requestGeneration.current
+      && isCurrentSession() && loginGuard.accountId === currentUser.id;
     const showErrorIfActionCurrent = (message: string) => {
       if (isCurrent()) setCouncilError(message);
     };
@@ -119,7 +121,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
     }).catch((error: unknown) => {
       showErrorIfActionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
     });
-  }, [currentUser, history.remove, loginGuard, sessionScopeKey]);
+  }, [currentUser, history.remove, isCurrentSession, loginGuard, scope, sessionScopeKey]);
 
   const handleCouncilSubmit = useCallback(async () => {
     if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;

@@ -1262,6 +1262,13 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     попадает в историю после возврата. Browser acceptance прошёл 7/7 desktop,
     Android, iPhone и PWA профилей, `workers=1,retries=0`. Точный CI нового
     коммита и staging ещё не подтверждены; общий P0.5 остаётся открытым.
+  - [x] При очистке AI Council отменять удержанный запрос и блокировать его
+    поздний ответ общей generation-проверкой durable commit. До исправления
+    регрессия подтвердила, что signal оставался активным. После исправления
+    empty history и отсутствие outbox-записей сохранились после освобождения
+    ответа; E2E прошёл 7/7 desktop/mobile/PWA профилей без retries, scope unit —
+    4/4, root/domain/storage typecheck и diff check прошли. Точный CI изменения
+    ещё требуется; общий P0.5 остаётся открытым.
   - [x] Отменять все активные family callbacks перед навигацией через один
     временный listener на scope; listener снимается после завершения последнего
     действия или при invalidation, а при idle отсутствует. Family unit — 19/19;

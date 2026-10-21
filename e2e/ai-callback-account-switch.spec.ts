@@ -140,6 +140,14 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
         .map(({ key: itemKey, value, exists, version }) => ({ key: itemKey, value, exists, version }));
       return json({ items }, responseAccount);
     }
+    if (path === '/api/state' && method === 'DELETE') {
+      const key = url.searchParams.get('key');
+      const baseVersion = Number(url.searchParams.get('baseVersion'));
+      if (!key || !Number.isSafeInteger(baseVersion) || baseVersion < 0) {
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'INVALID_DELETE' }) });
+      }
+      return json({ ok: true, key, exists: false, version: baseVersion + 1 }, responseAccount);
+    }
     if (path === '/api/state' && method === 'PUT') {
       const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
       const keys = items.map(item => item.key);
@@ -618,6 +626,57 @@ test('navigation aborts a held AI Council response and preserves only the saved 
   await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
+test('clearing AI Council history aborts a held response and does not repopulate durable history', async ({ page }) => {
+  const marker = '__e2e_ai_council_clear__';
+  await page.addInitScript(({ markerKey, feature }) => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      let requestFeature: unknown;
+      try { requestFeature = typeof init?.body === 'string' ? JSON.parse(init.body).feature : undefined; } catch { /* Ignore unrelated requests. */ }
+      if (url.pathname === '/api/ai' && requestFeature === feature && init?.signal) {
+        localStorage.setItem(`${markerKey}:request`, 'started');
+        init.signal.addEventListener('abort', () => localStorage.setItem(`${markerKey}:signal`, 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+  }, { markerKey: marker, feature: 'council_chairman' });
+
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const fixture = await installAccountApi(page, state, 'council_chairman');
+  try {
+    await openApp(page, '/#council');
+    await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+
+    const question = 'Очистка должна отменить удержанный ответ';
+    await page.getByPlaceholder('Ваш вопрос экспертам...').fill(question);
+    await page.locator('form').getByRole('button').click();
+    await expect.poll(() => fixture.counts.heldRequests).toBe(1);
+    await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:request`), marker)).toBe('started');
+    await waitForAccountOutboxIdle(page, accountA);
+    const beforeClear = await readDurableSnapshot(page);
+    expect(rawValue(beforeClear, councilKey(accountA.id))).toContain(question);
+
+    await page.getByRole('button', { name: 'Очистить', exact: false }).click();
+    await expect.poll(async () => rawValue(await readDurableSnapshot(page), councilKey(accountA.id))).toBeNull();
+    await waitForAccountOutboxIdle(page, accountA);
+    const cleared = await readDurableSnapshot(page);
+    expect(operationsFor(cleared, accountA)).toEqual([]);
+    await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:signal`), marker)).toBe('aborted');
+
+    fixture.release();
+    await expect.poll(() => fixture.counts.releasedResponses).toBe(1);
+    await waitForAccountOutboxIdle(page, accountA);
+    const afterLateResponse = await readDurableSnapshot(page);
+    expect(rawValue(afterLateResponse, councilKey(accountA.id))).toBeNull();
+    expect(operationsFor(afterLateResponse, accountA)).toEqual([]);
+    await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+  } finally {
+    fixture.release();
+  }
 });
 
 test('navigation aborts the plateau AI request during session hydration before the daily task is committed', async ({ page }) => {

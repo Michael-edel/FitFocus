@@ -8438,5 +8438,25 @@ Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). `npm run typecheck` и
 для родительского SHA `40642ae` был отменён concurrency во время browser matrix;
 все завершённые audit, guards, unit, typechecks и build прошли. Точный CI
 [#1844](https://github.com/Michael-edel/FitFocus/actions/runs/39558441889)
-для `74d3121` создан и ожидает запуска. Изолированного staging нет; общий P0.5
-и интеграция в `main` остаются открыты.
+для `74d3121` запущен: audit, guards, unit, typechecks и build прошли; browser
+matrix ещё выполняется. Изолированного staging нет; общий P0.5 и интеграция в
+`main` остаются открыты.
+
+## P0.5 — очистка AI Council отменяет активный ответ, 21.10.2026
+
+Добавлена регрессия для очистки истории при удержанном `council_chairman`
+ответе. Сначала выяснилось, что тестовая API-фикстура не подтверждала DELETE
+`/api/state`; мок дополнен корректным scoped DELETE-ответом. После этого тест
+воспроизвёл продуктовый дефект: durable history удалялась, но активный
+`AbortSignal` AI-запроса оставался действующим.
+
+Исправление связывает очистку и AI-запросы одним поколением действия. Очистка
+отменяет текущий `AiActionScope`, активирует его для следующего действия и
+передаёт проверку поколения в durable delete. Поздний AI-ответ теряет право на
+запись; новый запрос также не может быть удалён завершившейся старой очисткой.
+После освобождения held response история остаётся пустой и outbox не содержит
+операций. E2E прошёл **7/7** desktop Chromium/Firefox/WebKit, Android Chrome/PWA,
+iPhone Safari/PWA (`workers=1,retries=0`); `ai_action_scope` unit — **4/4**,
+root/domain/storage typecheck и `git diff --check` прошли. Этот результат локальный;
+точный CI новой ревизии ещё не подтверждён. PR #93 и защищённая `main` остаются
+открытыми; staging отсутствует.
