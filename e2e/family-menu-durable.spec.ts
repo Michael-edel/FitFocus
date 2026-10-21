@@ -105,6 +105,23 @@ async function activeSessionIdentity(page: Page) {
   });
 }
 
+test('new family preferences include members loaded after the owner editor and preserve an explicit owner-only choice', async ({ page }) => {
+  const member = { user_id: 'family-member-2', role: 'member', status: 'active', name: 'Member Two',
+    sex: 'FEMALE', age: 30, height_cm: 165, weight_kg: 65, activity: 1.375, goal: 'MAINTAIN' };
+  const { errors } = await setup(page, 'normal', { familyMembers: [member] });
+  await navigate(page, 'План');
+  await page.getByRole('button', { name: 'Параметры', exact: true }).click();
+  const memberChoice = page.getByRole('checkbox', { name: /Member Two/ });
+  await expect(memberChoice).toBeChecked();
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(2);
+  await memberChoice.click();
+  await expect(memberChoice).not.toBeChecked();
+  await page.reload();
+  await expect(page.getByRole('checkbox', { name: /Member Two/ })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(1);
+  await healthy(page, errors);
+});
+
 test('server preview becomes one durable family menu and purchases operation', async ({ page }, info) => {
   const { counts, errors } = await setup(page);
   await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();

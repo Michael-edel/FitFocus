@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { mockApp, openApp, buildMockProfile } from './appHarness';
 import { familyTestMenu } from '../../tests/_helpers/familyMenu';
+import type { CloudFamilyMember } from '../../features/family/familyApi';
 
 const account = 'google-e2e-sub', sid = 'a'.repeat(64), familyId = 'family-durable-e2e';
 const headers = { 'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid,
@@ -52,10 +53,11 @@ export async function saved(page: Page) {
   }, account);
 }
 
-export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'session-expired-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean } = {}) {
+export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'session-expired-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean; familyMembers?: CloudFamilyMember[] } = {}) {
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
-  let cloud = familyTestMenu(account), profile = buildMockProfile();
+  let cloud = familyTestMenu(account), profile = { ...buildMockProfile(),
+    plan: options.familyMembers ? 'family' as const : 'free' as const };
   const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0, stateReads: 0, logout: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   let releasePreview!: () => void; const heldPreview = new Promise<void>(resolve => { releasePreview = resolve; });
@@ -88,7 +90,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     if (path === '/api/wearable/huawei/status') return json({ configured: false, connected: false });
     if (path === '/api/achievements' && request.method() === 'POST') { counts.achievements += 1; return json({ ok: true, unlocked: [] }); }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },
-      members: [{ user_id: account, role: 'owner', status: 'active' }] });
+      members: [{ user_id: account, role: 'owner', status: 'active' }, ...(options.familyMembers ?? [])] });
     if (path === '/api/family/menu') {
       if (request.method() !== 'GET') { counts.oldWriter += 1; return json({ error: 'OLD_WRITER' }, 409); }
       week = url.searchParams.get('week')!; cloud = { ...cloud, weekStart: week };

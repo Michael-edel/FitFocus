@@ -1,5 +1,32 @@
 # Стабилизация: проверяемые изменения
 
+## P1 — default participants после family hydration, 21.10.2026
+
+Ветка `fix/main-integration-20261019`, рабочая копия поверх
+`db30bb932b78de654314b33519452ffbc0ced7ec` с незакоммиченным исправлением.
+Редактор больше не фиксирует owner-only initial до ответа family API:
+несохранённый пустой список разрешается в текущих участников. Functional
+updater получает тот же fallback и сохраняет явный выбор только владельца.
+
+Regression на исходном initializer упал в Chromium: checkbox позднего
+участника остался unchecked. С исправлением сценарий включения всех участников,
+снятия флажка и восстановления owner-only после reload прошёл 7/7 проектов
+(`retries=0`, mock API). Полный unit-набор — 1478/1478 в 217 файлах; root
+typecheck и `git diff --check` прошли. Независимый Sol-review: no findings;
+явного held-response барьера и отдельной membership-race проверки в новом
+тесте нет. Полный CI опубликованного SHA остаётся отдельным gate.
+
+```text
+npm run test:e2e:mock -- e2e/family-menu-durable.spec.ts --grep "new family preferences include members loaded after the owner editor"
+npm run test:unit
+npm run typecheck
+```
+
+PR #96 на базовом `db30bb9` прошёл CI 39410731484; этот результат не относится
+к незакоммиченному fix. Upstream PR #93 на `c8f95a5` не меняет `useFamilyMenu.ts`
+и имеет отдельный failed CI 39583939734 (WebKit offline recovery).
+Merge/deploy не выполнены; обязательное одобрение GitHub остаётся открытым.
+
 ## P0.5 — убрать последнее исключение WebKit при переключении аккаунта, 20.10.2026
 
 В `ai-callback-account-switch.spec.ts` удалён допуск для одного WebKit

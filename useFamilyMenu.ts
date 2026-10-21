@@ -91,7 +91,7 @@ export function useFamilyMenu({ cloudFamily, cloudFamilyMembers, cloudFamilyMenu
   const familyMenuProfiles = useMemo(() => currentUser ? familyProfiles(currentUser, cloudFamily ? cloudFamilyMembers : null) : [],
     [currentUser, cloudFamily, cloudFamilyMembers]);
   const preferences = useOwnedState(currentUser?.id, 'family_menu_prefs', {
-    ...DEFAULT_FAMILY_MENU_PREFS, includeIds: familyMenuProfiles.map(profile => profile.id),
+    ...DEFAULT_FAMILY_MENU_PREFS,
   }, familyPrefsCodec);
   const allowed = new Set(familyMenuProfiles.map(profile => profile.id));
   const selected = preferences.value.includeIds.filter(id => allowed.has(id));
@@ -100,8 +100,15 @@ export function useFamilyMenu({ cloudFamily, cloudFamilyMembers, cloudFamilyMenu
   const inputsRef = useRef(inputKey); inputsRef.current = inputKey;
   const setFamilyMenuPrefs = useCallback<Dispatch<SetStateAction<FamilyMenuPrefs>>>(action => {
     if (!loginGuard || !scope.isCurrent()) return;
-    void preferences.persistGenerated(action, { readGuard: loginGuard, canCommit: () => scope.isCurrent() }).catch(() => {});
-  }, [loginGuard, preferences.persistGenerated, scope]);
+    const defaultIncludeIds = familyMenuProfiles.map(profile => profile.id);
+    const update = typeof action === 'function'
+      ? (previous: FamilyMenuPrefs) => action({
+        ...previous,
+        includeIds: previous.includeIds.length ? previous.includeIds : defaultIncludeIds,
+      })
+      : action;
+    void preferences.persistGenerated(update, { readGuard: loginGuard, canCommit: () => scope.isCurrent() }).catch(() => {});
+  }, [familyMenuProfiles, loginGuard, preferences.persistGenerated, scope]);
   // An empty canonical family generation never resurrects an old personal profile snapshot.
   const familyMenu = cloudFamily ? cloudFamilyMenu : currentUser?.aiPlan?.familyWeeklyMenu ?? null;
   const handleGenerateFamilyWeeklyMenu = useCallback(async () => {
