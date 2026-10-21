@@ -21,12 +21,21 @@ schema/privacy/auth/API guards, 1469 unit tests, три typecheck и build пр�
 Артефакт диагностики сохранён в
 [CI #1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731/artifacts/12315576395).
 
-В рабочей копии проверяется исправление двух границ: очистка Council опирается на
-транзакционный account/session guard outbox, а не на временный AI action scope;
-profile sync notice привязывается к подтверждённой сессии, а не к флагу готовности
-UI-кэша. Эти изменения ещё не опубликованы и не проверены CI. Локальные build/E2E
-не запускались согласно установленной границе security review; `git diff --check`
-проверяется перед коммитом.
+Исправление этих двух границ опубликовано в коммите
+[`7f53486`](https://github.com/Michael-edel/FitFocus/commit/7f534868584936067f12b0070adc874e5755be74):
+очистка Council защищена транзакционным account/session guard outbox и отделена
+от AI action lifecycle; profile sync notice привязано к подтверждённой сессии,
+независимо от временного gate восстановления UI-кэша.
+
+Точный [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883)
+для SHA `7f534868584936067f12b0070adc874e5755be74` завершился success. Прошли
+dependency audit, schema/privacy/auth/API guards, 1469 unit tests, три typecheck,
+production build, browser matrix, native BFCache acceptance и проверка canonical
+readers/CAS после server rollback. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883/artifacts/12317497711)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883/artifacts/12317537598).
+Локальные build/E2E не запускались согласно установленной границе security
+review. Это CI/mock acceptance, а не отдельная staging-база или проверка OAuth,
+реальных D1 и физических устройств.
 
 Ранее точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
 для `58f4d30` завершился success: 1469 unit tests / 216 файлов, 1627 browser

@@ -2385,6 +2385,15 @@ legacy-ключ не используется для новой очереди �
   связывает допустимый warning с тем же GET `/api/me`, начатым до reload и
   завершившимся abort/cancel. Причина прежнего Firefox timeout остаётся
   недоказанной; успешный повтор не объявляется доказательством её устранения.
+- [x] Исправить два browser отказа точного CI #1839: durable delete Council и
+  Android Chrome profile sync notice. Изменение опубликовано в
+  [`7f53486`](https://github.com/Michael-edel/FitFocus/commit/7f534868584936067f12b0070adc874e5755be74);
+  точный [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883)
+  прошёл: audit, guards, 1469 unit tests, три typecheck, build, browser matrix,
+  native BFCache и rollback/CAS. Browser diagnostics и rollback archive
+  сохранены [в CI](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883).
+  Причины двух исторических отказов не доказаны; это mock acceptance, staging и
+  физические устройства остаются открытыми.
 - [ ] Покрыть [матрицу сценариев](docs/sync-model.md#матрица-приёмки).
   - [x] Проверить переключение A → B во время in-flight PUT `/api/state`:
     поздний scoped-ответ A не подтверждает операцию A после смены active session;

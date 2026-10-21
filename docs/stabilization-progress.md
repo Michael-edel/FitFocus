@@ -1,6 +1,6 @@
 # Стабилизация: проверяемые изменения
 
-## P0.9 — два browser отказа точного CI #1839, 21.10.2026
+## P0.9 — follow-up двух browser отказов CI #1839, `7f53486`, 21.10.2026
 
 Точный workflow [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
 для SHA `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился с **1625 browser
@@ -16,12 +16,22 @@ action lifecycle и остаётся защищённым exact account/server-s
 проверками в транзакции outbox.
 
 В Android Chrome UI загрузил облачный профиль A, но не показал ожидаемый notice.
-Candidate привязывает это краткое сообщение к подтверждённой account/session
-scope, независимо от временного gate восстановления UI-кэша; account B и новая
-сессия по-прежнему не должны видеть старое сообщение. Изменения candidate ещё не
-опубликованы и не проверены. Локальные build/E2E не запускались в рамках границы
-security review; результат следующего точного CI будет записан отдельно.
-Сохранён [browser diagnostics artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731/artifacts/12315576395).
+Исправление опубликовано в коммите
+[`7f53486`](https://github.com/Michael-edel/FitFocus/commit/7f534868584936067f12b0070adc874e5755be74):
+Council clear использует отдельный lifecycle и сохраняет транзакционный
+account/server-session/epoch guard; profile sync notice связывается с
+подтверждённой account/session scope, независимо от временного gate UI-кэша.
+
+Точный [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883)
+на полном SHA `7f534868584936067f12b0070adc874e5755be74` завершился success:
+audit, все guards, 1469 unit tests, три typecheck, build, browser matrix,
+native BFCache и canonical readers/CAS после server rollback прошли. Сохранены
+[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883/artifacts/12317497711)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883/artifacts/12317537598).
+Это подтверждает прохождение текущего CI, но не устанавливает точную причину
+исторических отказов #1839. Локальные build/E2E не запускались в рамках границы
+security review; CI использует mock API и не заменяет staging, OAuth, D1 или
+приёмку на физическом устройстве. Общий P0.9 остаётся открытым.
 
 ## P0.9 — WebKit weekly-menu warning в CI #1838, 21.10.2026
 
