@@ -2,6 +2,7 @@ import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
 import { clearIndexedUserStateForUser } from './indexedUserState';
 import { legacyRecordMayBelongToAccount } from './legacyQueue';
+import { USER_STATE_KEYS } from './userStateRepository';
 
 type ProfileLike = {
   id: string;
@@ -41,6 +42,23 @@ const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.analytics.sent.v1:',
   'fitfocus.achievements.counters.v1:',
 ];
+
+const DATA_KEY_SUFFIXES = [
+  ...USER_STATE_KEYS,
+  'profile',
+  'all_users',
+  'sync',
+  'ai_gemini_cooldown_until',
+  'ai_last_status_v1',
+  'ai_last_action_v1',
+].sort((left, right) => right.length - left.length);
+
+const DATA_KEY_DYNAMIC_SUFFIXES = [
+  '_ai_cache_v1:',
+  '_ai_feature_lastcall_v1:',
+  '_family_menu:',
+  '_shopping_fallback_',
+] as const;
 
 const RETIRED_LOCAL_TELEMETRY_KEYS = new Set([
   'fitfocus.analytics.onboarding.v1',
@@ -82,6 +100,45 @@ function isLocalUserKey(key: string, userId: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Returns the owner of known account-scoped keys included in portable backups. */
+export function localUserIdFromStorageKey(rawKey: string): string | null {
+  const key = rawKey.endsWith('__ffv') ? rawKey.slice(0, -'__ffv'.length) : rawKey;
+
+  if (key.startsWith(STORAGE_KEYS.dataPrefix)) {
+    const dataKey = key.slice(STORAGE_KEYS.dataPrefix.length);
+    for (const suffix of DATA_KEY_SUFFIXES) {
+      if (dataKey.endsWith(`_${suffix}`)) {
+        const accountId = dataKey.slice(0, -suffix.length - 1);
+        return accountId || null;
+      }
+    }
+    const dynamicSuffixIndex = DATA_KEY_DYNAMIC_SUFFIXES
+      .map((suffix) => dataKey.lastIndexOf(suffix))
+      .reduce((latest, index) => Math.max(latest, index), -1);
+    if (dynamicSuffixIndex > 0) return dataKey.slice(0, dynamicSuffixIndex) || null;
+    return null;
+  }
+
+  for (const prefix of USER_SCOPED_KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length) || null;
+  }
+
+  for (const prefix of [
+    'ff_last_weekly_ai_attempt_',
+    'ff_weekly_ai_inflight_',
+    'ff_dev_plan_override_scope_',
+  ]) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length) || null;
+  }
+
+  if (key.startsWith(STORAGE_KEYS.recipeUsagePrefix)) {
+    try { return decodeURIComponent(key.slice(STORAGE_KEYS.recipeUsagePrefix.length)) || null; }
+    catch { return null; }
+  }
+
+  return null;
 }
 
 /** Automatic mirroring is retired; all synchronized edits require an explicit account editor. */
@@ -148,28 +205,14 @@ function legacyQueueMayContainAccount(raw: string | null, accountId: string): bo
   return records.some((record) => legacyRecordMayBelongToAccount(record, accountId));
 }
 
-/**
- * Clears local account-owned data after server deletion. Global legacy migration
- * evidence is preserved if it cannot be separated safely from other accounts.
- */
-export async function clearLocalUserData(userId: string | null | undefined): Promise<LocalUserDataCleanupResult> {
-  const normalizedUserId = String(userId || '').trim();
-  if (!normalizedUserId) return {
-    complete: false, localStorageKeysRemoved: 0, localStorageCleared: false,
-    indexedDbCleared: false, legacyEvidenceRetained: false,
-  };
-
-  const keysToRemove: string[] = [];
-  const removed = new Set<string>();
-  let localStorageCleared = true;
-  let legacyEvidenceRetained = false;
-  const accountPrefix = `${STORAGE_KEYS.dataPrefix}${normalizedUserId}_`;
+function clearAccountScopedLocalStorage(userId: string, removed: Set<string>): boolean {
   try {
+    const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
       if (!key) continue;
       const baseKey = key.endsWith('__ffv') ? key.slice(0, -'__ffv'.length) : key;
-      if (isLocalUserKey(baseKey, normalizedUserId)) keysToRemove.push(key);
+      if (isLocalUserKey(baseKey, userId)) keysToRemove.push(key);
     }
 
     const selectedKeys = new Set(keysToRemove);
@@ -184,9 +227,26 @@ export async function clearLocalUserData(userId: string | null | undefined): Pro
         }
       }
     }
+    return true;
   } catch {
-    localStorageCleared = false;
+    return false;
   }
+}
+
+/**
+ * Clears local account-owned data after server deletion. Global legacy migration
+ * evidence is preserved if it cannot be separated safely from other accounts.
+ */
+export async function clearLocalUserData(userId: string | null | undefined): Promise<LocalUserDataCleanupResult> {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return {
+    complete: false, localStorageKeysRemoved: 0, localStorageCleared: false,
+    indexedDbCleared: false, legacyEvidenceRetained: false,
+  };
+
+  const removed = new Set<string>();
+  let localStorageCleared = clearAccountScopedLocalStorage(normalizedUserId, removed);
+  let legacyEvidenceRetained = false;
 
   try {
     legacyEvidenceRetained = legacyQueueMayContainAccount(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY), normalizedUserId);
@@ -195,14 +255,30 @@ export async function clearLocalUserData(userId: string | null | undefined): Pro
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const durableCleanup = clearIndexedUserStateForUser(normalizedUserId);
+  void durableCleanup.then(() => {
+    if (!clearAccountScopedLocalStorage(normalizedUserId, removed)) localStorageCleared = false;
+  }).catch(() => { /* The synchronous cleanup result below reports failure. */ });
   const durable = await Promise.race([
-    clearIndexedUserStateForUser(normalizedUserId),
+    durableCleanup,
     new Promise<{ cleared: false; legacyEvidenceRetained: true }>((resolve) => {
       timeoutId = setTimeout(() => resolve({ cleared: false, legacyEvidenceRetained: true }), INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS);
     }),
   ]);
   if (timeoutId !== undefined) clearTimeout(timeoutId);
+  if (!clearAccountScopedLocalStorage(normalizedUserId, removed)) localStorageCleared = false;
   legacyEvidenceRetained ||= durable.legacyEvidenceRetained;
+  // A legacy bundle in another tab can still append to the global source while
+  // IndexedDB cleanup is pending. Recheck at the end so `complete` describes the
+  // evidence that exists when this cleanup finishes, not only its starting snapshot.
+  try {
+    legacyEvidenceRetained ||= legacyQueueMayContainAccount(
+      localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY),
+      normalizedUserId,
+    );
+  } catch {
+    legacyEvidenceRetained = true;
+  }
   const indexedDbCleared = durable.cleared;
   return {
     complete: localStorageCleared && indexedDbCleared && !legacyEvidenceRetained,

@@ -7,6 +7,7 @@ import { DurableOutbox } from '../storage/durableOutbox';
 import { STATE_STORES, stateTransaction, indexedRequest, userStateDatabase } from '../storage/stateDatabase';
 import { LegacyQueueMigration } from '../storage/legacyMigration';
 import { LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from '../storage/legacyQueue';
+import { clearLocalUserData } from '../storage/hybrid';
 
 function createLocalStorage(): Storage {
   const values = new Map<string, string>();
@@ -223,6 +224,113 @@ describe('browser backup', () => {
     const portableMarker = await stateTransaction(await userStateDatabase.open(), [STATE_STORES.meta], 'readonly',
       (tx) => indexedRequest(tx.objectStore(STATE_STORES.meta).get(deletionMarkerId)));
     expect(portableMarker).toMatchObject({ kind: 'legacy-deleted-account', version: 1 });
+  });
+
+  it('does not restore deleted-account localStorage keys from a stale version-three backup', async () => {
+    const accountId = 'deleted-localstorage-backup-owner';
+    const relatedAccountId = `${accountId}-related`;
+    const key = `fitfocus_data_${accountId}_diary`;
+    const relatedKey = `fitfocus_data_${relatedAccountId}_diary`;
+    const staleValue = '[{"id":"must-stay-deleted"}]';
+    localStorage.setItem(key, staleValue);
+    localStorage.setItem(relatedKey, '[{"id":"related-account"}]');
+    const staleBackup = await createBackupPayload();
+    expect(staleBackup.localStorage[key]).toBe(staleValue);
+
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+    expect(localStorage.getItem(key)).toBe(staleValue);
+
+    await expect(applyBackupPayload(staleBackup)).resolves.toMatchObject({ ok: true });
+
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem(relatedKey)).toBe('[{"id":"related-account"}]');
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+  });
+
+  it('does not restore deleted-account IndexedDB values from a stale version-three backup', async () => {
+    const accountId = 'deleted-indexed-backup-owner';
+    const relatedAccountId = `${accountId}-related`;
+    const key = `fitfocus_data_${accountId}_diary`;
+    const relatedKey = `fitfocus_data_${relatedAccountId}_diary`;
+    await expect(writeIndexedUserStateRaw(key, '[{"id":"stale-durable"}]')).resolves.toBe(true);
+    await expect(writeIndexedUserStateRaw(relatedKey, '[{"id":"related-account"}]')).resolves.toBe(true);
+    const staleBackup = await createBackupPayload();
+    expect(staleBackup.durableState?.stores[STATE_STORES.values]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key, value: '[{"id":"stale-durable"}]' }),
+    ]));
+
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+    await expect(applyBackupPayload(staleBackup)).resolves.toMatchObject({ ok: true });
+
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(relatedKey)).toBe('[{"id":"related-account"}]');
+  });
+
+  it.each(['diary', 'council_history'])('does not restore deleted-account %s from a legacy version-two backup', async (suffix) => {
+    const accountId = 'deleted-version-two-owner';
+    const key = `fitfocus_data_${accountId}_${suffix}`;
+    const relatedKey = `fitfocus_data_${accountId}-related_diary`;
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+
+    await expect(applyBackupPayload({
+      version: 2,
+      createdAt: '2026-10-20T00:00:00.000Z',
+      localStorage: { [key]: '[{"id":"stale-local"}]' },
+      indexedDb: { [key]: '[{"id":"stale-indexed"}]', [relatedKey]: '[{"id":"keep-other-account"}]' },
+    })).resolves.toMatchObject({ ok: true });
+
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(relatedKey)).toBe('[{"id":"keep-other-account"}]');
+  });
+
+  it('honors a portable deletion marker before restoring local keys into a fresh database', async () => {
+    const accountId = 'portable-deletion-owner';
+    const key = `fitfocus_data_${accountId}_diary`;
+    localStorage.setItem(key, 'stale local value');
+    await clearIndexedUserStateForUser(accountId);
+    const backup = await createBackupPayload();
+    localStorage.clear();
+    userStateDatabase.close();
+    vi.stubGlobal('indexedDB', new IDBFactory());
+
+    await expect(applyBackupPayload(backup)).resolves.toEqual({ ok: true });
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+  });
+
+  it.each(['success', 'conflict'] as const)('keeps account data deleted when deletion overlaps a %s restore', async (outcome) => {
+    const accountId = 'delete-during-backup';
+    const key = `fitfocus_data_${accountId}_diary`;
+    const otherKey = 'fitfocus_data_other-restore-owner_settings';
+    localStorage.setItem(key, 'previous local value');
+    await writeIndexedUserStateRaw(otherKey, 'backup settings');
+    const backup = await createBackupPayload();
+    backup.localStorage[key] = 'imported local value';
+    if (outcome === 'conflict') await writeIndexedUserStateRaw(otherKey, 'current settings');
+    const originalOpen = userStateDatabase.open.bind(userStateDatabase);
+    let count = 0;
+    let signalRestore!: () => void;
+    let releaseRestore!: () => void;
+    const started = new Promise<void>(resolve => { signalRestore = resolve; });
+    const gate = new Promise<void>(resolve => { releaseRestore = resolve; });
+    const open = vi.spyOn(userStateDatabase, 'open').mockImplementation(async () => {
+      if (++count === 2) { signalRestore(); await gate; }
+      return originalOpen();
+    });
+    try {
+      const restore = applyBackupPayload(backup);
+      await started;
+      expect(localStorage.getItem(key)).toBe('imported local value');
+      await expect(clearLocalUserData(accountId)).resolves.toMatchObject({ complete: true });
+      releaseRestore();
+      await expect(restore).resolves.toMatchObject({ ok: outcome === 'success' });
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(await readIndexedUserStateRaw(otherKey)).toBe(outcome === 'success' ? 'backup settings' : 'current settings');
+    } finally {
+      releaseRestore();
+      open.mockRestore();
+    }
   });
 
   it('aborts every IndexedDB store and rolls localStorage back when one durable key conflicts', async () => {

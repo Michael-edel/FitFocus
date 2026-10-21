@@ -2,11 +2,13 @@
 // browser storage layers are included in the portable JSON snapshot.
 
 import { restoreIndexedUserStateBackup } from './storage/indexedUserState';
+import { localUserIdFromStorageKey } from './storage/hybrid';
 import {
   createDurableStateBackup, getBackupIndexedValues, restoreDurableStateBackup,
   type DurableStateBackup,
 } from './storage/durableStateBackup';
-import { LEGACY_QUEUE_SOURCE_KEY } from './storage/legacyQueue';
+import { LEGACY_DELETED_ACCOUNT_META_PREFIX, LEGACY_QUEUE_SOURCE_KEY, legacyDeletedAccountMetaId } from './storage/legacyQueue';
+import { afterIndexedRequests, STATE_STORES, stateTransaction, userStateDatabase } from './storage/stateDatabase';
 
 export type BackupPayload = {
   version: number;
@@ -68,6 +70,44 @@ function isFitFocusBackupKey(key: string): boolean {
   );
 }
 
+function backupDeletionMarkerIds(payload: BackupPayload): Set<string> {
+  const stores = payload.durableState?.stores;
+  const rows = stores?.[STATE_STORES.meta];
+  if (!Array.isArray(rows)) return new Set();
+  return new Set(rows.flatMap((row) => isRecord(row) && typeof row.id === 'string'
+    && row.id.startsWith(LEGACY_DELETED_ACCOUNT_META_PREFIX) ? [row.id] : []));
+}
+
+async function deletedAccountsForBackup(
+  accountIds: readonly string[],
+  payload: BackupPayload,
+): Promise<Set<string>> {
+  const uniqueAccountIds = [...new Set(accountIds)];
+  if (!uniqueAccountIds.length) return new Set();
+
+  const markerByAccount = new Map(await Promise.all(uniqueAccountIds.map(async (accountId) =>
+    [accountId, await legacyDeletedAccountMetaId(accountId)] as const)));
+  const importedMarkers = backupDeletionMarkerIds(payload);
+  const deleted = new Set(uniqueAccountIds.filter((accountId) => importedMarkers.has(markerByAccount.get(accountId)!)));
+  const currentMarkerIds = uniqueAccountIds
+    .filter((accountId) => !deleted.has(accountId))
+    .map((accountId) => markerByAccount.get(accountId)!);
+  if (!currentMarkerIds.length) return deleted;
+
+  const database = await userStateDatabase.open();
+  const currentMarkers = await stateTransaction(database, [STATE_STORES.meta], 'readonly', (tx) => {
+    const requests = currentMarkerIds.map((id) => tx.objectStore(STATE_STORES.meta).get(id));
+    return afterIndexedRequests(tx, requests, (results) => results);
+  });
+  currentMarkerIds.forEach((id, index) => {
+    if (currentMarkers[index]) {
+      const accountId = uniqueAccountIds.find((candidate) => markerByAccount.get(candidate) === id);
+      if (accountId) deleted.add(accountId);
+    }
+  });
+  return deleted;
+}
+
 export async function createBackupPayload(): Promise<BackupPayload> {
   const data: Record<string, string> = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -91,13 +131,23 @@ export async function createBackupPayload(): Promise<BackupPayload> {
 
 export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolean; error?: string }> {
   const localStorageBefore = new Map<string, string | null>();
+  const accountByKey = new Map<string, string>();
+  let validatedPayload: BackupPayload | null = null;
   let localStorageWasChanged = false;
   try {
     if (!isBackupPayload(payload)) return { ok: false, error: 'Invalid payload' };
+    validatedPayload = payload;
 
     const entries = Object.entries(payload.localStorage).filter(([key]) => isFitFocusBackupKey(key));
-    for (const [key] of entries) localStorageBefore.set(key, localStorage.getItem(key));
+    for (const [key] of entries) {
+      const accountId = localUserIdFromStorageKey(key);
+      if (accountId) accountByKey.set(key, accountId);
+    }
+    const deletedBeforeRestore = await deletedAccountsForBackup([...accountByKey.values()], payload);
     for (const [key, value] of entries) {
+      const accountId = accountByKey.get(key);
+      if (accountId && deletedBeforeRestore.has(accountId)) continue;
+      localStorageBefore.set(key, localStorage.getItem(key));
       localStorage.setItem(key, value);
       localStorageWasChanged = true;
     }
@@ -107,11 +157,32 @@ export async function applyBackupPayload(payload: unknown): Promise<{ ok: boolea
     } else if (!await restoreIndexedUserStateBackup(payload.indexedDb || {})) {
       throw new Error('Не все данные удалось восстановить: хранилище недоступно или запись защищена очередью изменений.');
     }
+
+    const deletedAfterRestore = await deletedAccountsForBackup([...accountByKey.values()], payload);
+    for (const [key, accountId] of accountByKey) {
+      if (!deletedAfterRestore.has(accountId)) continue;
+      const importedValue = payload.localStorage[key];
+      if (localStorage.getItem(key) !== importedValue) continue;
+      localStorage.removeItem(key);
+    }
     return { ok: true };
   } catch (error: unknown) {
     if (localStorageWasChanged) {
+      // A concurrent deletion outranks rollback: restoring the previous local
+      // snapshot would otherwise resurrect data already removed by cleanup.
+      const deleted = validatedPayload
+        ? await deletedAccountsForBackup([...accountByKey.values()], validatedPayload).catch(() => null)
+        : null;
       for (const [key, previous] of localStorageBefore) {
         try {
+          const accountId = accountByKey.get(key);
+          // If storage is unavailable, leave account keys as they are rather
+          // than assume a deletion marker is absent and restore private data.
+          if (accountId && deleted === null) continue;
+          if (accountId && deleted?.has(accountId)) {
+            if (localStorage.getItem(key) === validatedPayload?.localStorage[key]) localStorage.removeItem(key);
+            continue;
+          }
           if (previous === null) localStorage.removeItem(key);
           else localStorage.setItem(key, previous);
         } catch { /* Report the original failure; the IDB restore itself is transactional. */ }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { clearLocalUserData, clearRetiredLocalTelemetry } from '../storage/hybrid';
+import { clearLocalUserData, clearRetiredLocalTelemetry, localUserIdFromStorageKey } from '../storage/hybrid';
 import { userStateDatabase } from '../storage/stateDatabase';
 
 class MemoryStorage implements Storage {
@@ -35,6 +35,16 @@ describe('clearLocalUserData', () => {
   afterEach(() => {
     userStateDatabase.close();
     vi.unstubAllGlobals();
+  });
+
+  it('parses account owners without truncating dynamic suffixes embedded in account ids', () => {
+    const accountId = 'owner_ai_cache_v1:embedded_family_menu:';
+    expect(localUserIdFromStorageKey(`fitfocus_data_${accountId}_ai_cache_v1:recipe`)).toBe(accountId);
+    expect(localUserIdFromStorageKey(`fitfocus_data_${accountId}_family_menu:["family","2026-10-19"]`)).toBe(accountId);
+    expect(localUserIdFromStorageKey(`fitfocus_data_${accountId}_shopping_fallback_2026-10-19`)).toBe(accountId);
+    expect(localUserIdFromStorageKey(`fitfocus_usage_counters_v1:${encodeURIComponent(accountId)}__ffv`)).toBe(accountId);
+    expect(localUserIdFromStorageKey('fitfocus.remote-kv-outbox.v1')).toBeNull();
+    expect(localUserIdFromStorageKey(`fitfocus_data_${accountId}_council_history`)).toBe(accountId);
   });
 
   it('removes all user-scoped data and version metadata without touching another account', async () => {
@@ -164,6 +174,73 @@ describe('clearLocalUserData', () => {
 
     expect(await clearLocalUserData('')).toMatchObject({ complete: false, localStorageKeysRemoved: 0 });
     expect(storage.getItem('fitfocus_data_user-1_diary')).toBe('keep');
+  });
+
+  it('removes account data restored while the deletion tombstone is being written', async () => {
+    const storage = new MemoryStorage();
+    const accountId = 'restore-during-delete';
+    const accountKey = `fitfocus_data_${accountId}_diary`;
+    vi.stubGlobal('localStorage', storage);
+
+    const originalOpen = userStateDatabase.open.bind(userStateDatabase);
+    let signalOpenStarted!: () => void;
+    let releaseOpen!: () => void;
+    const openStarted = new Promise<void>((resolve) => { signalOpenStarted = resolve; });
+    const openGate = new Promise<void>((resolve) => { releaseOpen = resolve; });
+    vi.spyOn(userStateDatabase, 'open').mockImplementationOnce(async () => {
+      signalOpenStarted();
+      await openGate;
+      return originalOpen();
+    });
+
+    const deletion = clearLocalUserData(accountId);
+    await openStarted;
+
+    // Model an old backup restore landing after the first localStorage sweep.
+    storage.setItem(accountKey, 'stale private diary');
+    releaseOpen();
+
+    await expect(deletion).resolves.toMatchObject({
+      complete: true,
+      indexedDbCleared: true,
+      localStorageCleared: true,
+    });
+    expect(storage.getItem(accountKey)).toBeNull();
+  });
+
+  it('rechecks legacy evidence written by an old tab during account cleanup', async () => {
+    const storage = new MemoryStorage();
+    const accountId = 'legacy-race-user';
+    const accountKey = `fitfocus_data_${accountId}_diary`;
+    storage.setItem('fitfocus.remote-kv-outbox.v1', JSON.stringify([
+      { type: 'put', key: 'fitfocus_data_other-user_diary', value: 'unrelated' },
+    ]));
+    vi.stubGlobal('localStorage', storage);
+
+    const originalOpen = userStateDatabase.open.bind(userStateDatabase);
+    let signalOpenStarted!: () => void;
+    let releaseOpen!: () => void;
+    const openStarted = new Promise<void>((resolve) => { signalOpenStarted = resolve; });
+    const openGate = new Promise<void>((resolve) => { releaseOpen = resolve; });
+    vi.spyOn(userStateDatabase, 'open').mockImplementationOnce(async () => {
+      signalOpenStarted();
+      await openGate;
+      return originalOpen();
+    });
+
+    const deletion = clearLocalUserData(accountId);
+    await openStarted;
+    storage.setItem('fitfocus.remote-kv-outbox.v1', JSON.stringify([
+      { type: 'put', key: accountKey, value: 'legacy private diary from old tab' },
+    ]));
+    releaseOpen();
+
+    await expect(deletion).resolves.toMatchObject({
+      complete: false,
+      localStorageCleared: true,
+      indexedDbCleared: true,
+      legacyEvidenceRetained: true,
+    });
   });
 
   it('preserves a mixed-account legacy queue and reports retained account evidence', async () => {
