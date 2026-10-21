@@ -1257,6 +1257,11 @@ HTTP bootstrap/state-hydration и атомарный auth-fence добавлен
     протестированную request-specific обработку. Unit scope/report — 13/13,
     полный unit — 1390/1390, root/domain/storage typecheck прошли; удержанный
     Coach retry отменён при реальной навигации в Chromium (1/1). P0.5 в целом открыт.
+  - [x] Проверить навигацию во время ответа AI Совета: `beforeunload` отменяет
+    запрос; сохранённый вопрос и durable operation остаются, поздний ответ не
+    попадает в историю после возврата. Browser acceptance прошёл 7/7 desktop,
+    Android, iPhone и PWA профилей, `workers=1,retries=0`. Точный CI нового
+    коммита и staging ещё не подтверждены; общий P0.5 остаётся открытым.
   - [x] Отменять все активные family callbacks перед навигацией через один
     временный listener на scope; listener снимается после завершения последнего
     действия или при invalidation, а при idle отсутствует. Family unit — 19/19;

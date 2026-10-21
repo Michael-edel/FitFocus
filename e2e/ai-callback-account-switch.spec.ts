@@ -558,6 +558,68 @@ test('navigation aborts a held Coach retry without durable success effects', asy
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
+test('navigation aborts a held AI Council response and preserves only the saved question', async ({ page }) => {
+  const marker = '__e2e_ai_council_unload__';
+  await page.addInitScript(({ markerKey, feature }) => {
+    const mark = (suffix: string, value: string) => {
+      try { localStorage.setItem(`${markerKey}:${suffix}`, value); } catch { /* The document may be unloading. */ }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof Request ? input.url : String(input), location.href);
+      let requestFeature: unknown;
+      try { requestFeature = typeof init?.body === 'string' ? JSON.parse(init.body).feature : undefined; } catch { /* Ignore unrelated requests. */ }
+      if (url.pathname === '/api/ai' && requestFeature === feature && init?.signal) {
+        mark('request', 'started');
+        init.signal.addEventListener('abort', () => mark('signal', 'aborted'), { once: true });
+      }
+      return originalFetch(input, init);
+    };
+    window.addEventListener('beforeunload', () => mark('beforeunload', 'fired'));
+    window.addEventListener('pagehide', () => mark('pagehide', 'fired'));
+  }, { markerKey: marker, feature: 'council_chairman' });
+
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const fixture = await installAccountApi(page, state, 'council_chairman');
+  await openApp(page, '/#council');
+  await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+
+  const question = 'Вопрос должен сохраниться, поздний ответ — нет';
+  await page.getByPlaceholder('Ваш вопрос экспертам...').fill(question);
+  await page.locator('form').getByRole('button').click();
+  await expect.poll(() => fixture.counts.heldRequests).toBe(1);
+  await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:request`), marker)).toBe('started');
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const savedHistory = rawValue(before, councilKey(accountA.id));
+  const savedOperations = operationsFor(before, accountA);
+  expect(savedHistory).toContain(question);
+
+  const appOrigin = await page.evaluate(() => location.origin);
+  await page.goto('about:blank');
+  fixture.release();
+  await expect.poll(() => fixture.counts.releasedResponses).toBe(1);
+
+  await page.goto(`${appOrigin}/#council`);
+  await expect(page.getByRole('heading', { name: 'AI Совет Экспертов' })).toBeVisible();
+  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(accountA.sid);
+  await expect.poll(async () => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:signal`), marker)).toBe('aborted');
+  await expect.poll(async () => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:beforeunload`), marker)).toBe('fired');
+  await waitForAccountOutboxIdle(page, accountA);
+  const after = await readDurableSnapshot(page);
+  expect(rawValue(after, councilKey(accountA.id))).toBe(savedHistory);
+  expect(operationsFor(after, accountA)).toEqual(savedOperations);
+  expect(fixture.counts.aiRequests.filter(request => request.feature.startsWith('council_'))).toEqual([{
+    feature: 'council_chairman', account: accountA.id, session: accountA.sid,
+  }]);
+  await expect(page.getByText('Поздний ответ AI Совета из аккаунта A', { exact: true })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+});
+
 test('navigation aborts the plateau AI request during session hydration before the daily task is committed', async ({ page }) => {
   const marker = '__e2e_hydration_plateau_unload__';
   await page.addInitScript(markerKey => {

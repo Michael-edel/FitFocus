@@ -240,6 +240,17 @@ OAuth, BFCache и staging остаются за пределами провер�
 для `961c895` завершился success: 1388 unit / 215 файлов, 1044 browser passed /
 307 skipped, guards, три typecheck, build и 23 HTTP/D1 rollback/CAS-запроса.
 
+## P0.5 follow-up — навигация во время ответа AI Совета, 21.10.2026
+
+Новая browser-регрессия удерживает `council_chairman` ответ AI Совета и уходит со
+страницы после сохранения вопроса. На `beforeunload` клиентский `AbortSignal`
+отменяется; после возврата сохранённый вопрос и durable operation остаются без
+изменений, а поздний ответ не добавляется в историю. Сценарий прошёл **7/7** на
+desktop Chromium/Firefox/WebKit, Android Chrome/PWA и iPhone Safari/PWA
+(`workers=1,retries=0`). Использован реальный app transport с mock API; код
+приложения не менялся. Точный CI нового коммита и staging ещё не подтверждены,
+поэтому общий P0.5 остаётся открытым.
+
 ## Приёмка
 
 - Unit-тесты подтверждают отказ при другом аккаунте, повторном входе,
