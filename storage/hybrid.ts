@@ -268,6 +268,17 @@ export async function clearLocalUserData(userId: string | null | undefined): Pro
   if (timeoutId !== undefined) clearTimeout(timeoutId);
   if (!clearAccountScopedLocalStorage(normalizedUserId, removed)) localStorageCleared = false;
   legacyEvidenceRetained ||= durable.legacyEvidenceRetained;
+  // A legacy bundle in another tab can still append to the global source while
+  // IndexedDB cleanup is pending. Recheck at the end so `complete` describes the
+  // evidence that exists when this cleanup finishes, not only its starting snapshot.
+  try {
+    legacyEvidenceRetained ||= legacyQueueMayContainAccount(
+      localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY),
+      normalizedUserId,
+    );
+  } catch {
+    legacyEvidenceRetained = true;
+  }
   const indexedDbCleared = durable.cleared;
   return {
     complete: localStorageCleared && indexedDbCleared && !legacyEvidenceRetained,

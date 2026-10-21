@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-import { clearLocalUserData, clearRetiredLocalTelemetry, localUserIdFromStorageKey } from '../storage/hybrid';
+import {
+  clearLocalUserData,
+  clearRetiredLocalTelemetry,
+  localUserIdFromStorageKey,
+  REMOTE_KV_OUTBOX_STORAGE_KEY,
+} from '../storage/hybrid';
 import { userStateDatabase } from '../storage/stateDatabase';
 
 class MemoryStorage implements Storage {
@@ -204,6 +209,41 @@ describe('clearLocalUserData', () => {
       localStorageCleared: true,
     });
     expect(storage.getItem(accountKey)).toBeNull();
+  });
+
+  it('rechecks legacy evidence written by an old tab during account cleanup', async () => {
+    const storage = new MemoryStorage();
+    const accountId = 'legacy-race-user';
+    const accountKey = `fitfocus_data_${accountId}_diary`;
+    storage.setItem(REMOTE_KV_OUTBOX_STORAGE_KEY, JSON.stringify([
+      { type: 'put', key: 'fitfocus_data_other-user_diary', value: 'unrelated' },
+    ]));
+    vi.stubGlobal('localStorage', storage);
+
+    const originalOpen = userStateDatabase.open.bind(userStateDatabase);
+    let signalOpenStarted!: () => void;
+    let releaseOpen!: () => void;
+    const openStarted = new Promise<void>((resolve) => { signalOpenStarted = resolve; });
+    const openGate = new Promise<void>((resolve) => { releaseOpen = resolve; });
+    vi.spyOn(userStateDatabase, 'open').mockImplementationOnce(async () => {
+      signalOpenStarted();
+      await openGate;
+      return originalOpen();
+    });
+
+    const deletion = clearLocalUserData(accountId);
+    await openStarted;
+    storage.setItem(REMOTE_KV_OUTBOX_STORAGE_KEY, JSON.stringify([
+      { type: 'put', key: accountKey, value: 'legacy private diary from old tab' },
+    ]));
+    releaseOpen();
+
+    await expect(deletion).resolves.toMatchObject({
+      complete: false,
+      localStorageCleared: true,
+      indexedDbCleared: true,
+      legacyEvidenceRetained: true,
+    });
   });
 
   it('preserves a mixed-account legacy queue and reports retained account evidence', async () => {
