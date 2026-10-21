@@ -13,6 +13,16 @@ export function accountSessionRenderKey(
     : `no-session:${accountId || 'anonymous'}`;
 }
 
+/** Feedback can survive cache reconciliation, but never a missing or mismatched login. */
+export function authenticatedAccountSessionScope(
+  guard: OutboxReadGuard | null,
+  accountId: string | null | undefined,
+): string | null {
+  return accountId && guard?.accountId === accountId
+    ? accountSessionRenderKey(guard, accountId)
+    : null;
+}
+
 /** Hide account-owned UI state until the active account's storage key is loaded. */
 export function getAccountScopedUiValue<T>(
   activeStorageKey: string | null,

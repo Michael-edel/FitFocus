@@ -129,7 +129,7 @@ import { usePlanTaskState } from './features/plan/usePlanTaskState';
 import { togglePlanTask } from './features/plan/planTasks';
 import { usePlanUiState } from './features/plan/usePlanUiState';
 import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
-import { accountSessionRenderKey, getAccountScopedUiValue, useAccountScopedUiState } from './features/state/accountScopedUi';
+import { authenticatedAccountSessionScope, accountSessionRenderKey, getAccountScopedUiValue, useAccountScopedUiState } from './features/state/accountScopedUi';
 import { recordDashboardWeight } from './features/dashboard/weightLogging';
 import { shareWisCard } from './features/dashboard/shareWisCard';
 import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
@@ -325,8 +325,10 @@ const App: React.FC = () => {
   const rootAccountSessionScope = allowCachedUiStateRestore && currentUser?.id
     ? accountSessionRenderKey(loginReadGuard, currentUser.id)
     : null;
+  // Feedback belongs to the login session while the workspace reconciles its cache.
+  const profileSyncNoteScope = authenticatedAccountSessionScope(loginReadGuard, currentUser?.id);
   const { value: profileSyncNote, setValue: setProfileSyncNote } = useAccountScopedUiState<string | null>(
-    rootAccountSessionScope,
+    profileSyncNoteScope,
     null,
   );
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);
@@ -698,6 +700,7 @@ const App: React.FC = () => {
     councilStage,
     councilError,
     councilMessages,
+    canClearCouncilHistory,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,
     councilScrollRef,
@@ -1890,6 +1893,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       councilStage,
       councilError,
       councilMessages,
+      canClearCouncilHistory,
       expandedCouncilThoughtIds,
       setExpandedCouncilThoughtIds,
       councilScrollRef,
