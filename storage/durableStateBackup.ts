@@ -1,6 +1,7 @@
 import { afterIndexedRequests, StateStorageError, STATE_STORES, indexedRequest, stateTransaction, userStateDatabase, type StateStore } from './stateDatabase';
 import { LEGACY_DELETED_ACCOUNT_META_PREFIX, LEGACY_MIGRATION_META_ID, LEGACY_QUEUE_SOURCE_KEY,
   legacyDeletedAccountMetaId, legacyMigrationItemId } from './legacyQueue';
+import { indexedUserStateAccountId } from './indexedUserState';
 
 const STORE_NAMES = Object.values(STATE_STORES) as StateStore[];
 const DURABLE_META_EXCLUDED = new Set(['active-session', 'auth-fence']);
@@ -201,7 +202,10 @@ export async function restoreDurableStateBackup(value: unknown): Promise<void> {
   const stores = value.stores;
   const candidateAccounts = new Set<string>();
   const addAccount = (accountId: unknown) => { if (text(accountId)) candidateAccounts.add(accountId); };
-  for (const row of stores[STATE_STORES.values] as Record<string, unknown>[]) addAccount(row.accountId);
+  for (const row of stores[STATE_STORES.values] as Record<string, unknown>[]) {
+    addAccount(row.accountId);
+    if (text(row.key)) addAccount(indexedUserStateAccountId(row.key));
+  }
   for (const row of stores[STATE_STORES.outbox] as Record<string, unknown>[]) addAccount(row.accountId);
   for (const row of stores[STATE_STORES.migrationItems] as Record<string, unknown>[]) addAccount(row.accountId);
   for (const row of stores[STATE_STORES.migrationUnknown] as Record<string, unknown>[]) {
@@ -255,7 +259,10 @@ export async function restoreDurableStateBackup(value: unknown): Promise<void> {
             const resolvedOwner = storeName === STATE_STORES.migrationUnknown && isRecord(row.resolved)
               ? row.resolved.accountId
               : undefined;
-            if (deletedAccounts.has(String(row.accountId ?? owner ?? resolvedOwner ?? ''))) continue;
+            const valueKeyOwner = storeName === STATE_STORES.values && text(row.key)
+              ? indexedUserStateAccountId(row.key)
+              : undefined;
+            if (deletedAccounts.has(String(row.accountId ?? owner ?? resolvedOwner ?? valueKeyOwner ?? ''))) continue;
             candidates.push({ storeName, store, row, key: rowKey(storeName, row) });
           }
         }

@@ -35,6 +35,14 @@ export function isIndexedUserStateStorageKey(key: string): boolean {
   return VOLUME_STATE_SUFFIXES.some((suffix) => key.endsWith(`_${suffix}`));
 }
 
+export function indexedUserStateAccountId(key: string): string | null {
+  if (!key.startsWith(STORAGE_KEYS.dataPrefix)) return null;
+  const suffix = VOLUME_STATE_SUFFIXES.find((candidate) => key.endsWith(`_${candidate}`));
+  if (!suffix) return null;
+  const accountId = key.slice(STORAGE_KEYS.dataPrefix.length, -suffix.length - 1);
+  return accountId || null;
+}
+
 /** Reads a raw user-state value without depending on synchronous localStorage. */
 export async function readIndexedUserStateRaw(key: string): Promise<string | null> {
   if (!isIndexedUserStateStorageKey(key)) return null;
@@ -75,22 +83,30 @@ export async function restoreIndexedUserStateBackup(entries: Record<string, stri
   const rows = Object.entries(entries);
   if (rows.length === 0) return true;
   if (rows.some(([key, value]) => !isIndexedUserStateStorageKey(key) || typeof value !== 'string')) return false;
+  const accountIds = rows.map(([key]) => indexedUserStateAccountId(key));
+  if (accountIds.some((accountId) => accountId === null)) return false;
+  const deletionMarkerIds = await Promise.all(accountIds.map((accountId) => legacyDeletedAccountMetaId(accountId!)));
   const database = await openDatabase();
   if (!database) return false;
   try {
     return await stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta], 'readwrite', (tx) => {
       const meta = tx.objectStore(STATE_STORES.meta);
       const store = tx.objectStore(STORE_NAME);
-      const reads = rows.flatMap(([key]) => [
+      const reads = rows.flatMap(([key], index) => [
         meta.get(outboxKeyOwnerId(key)) as unknown as IDBRequest<unknown>,
         store.get(key) as unknown as IDBRequest<unknown>,
+        meta.get(deletionMarkerIds[index]) as unknown as IDBRequest<unknown>,
       ]);
       return afterIndexedRequests(tx, reads, (results) => {
-        const owners = rows.map((_, index) => results[index * 2]);
-        const currentValues = rows.map((_, index) => results[index * 2 + 1]);
+        const restorableIndexes = rows.map((_, index) => index).filter((index) => !results[index * 3 + 2]);
+        const owners = restorableIndexes.map((index) => results[index * 3]);
+        const currentValues = restorableIndexes.map((index) => results[index * 3 + 1]);
         if (owners.some(Boolean) || currentValues.some((value) => !!value && typeof value === 'object' && 'accountId' in value)) return false;
         const updatedAt = Date.now();
-        for (const [key, value] of rows) store.put({ key, value, updatedAt } satisfies IndexedValue);
+        for (const index of restorableIndexes) {
+          const [key, value] = rows[index];
+          store.put({ key, value, updatedAt } satisfies IndexedValue);
+        }
         return true;
       });
     });

@@ -225,6 +225,62 @@ describe('browser backup', () => {
     expect(portableMarker).toMatchObject({ kind: 'legacy-deleted-account', version: 1 });
   });
 
+  it('does not restore deleted-account localStorage keys from a stale version-three backup', async () => {
+    const accountId = 'deleted-localstorage-backup-owner';
+    const relatedAccountId = `${accountId}-related`;
+    const key = `fitfocus_data_${accountId}_diary`;
+    const relatedKey = `fitfocus_data_${relatedAccountId}_diary`;
+    const staleValue = '[{"id":"must-stay-deleted"}]';
+    localStorage.setItem(key, staleValue);
+    localStorage.setItem(relatedKey, '[{"id":"related-account"}]');
+    const staleBackup = await createBackupPayload();
+    expect(staleBackup.localStorage[key]).toBe(staleValue);
+
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+    expect(localStorage.getItem(key)).toBe(staleValue);
+
+    await expect(applyBackupPayload(staleBackup)).resolves.toMatchObject({ ok: true });
+
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem(relatedKey)).toBe('[{"id":"related-account"}]');
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+  });
+
+  it('does not restore deleted-account IndexedDB values from a stale version-three backup', async () => {
+    const accountId = 'deleted-indexed-backup-owner';
+    const relatedAccountId = `${accountId}-related`;
+    const key = `fitfocus_data_${accountId}_diary`;
+    const relatedKey = `fitfocus_data_${relatedAccountId}_diary`;
+    await expect(writeIndexedUserStateRaw(key, '[{"id":"stale-durable"}]')).resolves.toBe(true);
+    await expect(writeIndexedUserStateRaw(relatedKey, '[{"id":"related-account"}]')).resolves.toBe(true);
+    const staleBackup = await createBackupPayload();
+    expect(staleBackup.durableState?.stores[STATE_STORES.values]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key, value: '[{"id":"stale-durable"}]' }),
+    ]));
+
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+    await expect(applyBackupPayload(staleBackup)).resolves.toMatchObject({ ok: true });
+
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(relatedKey)).toBe('[{"id":"related-account"}]');
+  });
+
+  it('does not restore deleted-account values from a legacy version-two backup', async () => {
+    const accountId = 'deleted-version-two-owner';
+    const key = `fitfocus_data_${accountId}_diary`;
+    await expect(clearIndexedUserStateForUser(accountId)).resolves.toMatchObject({ cleared: true });
+
+    await expect(applyBackupPayload({
+      version: 2,
+      createdAt: '2026-10-20T00:00:00.000Z',
+      localStorage: { [key]: '[{"id":"stale-local"}]' },
+      indexedDb: { [key]: '[{"id":"stale-indexed"}]' },
+    })).resolves.toMatchObject({ ok: true });
+
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(await readIndexedUserStateRaw(key)).toBeNull();
+  });
+
   it('aborts every IndexedDB store and rolls localStorage back when one durable key conflicts', async () => {
     const diaryKey = 'fitfocus_data_restore-user_diary';
     const settingsKey = 'fitfocus_data_restore-user_settings';
