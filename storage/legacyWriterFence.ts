@@ -59,7 +59,7 @@ function isFenceReply(value: unknown): value is FenceReply {
       && (typeof client.buildId === 'string' || client.buildId === null));
 }
 
-/** Ask the active worker to verify that every same-origin window runs this exact build. */
+/** Ask the controlling worker to verify that every same-origin window runs this exact build. */
 export async function checkLegacyWriterFence(
   container: Pick<ServiceWorkerContainer, 'controller'>,
   buildId: string,
@@ -89,11 +89,10 @@ export async function checkLegacyWriterFence(
     };
     const timer = setTimeout(() => finish(null), timeoutMs);
     const onStateChange = () => {
-      if (controller.state === 'redundant') return finish(null);
-      if (controller.state === 'activated') postCheck();
+      if (controller.state === 'redundant') finish(null);
     };
     const postCheck = () => {
-      if (settled || controller.state !== 'activated') return;
+      if (settled || controller.state === 'redundant') return finish(null);
       try {
         channel = new MessageChannel();
       } catch { return finish(null); }
@@ -113,7 +112,9 @@ export async function checkLegacyWriterFence(
       }
     };
     controller.addEventListener('statechange', onStateChange);
-    onStateChange();
+    // A controller may still report "activating" while it can already answer.
+    // The challenge, worker build and complete client inventory establish proof.
+    postCheck();
   });
 }
 
