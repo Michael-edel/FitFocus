@@ -30,7 +30,7 @@ export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_L
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
-export const DB_MIGRATION_VERSION = "0018_wearable_connections.sql";
+export const DB_MIGRATION_VERSION = "0019_state_tombstones.sql";
 
 export const versioningRules = [
   {

@@ -2,7 +2,7 @@ import type { SessionUser } from './auth';
 import { safeJsonParse } from './json';
 import { parseAttachmentsJson, type SupportAttachmentRecord } from './support_attachments';
 
-type KvRow = { k: string; v: string; updated_at?: number; version?: number };
+type KvRow = { k: string; v: string; updated_at?: number; version?: number; deleted_at?: number | null };
 type PublicSupportAttachment = Pick<SupportAttachmentRecord, 'name' | 'mime' | 'size' | 'kind' | 'data_url'>;
 type SupportFeedbackExportRow = Record<string, unknown> & { attachments_json?: string | null };
 type SupportMessageExportRow = Record<string, unknown> & { attachments_json?: string | null };
@@ -19,7 +19,7 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
     .bind(userId)
     .first<{ profile_json: string; updated_at: number; version: number }>();
 
-  const kv = await allRows(db, 'SELECT k, v, updated_at, version FROM user_kv WHERE user_id = ? ORDER BY k', userId);
+  const kv = await allRows(db, 'SELECT k, v, updated_at, version, deleted_at FROM user_kv WHERE user_id = ? ORDER BY k', userId);
   const sessions = await allRows(db, 'SELECT id, created_at, expires_at, revoked, user_agent, ip FROM sessions WHERE user_id = ? ORDER BY created_at DESC', userId);
   const roles = await allRows(db, 'SELECT role FROM user_roles WHERE user_id = ? ORDER BY role', userId);
   const subscriptions = await allRows(db, 'SELECT plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at FROM subscriptions WHERE user_id = ?', userId);
@@ -51,7 +51,10 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
     profile: profRow?.profile_json ? safeJsonParse(profRow.profile_json) : null,
     profile_updated_at: profRow?.updated_at ?? null,
     profile_version: profRow?.version ?? null,
-    kv: kv.map((r: KvRow) => ({ key: r.k, value: r.v, updated_at: r.updated_at, version: r.version })),
+    kv: kv.map((r: KvRow) => ({
+      key: r.k, value: r.deleted_at == null ? r.v : '', updated_at: r.updated_at,
+      version: r.version, exists: r.deleted_at == null, deleted_at: r.deleted_at ?? null,
+    })),
     sessions,
     roles,
     subscriptions,

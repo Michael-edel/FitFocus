@@ -33,7 +33,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number } = {}) {
+function makeDb(options: { atomicWriteChanges?: number } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   const batches: Array<Array<{ sql: string; binds: unknown[] }>> = [];
   return {
@@ -51,7 +51,7 @@ function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number }
           if (sql.includes('FROM sessions')) return { id: 'sid-1', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('FROM users WHERE id = ? LIMIT 1')) return { is_active: 1, deleted_at: null };
           if (sql.includes('SELECT 1 as ok FROM invite_redemptions')) return { ok: 1 };
-          if (sql.includes('SELECT v, version FROM user_kv')) {
+          if (sql.includes('SELECT v, version, deleted_at FROM user_kv')) {
             const key = String(this.binds[1] || '');
             if (key === 'fitfocus_data_user-1_food:1') return { v: '{"ok":true}', version: 1 };
             if (key === 'fitfocus_data_user-1_food:2') return { v: '{"server":true}', version: 5 };
@@ -62,12 +62,16 @@ function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number }
         async all() {
           if (sql.includes('INSERT INTO user_kv')) {
             runs.push({ sql, binds: this.binds });
-            const inputBinds = this.binds.slice(0, -4);
+            const inputBinds = this.binds.slice(0, -3);
             const input = Array.from({ length: inputBinds.length / 3 }, (_, index) => ({
               k: String(inputBinds[index * 3]),
               version: String(inputBinds[index * 3]).endsWith('food:1') ? 2 : 1,
             }));
-            const changes = options.atomicWriteChanges ?? input.length;
+            const conflicting = input.some((item, index) => {
+              const currentVersion = item.k.endsWith('food:1') ? 1 : item.k.endsWith('food:2') ? 5 : 0;
+              return inputBinds[index * 3 + 2] !== currentVersion;
+            });
+            const changes = options.atomicWriteChanges ?? (conflicting ? 0 : input.length);
             return { results: changes === 0 ? [] : input, meta: { changes } };
           }
           if (sql.includes('SELECT role FROM user_roles')) return { results: [{ role: 'user' }] };
@@ -76,6 +80,7 @@ function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number }
               results: [
                 { k: 'fitfocus_data_user-1_food:1', v: '{"meal":true}', version: 2, updated_at: 1000 },
                 { k: 'fitfocus_data_user-1_all_users', v: '[{"name":"Hidden"}]', version: 3, updated_at: 1001 },
+                { k: 'fitfocus_data_user-1_food:deleted', v: '', version: 4, updated_at: 1002, deleted_at: 1002 },
               ],
             };
           }
@@ -83,7 +88,7 @@ function makeDb(options: { atomicWriteChanges?: number; deleteChanges?: number }
         },
         async run() {
           runs.push({ sql, binds: this.binds });
-          return { success: true, meta: { changes: options.deleteChanges ?? 1 } };
+          return { success: true, meta: { changes: 1 } };
         },
       };
       return stmt;
@@ -113,11 +118,11 @@ async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unkn
   return onRequestPut(context);
 }
 
-async function getState(db: ReturnType<typeof makeDb>, prefix: string) {
+async function getState(db: ReturnType<typeof makeDb>, prefix: string, includeDeleted = false) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateGetContext['env'];
   const context: StateGetContext = {
-    request: new Request(`https://fitfocus.test/api/state?prefix=${encodeURIComponent(prefix)}`, {
+    request: new Request(`https://fitfocus.test/api/state?prefix=${encodeURIComponent(prefix)}${includeDeleted ? '&includeDeleted=1' : ''}`, {
       method: 'GET',
       headers: { Cookie: `ff_session=${token}` },
     }),
@@ -148,6 +153,27 @@ async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersi
 }
 
 describe('/api/state PUT', () => {
+  it('returns the committed deletion version and advertises the state protocol', async () => {
+    const response = await deleteState(makeDb(), 'fitfocus_data_user-1_food:1', 1);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-FitFocus-State-Protocol')).toBe('2');
+    await expect(response.json()).resolves.toMatchObject({ ok: true, key: 'fitfocus_data_user-1_food:1', version: 2, exists: false });
+  });
+
+  it('rejects an old unversioned delete for an existing key', async () => {
+    const response = await deleteState(makeDb(), 'fitfocus_data_user-1_food:1');
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'KV_CONFLICT', version: 1, exists: true });
+  });
+
+  it('includes tombstone generations only when the reader opts in', async () => {
+    const response = await getState(makeDb(), 'fitfocus_data_user-1_', true);
+    expect(response.headers.get('X-FitFocus-State-Protocol')).toBe('2');
+    await expect(response.json()).resolves.toMatchObject({ items: [
+      { key: 'fitfocus_data_user-1_food:1', exists: true },
+      { key: 'fitfocus_data_user-1_food:deleted', value: '', version: 4, exists: false },
+    ] });
+  });
   it('rejects legacy all-users snapshots from the remote state keyspace', async () => {
     expect(isAllowedStateKey('user-1', 'fitfocus_data_user-1_all_users')).toBe(false);
 
@@ -179,7 +205,7 @@ describe('/api/state PUT', () => {
   });
 
   it('rejects stale state deletion and returns the newer server value', async () => {
-    const db = makeDb({ deleteChanges: 0 });
+    const db = makeDb();
     const response = await deleteState(db, 'fitfocus_data_user-1_food:1', 2);
 
     expect(response.status).toBe(409);
@@ -189,7 +215,7 @@ describe('/api/state PUT', () => {
       value: '{"ok":true}',
       version: 1,
     });
-    expect(db.runs.some((run) => run.sql.includes('version = ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('RETURNING k, version'))).toBe(true);
   });
 
   it('does not return legacy all-users snapshots during prefix hydration', async () => {
@@ -257,7 +283,7 @@ describe('/api/state PUT', () => {
       key: 'fitfocus_data_user-1_food:1',
     });
     expect(db.batches).toHaveLength(0);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+    expect(db.runs).toHaveLength(0);
   });
 
   it('returns KV_CONFLICT when the atomic write detects a concurrent update', async () => {
@@ -289,7 +315,7 @@ describe('/api/state PUT', () => {
       version: 5,
     });
     expect(db.batches).toHaveLength(0);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('RETURNING k, version'))).toBe(true);
   });
 
   it('rejects invalid baseVersion values before writes', async () => {

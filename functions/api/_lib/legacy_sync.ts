@@ -59,23 +59,23 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
   try {
     const legacyItems = await db
       .prepare(
-        `SELECT k, v, version, updated_at
+        `SELECT k, v, version, updated_at, deleted_at
          FROM user_kv
-         WHERE user_id = ? AND k LIKE ?`
+         WHERE user_id = ? AND substr(k, 1, length(?)) = ?`
       )
-      .bind(fromUserId, `${oldPrefix}%`)
-      .all<{ k: string; v: string; version?: number; updated_at?: number }>();
+      .bind(fromUserId, oldPrefix, oldPrefix)
+      .all<{ k: string; v: string; version?: number; updated_at?: number; deleted_at?: number | null }>();
 
     const statements: D1PreparedStatement[] = [];
     for (const item of legacyItems.results || []) {
-      if (!item?.k) continue;
-      const nextKey = item.k.startsWith(oldPrefix) ? `${newPrefix}${item.k.slice(oldPrefix.length)}` : item.k;
+      if (typeof item?.k !== 'string' || !item.k.startsWith(oldPrefix)) continue;
+      const nextKey = `${newPrefix}${item.k.slice(oldPrefix.length)}`;
       statements.push(
         db.prepare(
-          `INSERT INTO user_kv (user_id, k, v, updated_at, version)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version`
-        ).bind(toUserId, nextKey, item.v, item.updated_at ?? now, item.version ?? 1)
+          `INSERT INTO user_kv (user_id, k, v, updated_at, version, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, k) DO NOTHING`
+        ).bind(toUserId, nextKey, item.deleted_at == null ? item.v : '', item.updated_at ?? now, item.version ?? 1, item.deleted_at ?? null)
       );
     }
     if (statements.length) {
