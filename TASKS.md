@@ -106,7 +106,7 @@ PR #90 остаётся открыт; одобряющего review пока н�
 сможете получить необходимое одобрение. Требование защищённой `main` пока не
 выполнено, merge не сделан.
 
-В плане **28 незакрытых пунктов верхнего уровня**: 16 в P0, 7 в P1 и 5 в
+В плане **27 незакрытых пунктов верхнего уровня**: 15 в P0, 7 в P1 и 5 в
 подготовительных и компонентных разделах. Ни один P0 не закрыт целиком. Остались другие
 writers и lifecycle callbacks, полная матрица, UI разрешения конфликтов, отдельная
 staging-среда с OAuth и D1, совместимость старых/новых bundles, rollback/release
@@ -648,49 +648,23 @@ P0.5, P0.8 и выпуск остаются открытыми. Это реал�
   три typecheck, guards/schema/privacy и audit (0).
 - [x] Подтвердить [CI PWA `8d32f12`](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501):
   1043 unit / 192 файла, 341 browser passed / 9 skips; success.
-- [ ] Исследовать Firefox timeout в `pwa-update.spec.ts` на `saved(page)`
-  до активации SW: CI `98d4910` прошёл этот сценарий только с retry.
-  Установить причину по trace/IDB lifecycle и подтвердить без retries;
-  не считать повтор или увеличение таймаута исправлением. На базе `076f4ac`
-  локально воспроизведён 1 timeout / 3 повтора (`retries=0`); затем прошли
-  17 попыток с IDB open/versionchange logging и одна с полной стадийной
-  диагностикой. На опубликованной `47da77c` прошли 3+8 запусков с IDB-логами
-  и 3+8 без instrumentation (временно восстановлены тест/helper `076f4ac`);
-  все `workers=1,retries=0`. В `96937ea` test helper и failure-only probe
-  используют уже открытую приложением IDB v3 connection вместо независимых
-  `indexedDB.open()` запросов; тогдашняя версия trace связывала задержку с
-  наблюдателем на том же origin рядом с открытием legacy v2, но точная причина
-  не была подтверждена. Firefox прошёл ещё 10/10
-  локальных повторов, а точный CI [`38729850933`](https://github.com/Michael-edel/FitFocus/actions/runs/38729850933)
-  для `96937ea` завершился success. В том запуске были 2 flaky в других E2E;
-  они исправлены в `aa4073c`. Точный CI нового HEAD ещё ожидается, поэтому пункт
-  пока открыт. Working tree сохраняет IDB open/blocked/upgrade,
-  versionchange/close и стадии transaction/read в failure attachment. На HEAD
-  `404b3da` Firefox `pwa-update.spec.ts` прошёл ещё 5/5 последовательных
-  запусков (`workers=1,retries=0`); timeout снова не воспроизведён, поэтому
-  первопричина остаётся открытой. На коде `bb94957` сценарий реального
-  обновления PWA повторно прошёл 1/1 в `desktop-firefox` без retries; это не
-  устанавливает причину исторического timeout. На текущем коде `5250190`
-  сценарий прошёл ещё 3/3, затем 10/10 (`desktop-firefox`, `workers=1,retries=0`,
-  суммарно 6.3 минуты); timeout не воспроизвёлся, первопричина остаётся
-  недоказанной. Точный CI [#1686](https://github.com/Michael-edel/FitFocus/actions/runs/39190724688)
-  для runtime HEAD `1546073` завершился success, включая полную browser-матрицу,
-  rollback/CAS и артефакты; это подтверждает текущий код, но не объясняет исходный
-  timeout. Предыдущий #1684 для `5250190` отменён concurrency policy при обновлении
-  PR. На актуальном локальном HEAD сценарий ещё раз прошёл 3/3 и затем 10/10 в
-  desktop Firefox (`workers=1,retries=0`); ошибка не воспроизвелась. Это
-  повторяемость, а не доказательство причины. Staging и устройства остаются
-  открыты. Позднее сохранённый trace `pwa-firefox-repeat3-076` показал, что
-  зависший вызов `saved(page)` ожидал независимый `indexedDB.open()` в
-  `page.evaluate` около 87,9 с; screenshot при этом показывает живой экран семьи.
-  Это подтверждает задержку тестового probe, но не объясняет, почему Firefox
-  задержал дополнительное открытие IDB. В текущих локальных диагностических
-  изменениях helper повторно использует connection приложения и сразу завершает
-  проверку с понятной ошибкой, если connection не был захвачен; PWA-тест требует
-  захвата до чтения, а failure helper больше не открывает отдельную IDB. Три
-  целевых повтора прошли 3/3, полный `pwa-update.spec.ts` — 10 passed / 4 skipped,
-  typecheck и `git diff --check` прошли. Причина исторического stall остаётся
-  недоказанной; новый точный CI должен подтвердить диагностический follow-up.
+- [x] Исследовать Firefox timeout в `pwa-update.spec.ts` на `saved(page)` до
+  активации Service Worker. Trace показывает, что задерживался test-only
+  независимый `indexedDB.open()` в `saved(page)`: около 87,9 с при живом экране
+  приложения. `saved(page)` и failure diagnostics теперь повторно используют
+  открытую приложением IDB connection; в диагностическом режиме отсутствие
+  connection завершается ясной ошибкой. Так убран второй IDB open, а не
+  замаскирован timeout увеличением ожидания или retry. Targeted Firefox и полный
+  `pwa-update.spec.ts` прошли без retries. Точный CI
+  [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+  для кода `58f4d30` завершился success: 1627 browser passed / 74 explicit skips,
+  native BFCache 1/1, rollback/CAS HTTP 23/23. Основной `saved(page)` helper и
+  захват app connection не менялись после этой проверенной ревизии. Новый
+  диагностический follow-up также удаляет независимый `indexedDB.open()` из failure-only
+  `stateDebug`; targeted Firefox и полная PWA spec прошли без retries локально.
+  Точный CI этого диагностического follow-up ожидает завершения текущего run.
+  Причина внутренней задержки дополнительного запроса на уровне Firefox
+  неизвестна, но независимые открытия IDB в диагностических helpers устранены.
 
 - [x] Разобрать исторический native WebKit pageerror по trace CI `5b90249`:
   ошибка привязана к отмене семейного PUT при reload после `controllerchange`,

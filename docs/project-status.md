@@ -80,11 +80,13 @@ probe, но не объясняет задержку Firefox и не доказ�
 Локальное тестовое изменение повторно использует connection приложения и
 завершается понятной ошибкой, если connection не захвачен. Целевые повторы прошли
 3/3, полный `pwa-update.spec.ts` — 10 passed / 4 skipped без retries, typecheck
-прошёл. Точный CI #1832 завершился success: полная browser matrix прошла
-1627/1627 без отказов (74 явных skip); native BFCache — 1/1. Это подтверждает
-follow-up на текущем SHA, но не устанавливает первопричину прежней задержки
-Firefox. P0.9 остаётся открытым до завершения остальных lifecycle, staging и
-release критериев.
+прошёл. Точный CI #1832 для `58f4d30` завершился success: полная browser matrix
+прошла 1627/1627 без отказов (74 явных skip); native BFCache — 1/1. Он
+подтверждает основной `saved(page)` путь на этой ревизии. Новый тестовый
+follow-up также удаляет независимый IDB open из failure-only `stateDebug`;
+его точный CI ожидает завершения run #1838. Причина внутренней задержки Firefox
+остаётся неизвестной. P0.9 открыт до завершения lifecycle, staging и release
+критериев.
 
 Предыдущий follow-up `a560c6c` связывает точное WebKit reload warning с тем же
 GET `/api/me`, который начался до reload и завершился abort/cancel; прочие

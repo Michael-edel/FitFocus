@@ -148,45 +148,29 @@ async function expectCapturedAppDatabase(page: Page) {
 
 async function stateDebug(page: Page) {
   return page.evaluate(async () => {
-    let db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
-    let closeDatabase = false;
-    if (!db) {
-      const diagnosticsEnabled = (window as Window & {
-        __fitfocusE2eIdbDiagnostics?: boolean;
-      }).__fitfocusE2eIdbDiagnostics;
-      if (diagnosticsEnabled) {
-        throw new Error('APP_DATABASE_CONNECTION_NOT_CAPTURED');
-      }
-      const request = indexedDB.open('fitfocus-user-state-v1');
-      db = await new Promise<IDBDatabase>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      closeDatabase = true;
-    }
-    try {
-      const tx = db.transaction(['outbox_meta', 'outbox'], 'readonly');
-      const complete = new Promise<void>((resolve, reject) => {
-        tx.addEventListener('complete', () => resolve(), { once: true });
-        tx.addEventListener('abort', () => reject(tx.error), { once: true });
-      });
-      const get = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const [meta, outbox] = await Promise.all([
-        get(tx.objectStore('outbox_meta').getAll()), get(tx.objectStore('outbox').getAll()),
-      ]);
-      await complete;
-      return {
-        fence: meta.find((entry: { id: string }) => entry.id === 'auth-fence') ?? null,
-        activeSession: meta.find((entry: { id: string }) => entry.id === 'active-session') ?? null,
-        migration: meta.find((entry: { id: string }) => entry.id === 'legacy-migration:v1') ?? null,
-        operations: outbox.map((operation: { opId: string; resource?: string; status: string; reason?: string; baseVersion: number }) => ({
+    const db = (window as Window & { __fitfocusE2eDatabase?: IDBDatabase }).__fitfocusE2eDatabase;
+    if (!db) throw new Error('APP_DATABASE_CONNECTION_NOT_CAPTURED');
+    const tx = db.transaction(['outbox_meta', 'outbox'], 'readonly');
+    const complete = new Promise<void>((resolve, reject) => {
+      tx.addEventListener('complete', () => resolve(), { once: true });
+      tx.addEventListener('abort', () => reject(tx.error), { once: true });
+    });
+    const get = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const [meta, outbox] = await Promise.all([
+      get(tx.objectStore('outbox_meta').getAll()), get(tx.objectStore('outbox').getAll()),
+    ]);
+    await complete;
+    return {
+      fence: meta.find((entry: { id: string }) => entry.id === 'auth-fence') ?? null,
+      activeSession: meta.find((entry: { id: string }) => entry.id === 'active-session') ?? null,
+      migration: meta.find((entry: { id: string }) => entry.id === 'legacy-migration:v1') ?? null,
+      operations: outbox.map((operation: { opId: string; resource?: string; status: string; reason?: string; baseVersion: number }) => ({
         opId: operation.opId, resource: operation.resource, status: operation.status, reason: operation.reason, baseVersion: operation.baseVersion,
-        })),
-      };
-    } finally { if (closeDatabase) db.close(); }
+      })),
+    };
   });
 }
 
