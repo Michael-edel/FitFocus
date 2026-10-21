@@ -16,10 +16,16 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 включая volume-only v3 записи без явного владельца и гонку с account deletion.
 На чисто установленных зафиксированных зависимостях прошли 1477 unit-тестов,
 три typecheck, dependency audit, schema/privacy/auth/API guards и production
-build. Это локальная проверка; точный CI `671196e` ожидает push. Run #1845
-проверяет предыдущий SHA `b896c2c`; browser matrix ещё выполняется. PR #90
-остаётся без одобряющего ревью, требуемого защитой `main`; отдельного staging
-нет. Поэтому `main` не обновлён.
+build. Точный [CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+для PR-head `0c44c0e` завершился success: 1477 unit / 217 файлов, 1641 browser
+passed / 74 skipped, native BFCache 1/1, rollback/CAS 23/23, audit без
+уязвимостей, guards, три typecheck и build. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12336870919)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12337295421).
+Cloudflare branch preview успешно собран для `0c44c0e`; отдельного staging нет.
+Предыдущий CI #1845 на `b896c2c` отменён concurrency при push нового SHA.
+GitGuardian отметил PR как слишком большой для secret scan; этот neutral check
+не является успешным сканированием. PR #90 остаётся без одобряющего ревью,
+требуемого защитой `main`. Поэтому `main` не обновлён.
 
 Кодовый follow-up `7f534868584936067f12b0070adc874e5755be74` прошёл полный точный
 [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883),

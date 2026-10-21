@@ -85,8 +85,12 @@ backup во время tombstone удаления.
 добавляет эти проверки и закрывает обнаруженный путь возврата volume-only v3
 данных без `accountId`. Локально на установленном из lock-файла Vite 6.4.4
 прошли 1477 unit-тестов / 217 файлов, три typecheck, dependency audit без
-уязвимостей, schema/privacy/auth/API guards и production build. Точный CI этого
-коммита ожидает публикации.
+уязвимостей, schema/privacy/auth/API guards и production build. Точный
+[CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+для PR-head `0c44c0e` завершился success: 1641 browser passed / 74 skipped,
+native BFCache 1/1 и rollback/CAS 23/23 также прошли. Сохранены [browser
+diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12336870919)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12337295421).
 
 На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
 добавлен [браузерный сценарий](../e2e/durable-backup-restore.spec.ts) импорта

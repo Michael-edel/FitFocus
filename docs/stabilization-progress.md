@@ -8481,6 +8481,13 @@ tombstone в той же транзакции, где записывает ст�
 сообщил 0 уязвимостей. Полный unit suite прошёл **1477/1477** в 217 файлах;
 root, domain-strict и storage-strict typecheck, API/auth/schema/privacy/admin
 guards и production build прошли. Локальный `git diff --check` также прошёл после
-документационных правок. Точный GitHub CI `671196e` ожидает публикации; run #1845
-для предшествующего `b896c2c` ещё выполняет browser matrix. PR #90 всё ещё
-требует одобряющее ревью для защищённой `main`; выделенного staging у проекта нет.
+документационных правок. Точный [CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+для PR-head `0c44c0e` завершился success: 1477 unit / 217 файлов, 1641 browser
+passed / 74 skipped, native BFCache 1/1, rollback/CAS 23/23; dependency audit —
+0 уязвимостей, все guards, три typecheck и build прошли. Сохранены [browser
+diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12336870919)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12337295421).
+Cloudflare branch preview собран успешно, но отдельного staging нет. Предыдущий
+run #1845 на `b896c2c` отменён concurrency при push. GitGuardian не выполнил
+secret scan из-за размера PR (neutral). PR #90 всё ещё требует одобряющее
+ревью для защищённой `main`.

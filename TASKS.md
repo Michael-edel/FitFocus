@@ -2389,8 +2389,10 @@ all-client Service Worker fence, атомарные migration items и quarantin
     соседний аккаунт и гонку удаления. Коммит
     [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9):
     1477 unit / 217 файлов, три typecheck, audit, schema/privacy/auth/API guards
-    и build прошли локально. Точный CI ожидает публикации; общий P0.8 остаётся
-    открыт.
+    и build прошли локально. Точный [CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+    для PR-head `0c44c0e` завершился success: 1477 unit / 217 файлов, 1641
+    browser passed / 74 skipped, native BFCache 1/1, rollback/CAS 23/23, audit
+    без уязвимостей, guards, три typecheck и build. Общий P0.8 остаётся открыт.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;

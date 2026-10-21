@@ -15,7 +15,10 @@ Follow-up [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d8
 восстановление успевало записать ключ после первого прохода очистки. После
 завершения IDB-транзакции удаление повторно сканирует scoped localStorage ключи;
 v2/v3 restore также сверяет tombstone перед восстановлением. Регрессионные тесты
-прошли в общем локальном наборе 1477/1477; точный CI новой ревизии ещё не запускался.
+прошли в общем локальном наборе 1477/1477. Точный
+[CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+для PR-head `0c44c0e` завершился success: browser 1641 passed / 74 skipped,
+BFCache 1/1 и rollback/CAS 23/23.
 
 Дополнение 13.10.2026: подавление повторного legacy-импорта, sender guard и
 фильтрация старого backup реализованы в коммите
