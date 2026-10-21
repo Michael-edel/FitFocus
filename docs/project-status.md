@@ -18,9 +18,14 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 На branch preview для `ed7100b` read-only smoke прошёл 8/8 GET-only проверок;
 проверка интерфейса обнаружила, что версия preview ошибочно называлась сборкой
 main. Исправление показывает имя ветки и SHA во всех подписях версии. Целевые
-unit-тесты (3/3), root typecheck, production build с admin guards и локальная
-Playwright-проверка окна версии прошли; точный полный CI и повторный smoke на
-опубликованном SHA исправления ещё не подтверждены.
+unit-тесты (3/3), root typecheck, production build с admin guards, локальная
+Playwright-проверка и повторный branch-preview smoke прошли. Preview отдаёт точный
+SHA `1e0110a8f697c038b433e723da73e87ddad1f037`. CI #1842 прошёл audit, guards,
+unit, typechecks и build, но один browser тест `iphone-pwa` упал из-за гонки
+готовности active session: условие могло считать отсутствие `active-session`
+готовностью. Ожидание исправлено, теперь оно требует серверную сессию. Целевой
+тест прошёл локально 3/3, весь migration spec на `iphone-pwa` — 7/7. Новый полный
+CI ещё не запущен.
 Изолированного staging у проекта нет.
 
 Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)

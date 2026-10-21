@@ -13,7 +13,12 @@
 прошёл точный [CI #1841](https://github.com/Michael-edel/FitFocus/actions/runs/39537965299).
 Branch-preview smoke выявил ошибочную подпись preview как `main`. Локальное
 исправление маркировки и регрессионный тест прошли целевые unit/typecheck/build и
-Playwright; точный полный CI и preview smoke для SHA исправления ещё не подтверждены.
+Playwright. Исправленный preview SHA `1e0110a8f697c038b433e723da73e87ddad1f037`
+прошёл 8/8 GET-only smoke и визуальную проверку. CI #1842 прошёл audit, guards,
+unit, typechecks и build; в browser suite упал один `iphone-pwa` тест из-за гонки
+готовности active session. Ожидание исправлено: теперь тест требует существующую
+серверную сессию. Тест прошёл локально 3/3, весь migration spec на `iphone-pwa` —
+7/7; новый полный CI ещё не запущен.
 
 Более ранняя проверенная ревизия Draft PR #93 —
 `4ed1d27a495f1eb7934864eb5808dae538dce520`; точный

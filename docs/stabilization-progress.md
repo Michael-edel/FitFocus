@@ -12,11 +12,17 @@ Read-only smoke публичного branch preview для `ed7100bbd50b15c2d2ed
 Для локального diff целевые unit-тесты прошли 3/3, root typecheck и production
 build с admin guards прошли. Локальный production preview в Playwright показал
 `Текущая сборка ветки durable-outbox • ed7100bb`, корректное описание preview,
-не показал подпись main и не сообщил page errors. Скриншот сохранён вне репозитория
-в `%LOCALAPPDATA%\Temp\fitfocus-local-version-label-20261021.png`. Точный полный
-CI и повторный smoke на опубликованном SHA исправления ещё не подтверждены.
-Предыдущая версия branch preview не является staging и не проверяет
-авторизованные сценарии.
+не показал подпись main и не сообщил page errors. После push опубликованный preview
+для SHA `1e0110a8f697c038b433e723da73e87ddad1f037` прошёл 8/8 GET-only smoke;
+визуальная проверка показала `Текущая сборка ветки fix/durable-outbox • 1e0110a8`,
+корректное описание и отсутствие main-only подписей и page errors. Скриншот
+сохранён вне репозитория в `%LOCALAPPDATA%\Temp\fitfocus-preview-version-label-1e0110a.png`.
+CI #1842 прошёл audit, guards, unit, typechecks и build, но упал на одном browser
+тесте `iphone-pwa`. Его условие готовности могло принять отсутствие `active-session`
+за готовность и начать действия до установки серверной сессии. Тест теперь ждёт
+запись с account ID и server session ID; целевой повтор прошёл 3/3, весь migration
+spec на `iphone-pwa` — 7/7. Новый полный CI ещё не запущен. Этот preview не является
+staging и не проверяет авторизованные сценарии.
 
 ## P0.9 — follow-up двух browser отказов CI #1839, `7f53486`, 21.10.2026
 

@@ -15,10 +15,22 @@ Service Worker активировался и контролировал стра
 `fix/durable-outbox`, SHA `ed7100bb` и build `1646`.
 
 Визуальная проверка этого preview нашла неверную подпись: branch build показывался
-как `main`. Исправление проверено только на локальном production preview; точная
-revision исправления и результат smoke после её публикации ещё не подтверждены.
-Этот smoke подтверждает только выбранные анонимные GET-маршруты, но не staging,
-OAuth, D1 или авторизованные операции.
+как `main`. Это наблюдение привело к исправлению в следующей ревизии.
+
+### Read-only branch-preview smoke: `1e0110a`, 21.10.2026
+
+Исправленная ветка опубликована по адресу
+`https://fix-durable-outbox.fitfocus.pages.dev/`; asset
+`/assets/index-BMyY-afF.js` содержит SHA
+`1e0110a8f697c038b433e723da73e87ddad1f037`. Повторный
+`npm run test:e2e:staging` завершился **8/8 GET-only**: корень, `/api/env` и
+анонимный `/api/me` вернули 200; закрытые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`; Service Worker
+контролировал страницу после reload. Playwright на опубликованной странице
+подтвердил подпись `Текущая сборка ветки fix/durable-outbox • 1e0110a8`, корректный
+preview-текст, отсутствие main-only подписей и page errors. Скриншот сохранён вне
+репозитория. Это подтверждает branch preview и выбранные анонимные GET-маршруты,
+но не отдельный staging, OAuth, D1 или авторизованные операции.
 
 ### Read-only branch-preview smoke: `58f4d30`, 21.10.2026
 

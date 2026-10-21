@@ -1081,8 +1081,9 @@ test('holds a state write from the old bundle at protocol 426 and retries it wit
     await oldPage.evaluate(sourceKey => localStorage.setItem(sourceKey, '[]'), legacySourceKey);
     await expect.poll(async () => {
       const state = await migrationState(oldPage, settingsKey);
-      return state.metadata.find(entry => entry.id === 'active-session')?.pause ?? null;
-    }).toBeNull();
+      const active = state.metadata.find(entry => entry.id === 'active-session');
+      return active?.accountId === account && typeof active.serverSessionId === 'string';
+    }).toBe(true);
     await oldPage.getByRole('button', { name: /^Светлая/ }).click();
     await expect(oldPage.getByRole('button', { name: /^Светлая/ })).toHaveClass(/border-indigo-500\/40/);
     // Startup can enqueue a background legacy mirror after the first cleanup;
