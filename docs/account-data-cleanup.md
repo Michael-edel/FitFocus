@@ -20,6 +20,15 @@ v2/v3 restore также сверяет tombstone перед восстанов�
 для PR-head `0c44c0e` завершился success: browser 1641 passed / 74 skipped,
 BFCache 1/1 и rollback/CAS 23/23.
 
+Follow-up [`e196a62`](https://github.com/Michael-edel/FitFocus/commit/e196a6226865dd38dad8ec48a0e39aaa3c13ff5a)
+закрывает временное окно проверки global legacy source. Если старая вкладка
+добавляет account-owned запись, пока ожидается очистка IndexedDB, источник
+проверяется повторно перед возвратом. Запись не удаляется: `legacyEvidenceRetained`
+становится `true`, а `complete` — `false`. Новый тест воспроизвёл прежний ложный
+успех и проходит после фикса; целевые privacy/cleanup/backup тесты прошли 29/29,
+полный unit suite — 1478/1478, все три typecheck, guards и production build прошли
+локально. Точный CI этого follow-up ещё не подтверждён.
+
 Дополнение 13.10.2026: подавление повторного legacy-импорта, sender guard и
 фильтрация старого backup реализованы в коммите
 [`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e).

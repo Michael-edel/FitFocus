@@ -8491,3 +8491,21 @@ Cloudflare branch preview собран успешно, но отдельного
 run #1845 на `b896c2c` отменён concurrency при push. GitGuardian не выполнил
 secret scan из-за размера PR (neutral). PR #90 всё ещё требует одобряющее
 ревью для защищённой `main`.
+
+## P0.8 — поздняя запись legacy source во время удаления аккаунта, 21.10.2026
+
+Новый regression в `tests/local_privacy.test.ts` задерживает открытие IndexedDB
+и моделирует запись старой вкладки в `fitfocus.remote-kv-outbox.v1` после первой
+проверки источника. До исправления удаление возвращало `complete: true` и
+`legacyEvidenceRetained: false`, хотя очередь уже содержала запись удалённого
+аккаунта.
+
+В коммите [`e196a62`](https://github.com/Michael-edel/FitFocus/commit/e196a6226865dd38dad8ec48a0e39aaa3c13ff5a)
+`clearLocalUserData` повторно проверяет legacy source после окончания
+асинхронной IDB-очистки. Обнаруженная запись сохраняется как migration evidence,
+но итог сообщает `complete: false`; сам global source остаётся неизменным.
+Профильные cleanup/backup тесты прошли **29/29**, полный unit suite —
+**1478/1478** в 217 файлах. Schema/privacy/auth/API/admin guards, root,
+domain-strict и storage-strict typecheck, production build и `git diff --check`
+прошли локально. Точный CI нового HEAD запускается после публикации; CI #1846
+проверял предыдущую ревизию и не включает это исправление.

@@ -13,6 +13,15 @@ guards, три typecheck и build прошли. Сохранены [browser diag
 Cloudflare preview deploy завершился success. GitGuardian сообщил `neutral` и
 пропустил сканирование, так как PR превышает настроенный размер.
 
+Follow-up [`e196a62`](https://github.com/Michael-edel/FitFocus/commit/e196a6226865dd38dad8ec48a0e39aaa3c13ff5a)
+добавляет проверку global legacy source после асинхронной очистки IDB: запись
+аккаунта, добавленная старой вкладкой во время операции, больше не позволяет
+ошибочно сообщить `complete: true`. Регрессия до исправления падала; целевые
+cleanup/backup тесты прошли 29/29, полный unit — 1478/1478 в 217 файлах, guards,
+три typecheck и production build прошли локально. Точный CI нового HEAD ещё не
+подтверждён. Неизвестный legacy source остаётся сохранённым и обозначается как
+неполная очистка.
+
 Проверяемая ревизия тестового follow-up PR #93 —
 `58f4d309f7a8359c4233905cacdb49d6adb6f430`;
 его точный [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)

@@ -2393,6 +2393,15 @@ all-client Service Worker fence, атомарные migration items и quarantin
     для PR-head `0c44c0e` завершился success: 1477 unit / 217 файлов, 1641
     browser passed / 74 skipped, native BFCache 1/1, rollback/CAS 23/23, audit
     без уязвимостей, guards, три typecheck и build. Общий P0.8 остаётся открыт.
+  - [x] Повторно проверять legacy source после асинхронной IDB-очистки аккаунта:
+    старая вкладка могла добавить account-owned запись после первой проверки,
+    а очистка ошибочно возвращала `complete: true`. Новый тест воспроизвёл гонку
+    до исправления; [`e196a62`](https://github.com/Michael-edel/FitFocus/commit/e196a6226865dd38dad8ec48a0e39aaa3c13ff5a)
+    проверяет очередь перед возвратом и сообщает `legacyEvidenceRetained`, если
+    запись появилась во время очистки. Целевые cleanup/backup тесты — 29/29,
+    полный unit — 1478/1478 в 217 файлах; schema/privacy/auth/API/admin guards,
+    три typecheck, build и `git diff --check` прошли. Точный CI нового HEAD
+    должен проверить этот follow-up; общий P0.8 остаётся открыт.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;
