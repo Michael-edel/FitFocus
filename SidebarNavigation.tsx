@@ -155,8 +155,8 @@ export default function SidebarNavigation({
         </div>
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/92 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-visible md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
-        <div className="hidden md:flex flex-col mb-12 w-full px-4 pt-4 text-left">
+      <nav className="fixed inset-x-0 bottom-0 bg-slate-900/92 backdrop-blur-xl border-t border-slate-800 px-2 pt-2 flex items-center justify-between gap-1 overflow-hidden md:top-0 md:left-0 md:right-auto md:w-64 md:h-full md:flex-col md:justify-start md:overflow-y-auto md:overflow-x-hidden md:border-r md:border-t-0 md:px-4 md:pt-4 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
+        <div className="hidden md:flex shrink-0 flex-col mb-12 w-full px-4 pt-4 text-left">
           <div className="flex items-center gap-3">
             <div className="relative inline-flex w-12 h-12 items-center justify-center shrink-0">
               <div className="absolute inset-0 rounded-[1.1rem] overflow-hidden pointer-events-none"><div className="absolute inset-[-200%] bg-[conic-gradient(from_0deg,transparent_85%,#818cf8_98%,transparent_100%)] animate-spin" style={{ animationDuration: '3s' }} /></div>
@@ -244,7 +244,7 @@ export default function SidebarNavigation({
           <span className="text-[9px] leading-tight text-center font-bold whitespace-nowrap">Ещё</span>
         </button>
 
-        <div className="hidden md:block w-full px-2 space-y-3">
+        <div className="hidden md:block shrink-0 w-full px-2 space-y-3">
           <div>
             <div className="px-3 mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Основное</div>
             {sidebarCoreTabs.map((tab) => (
@@ -288,7 +288,7 @@ export default function SidebarNavigation({
           </div>
         </div>
 
-        <button onClick={() => void logout()} className="hidden md:flex items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5">
+        <button onClick={() => void logout()} className="hidden md:flex shrink-0 items-center gap-4 p-4 text-slate-600 hover:text-rose-400 transition-all mt-auto w-full rounded-[1.5rem] hover:bg-rose-500/5">
           <X size={20} />
           <span className="font-bold">Выйти</span>
         </button>

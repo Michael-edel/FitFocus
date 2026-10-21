@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ensurePdfInterFont } from './font';
+import { isPdfExportSessionCurrent, type PdfExportOptions } from './exportSession';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle } from './theme';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 
@@ -75,7 +76,7 @@ const drawImageCard = (doc: jsPDF, x: number, y: number, w: number, h: number, i
   }
 };
 
-export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput) {
+export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput, options?: PdfExportOptions): Promise<boolean> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   await ensurePdfInterFont(doc);
   doc.setFont('Inter', 'normal');
@@ -208,5 +209,7 @@ export async function downloadProgressArchivePdf(input: ProgressArchivePdfInput)
   }
 
   pdfFooter(doc, generatedAt);
+  if (!await isPdfExportSessionCurrent(options)) return false;
   doc.save(`FitFocus_Progress_Archive_${input.startLabel}_to_${input.endLabel}.pdf`);
+  return true;
 }

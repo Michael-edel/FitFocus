@@ -2,6 +2,7 @@ import { isJsonObject } from './json';
 import { isAllowedStateKey } from './state_keyspace';
 
 type StatePutItem = { key: unknown; value: unknown; baseVersion?: unknown };
+type ReadStatePutItem = { ok: true; item: StatePutItem } | { ok: false };
 // 3 parameters per item plus 3 context parameters fit D1's 100-parameter limit.
 export const MAX_STATE_WRITE_ITEMS = 32;
 
@@ -13,7 +14,7 @@ export type StateWriteItem = {
 
 export type StateWriteValidation =
   | { ok: true; items: StateWriteItem[] }
-  | { ok: false; error: 'NO_ITEMS' | 'TOO_MANY_ITEMS' | 'FORBIDDEN_KEYSPACE' | 'DUPLICATE_KEY' | 'BAD_VALUE' | 'BAD_BASE_VERSION'; key?: string };
+  | { ok: false; error: 'NO_ITEMS' | 'TOO_MANY_ITEMS' | 'BAD_ITEM' | 'FORBIDDEN_KEYSPACE' | 'DUPLICATE_KEY' | 'BAD_VALUE' | 'BAD_BASE_VERSION'; key?: string };
 
 export function parseStateBaseVersion(value: unknown): number | null {
   if (value === undefined || value === null) return 0;
@@ -24,16 +25,17 @@ export function parseStateBaseVersion(value: unknown): number | null {
   return parsedBaseVersion;
 }
 
-function readItems(body: unknown): StatePutItem[] {
+function readItems(body: unknown): ReadStatePutItem[] {
   if (!isJsonObject(body)) return [];
   if (Array.isArray(body.items)) {
     return body.items.map((item) => (
       isJsonObject(item)
-        ? { key: item.key, value: item.value, baseVersion: item.baseVersion }
-        : { key: null, value: null }
+        ? { ok: true, item: { key: item.key, value: item.value, baseVersion: item.baseVersion } }
+        : { ok: false }
     ));
   }
-  return body.key ? [{ key: body.key, value: body.value ?? '', baseVersion: body.baseVersion }] : [];
+  if (!Object.prototype.hasOwnProperty.call(body, 'key')) return [];
+  return [{ ok: true, item: { key: body.key, value: body.value ?? '', baseVersion: body.baseVersion } }];
 }
 
 /** Validate a state-write request before it reaches the D1 persistence use case. */
@@ -44,8 +46,11 @@ export function normalizeStateWrite(body: unknown, userId: string): StateWriteVa
 
   const normalizedItems: StateWriteItem[] = [];
   const seenKeys = new Set<string>();
-  for (const item of items) {
-    const key = String(item?.key || '');
+  for (const readItem of items) {
+    if (!readItem.ok) return { ok: false, error: 'BAD_ITEM' };
+    const item = readItem.item;
+    if (typeof item.key !== 'string') return { ok: false, error: 'BAD_ITEM' };
+    const key = item.key;
     if (!key) continue;
     if (!isAllowedStateKey(userId, key)) return { ok: false, error: 'FORBIDDEN_KEYSPACE' };
     if (seenKeys.has(key)) return { ok: false, error: 'DUPLICATE_KEY', key };

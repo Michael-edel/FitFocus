@@ -1,16 +1,24 @@
-import React, { useMemo, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useState } from 'react';
 import type { FavoriteRecipe } from './types';
 import clsx from 'clsx';
 import { analyzeFoodPhotoEnhanced } from './geminiService';
 import type { EnhancedFoodPhotoAnalysisResult } from './geminiService';
 import { Heart, Search, Trash2, Clock3, Users, Camera, Upload, Loader2, X, CheckCircle2 } from 'lucide-react';
 import type { Recipe } from './types';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { assertAiSession, prepareAiSession } from './services/aiSession';
+import { isExpectedAiSessionFailure } from './services/frontendErrors';
+import { AiActionScope } from './features/ai/actionScope';
 
 type Props = {
+  userId: string | undefined;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   recipes: FavoriteRecipe[];
-  onAdd: (recipe: FavoriteRecipe) => void;
-  onRemove: (id: string) => void;
-  onClear: () => void;
+  onAdd: (recipe: FavoriteRecipe) => Promise<boolean>;
+  onUpdate: (recipe: FavoriteRecipe) => Promise<boolean>;
+  onRemove: (id: string) => Promise<boolean>;
+  onClear: () => Promise<boolean>;
 };
 
 type DraftRecipe = FavoriteRecipe & {
@@ -113,6 +121,12 @@ const positiveNumber = (value: unknown): number | undefined => {
 const nutritionNumber = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+};
+
+const createDraftRecipeId = (): string => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+  return String(Date.now());
 };
 
 const normalizeRecipe = (item: FavoriteRecipe): Recipe => {
@@ -265,7 +279,7 @@ const editorToFavoriteRecipe = (editor: RecipeEditorState): FavoriteRecipe => {
 export const buildDraftRecipeFromAi = (
   ai: EnhancedFoodPhotoAnalysisResult,
   photo: string,
-  id = globalThis.crypto?.randomUUID?.() || String(Date.now()),
+  id = createDraftRecipeId(),
 ): DraftRecipe => {
   const title = (ai.name || 'Рецепт').toString().slice(0, 80);
   const ingredients = toRecipeIngredients(ai.ingredients);
@@ -301,14 +315,36 @@ export const buildDraftRecipeFromAi = (
   };
 };
 
-export default function RecipesScreen({ recipes, onAdd, onRemove, onClear }: Props) {
+export default function RecipesScreen({ userId, loginGuard, isCurrentSession, recipes, onAdd, onUpdate, onRemove, onClear }: Props) {
   const [q, setQ] = useState('');
 
 const [isAnalyzing, setIsAnalyzing] = useState(false);
 const [draft, setDraft] = useState<DraftRecipe | null>(null);
 const [editor, setEditor] = useState<RecipeEditorState | null>(null);
+const [favoriteActionBusy, setFavoriteActionBusy] = useState(false);
+const [favoriteActionError, setFavoriteActionError] = useState<string | null>(null);
 const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const photoAnalysisScope = useMemo(() => new AiActionScope(isCurrentSession), [userId, isCurrentSession]);
+  useLayoutEffect(() => {
+    photoAnalysisScope.activate();
+    setIsAnalyzing(false);
+    setDraft(null);
+    const hide = () => photoAnalysisScope.invalidate();
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      photoAnalysisScope.activate();
+      setIsAnalyzing(false);
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
+    return () => {
+      photoAnalysisScope.invalidate();
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+    };
+  }, [photoAnalysisScope]);
 const editorPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
 
 const fileToBase64 = (file: File) =>
@@ -388,21 +424,40 @@ const fileToCompressedDataUrl = async (file: File) => {
 };
 
 const handlePick = async (file?: File) => {
-  if (!file) return;
+  if (!file || !userId || !loginGuard) return;
+  const attempt = photoAnalysisScope.begin();
+  if (!attempt) return;
+  let session: Awaited<ReturnType<typeof prepareAiSession>> | undefined;
   setIsAnalyzing(true);
   try {
+    session = await prepareAiSession(userId, attempt.controller, attempt.isCurrent, { previous: loginGuard });
+    if (!attempt.isCurrent()) return;
     const [b64, photo] = await Promise.all([
       fileToBase64(file),
       fileToCompressedDataUrl(file),
     ]);
-    const ai = await analyzeFoodPhotoEnhanced(b64);
+    if (!attempt.isCurrent()) return;
+    await assertAiSession(session);
+    if (!attempt.isCurrent()) return;
+    const ai = await analyzeFoodPhotoEnhanced(b64, session);
+    if (!attempt.isCurrent()) return;
+    await assertAiSession(session);
+    if (!attempt.isCurrent()) return;
     setDraft(buildDraftRecipeFromAi(ai, photo));
   } catch (e: unknown) {
-    alert(e instanceof Error && e.message ? e.message : 'Не удалось распознать рецепт по фото');
+    if (attempt.isCurrent() && !isExpectedAiSessionFailure(e)) {
+      if (session) {
+        try { await assertAiSession(session); } catch { return; }
+      }
+      if (attempt.isCurrent()) alert(e instanceof Error && e.message ? e.message : 'Не удалось распознать рецепт по фото');
+    }
   } finally {
-    setIsAnalyzing(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (attempt.isCurrent()) {
+      setIsAnalyzing(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+    attempt.finish();
   }
 };
 
@@ -416,12 +471,45 @@ const handlePick = async (file?: File) => {
     );
   }, [recipes, q]);
 
+  const runFavoriteAction = async (action: () => Promise<boolean>, failureMessage = 'Не удалось сохранить рецепт. Повторите попытку.') => {
+    if (favoriteActionBusy) return false;
+    setFavoriteActionBusy(true);
+    setFavoriteActionError(null);
+    try {
+      const saved = await action();
+      if (!saved) setFavoriteActionError(failureMessage);
+      return saved;
+    } catch {
+      setFavoriteActionError(failureMessage);
+      return false;
+    } finally {
+      setFavoriteActionBusy(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    if (!draft) return;
+    const saved = await runFavoriteAction(() => onAdd({
+      ...(draft as FavoriteRecipe),
+      createdAt: new Date().toISOString(),
+      recipe: normalizeRecipe(draft as FavoriteRecipe),
+    }));
+    if (saved) setDraft(null);
+  };
+
+  const saveEditedRecipe = async () => {
+    if (!editor) return;
+    const updated = editorToFavoriteRecipe(editor);
+    const saved = await runFavoriteAction(() => onUpdate(updated), 'Не удалось сохранить изменения рецепта. Повторите попытку.');
+    if (saved) setEditor(null);
+  };
+
   return (
     
 <div className="max-w-6xl mx-auto px-6 py-10">
   {draft && (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[1.75rem] border border-slate-800 bg-slate-950 shadow-2xl">
         <div className="p-5 flex items-center justify-between border-b border-slate-800">
           <div>
             <div className="text-slate-100 font-black text-lg">Новое блюдо</div>
@@ -540,25 +628,21 @@ const handlePick = async (file?: File) => {
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               onClick={() => setDraft(null)}
+              disabled={favoriteActionBusy}
               className="px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-200 font-black text-xs"
             >
               Отмена
             </button>
             <button
-              onClick={() => {
-                onAdd({
-                  ...(draft as FavoriteRecipe),
-                  createdAt: new Date().toISOString(),
-                  recipe: normalizeRecipe(draft as FavoriteRecipe),
-                });
-                setDraft(null);
-              }}
+              onClick={() => void saveDraft()}
+              disabled={favoriteActionBusy}
               className="px-4 py-2 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center gap-2"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              Сохранить
+              {favoriteActionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {favoriteActionBusy ? 'Сохраняем…' : 'Сохранить'}
             </button>
           </div>
+          {favoriteActionError && <div role="alert" className="mx-5 mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{favoriteActionError}</div>}
         </div>
       </div>
     </div>
@@ -744,23 +828,21 @@ const handlePick = async (file?: File) => {
           <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
             <button
               onClick={() => setEditor(null)}
+              disabled={favoriteActionBusy}
               className="px-4 py-2 rounded-full border border-slate-800 bg-slate-950 text-slate-200 font-black text-xs"
             >
               Закрыть
             </button>
             <button
-              onClick={() => {
-                const updated = editorToFavoriteRecipe(editor);
-                onRemove(editor.id);
-                onAdd(updated);
-                setEditor(null);
-              }}
+              onClick={() => void saveEditedRecipe()}
+              disabled={favoriteActionBusy}
               className="px-4 py-2 rounded-full bg-indigo-600 text-white font-black text-xs flex items-center gap-2"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              Сохранить изменения
+              {favoriteActionBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {favoriteActionBusy ? 'Сохраняем…' : 'Сохранить изменения'}
             </button>
           </div>
+          {favoriteActionError && <div role="alert" className="mx-5 mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{favoriteActionError}</div>}
         </div>
       </div>
     </div>
@@ -810,7 +892,8 @@ const handlePick = async (file?: File) => {
 
           {recipes.length > 0 && (
             <button
-              onClick={onClear}
+              onClick={() => void runFavoriteAction(onClear, 'Не удалось очистить избранные рецепты. Повторите попытку.')}
+              disabled={favoriteActionBusy}
               className="px-4 py-2 rounded-full bg-slate-900/50 border border-slate-800 text-slate-200 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all font-bold text-sm inline-flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" /> Очистить
@@ -818,6 +901,8 @@ const handlePick = async (file?: File) => {
           )}
           </div>
         </div>
+
+        {!draft && !editor && favoriteActionError && <div role="alert" className="mt-4 max-w-2xl rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{favoriteActionError}</div>}
 
         <div className="mt-4 space-y-2 max-w-2xl">
           <div className="text-slate-400">
@@ -887,8 +972,9 @@ const handlePick = async (file?: File) => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemove(r.id);
+                    void runFavoriteAction(() => onRemove(r.id), 'Не удалось удалить рецепт. Повторите попытку.');
                   }}
+                  disabled={favoriteActionBusy}
                   className="w-10 h-10 rounded-2xl bg-slate-950/40 border border-slate-800 hover:border-rose-500/30 hover:bg-rose-500/10 text-slate-200 transition-all flex items-center justify-center"
                   title="Удалить"
                 >

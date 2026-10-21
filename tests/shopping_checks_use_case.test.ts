@@ -75,4 +75,81 @@ describe('shopping check use cases', () => {
     expect(db.batches[0]).toHaveLength(1);
     expect(db.batches[0][0].sql).toContain('INSERT INTO shopping_checked');
   });
+
+  it('rejects a malformed bulk item before writing any valid neighbors', async () => {
+    const db = makeDb();
+    const result = await updateShoppingChecks({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      body: {
+        week_start: '2026-06-22',
+        updates: [
+          { ingredient_name: 'Овсянка', checked: true },
+          null,
+        ],
+      },
+    });
+
+    expect(result).toEqual({ kind: 'invalid', error: 'BAD_ITEM' });
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([
+    ['missing', {}],
+    ['not an array', { updates: { ingredient_name: 'Овсянка', checked: true } }],
+  ])('rejects bulk updates when the updates field is %s', async (_label, extra) => {
+    const db = makeDb();
+    const result = await updateShoppingChecks({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      body: { week_start: '2026-06-22', ...extra },
+    });
+
+    expect(result).toEqual({ kind: 'invalid', error: 'BAD_UPDATES' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([
+    { ingredient_name: 'Овсянка', checked: 'true' },
+    { ingredient_name: 42, checked: true },
+    { checked: true },
+  ])('rejects malformed bulk check fields before writing', async update => {
+    const db = makeDb();
+    const result = await updateShoppingChecks({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      body: { week_start: '2026-06-22', updates: [update] },
+    });
+
+    expect(result).toEqual({ kind: 'invalid', error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects an over-limit bulk without silently dropping its tail', async () => {
+    const db = makeDb();
+    const result = await updateShoppingChecks({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      body: {
+        week_start: '2026-06-22',
+        updates: Array.from({ length: 501 }, (_, index) => ({ ingredient_name: `Item ${index}`, checked: true })),
+      },
+    });
+
+    expect(result).toEqual({ kind: 'invalid', error: 'TOO_MANY_ITEMS' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('keeps empty bulk updates as a no-op without opening a D1 batch', async () => {
+    const db = makeDb();
+    const result = await updateShoppingChecks({
+      db: db as unknown as D1Database,
+      userId: 'user-1',
+      body: { week_start: '2026-06-22', updates: [{ ingredient_name: '', checked: false }] },
+    });
+
+    expect(result).toEqual({ kind: 'saved', weekStart: '2026-06-22', updated: 0 });
+    expect(db.batches).toHaveLength(0);
+  });
 });

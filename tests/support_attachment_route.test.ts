@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet } from '../functions/api/support/attachment';
 import type { SupportAttachmentBucket } from '../functions/api/_lib/support_attachments';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type SupportAttachmentContext = Parameters<typeof onRequestGet>[0];
 type SupportAttachmentBody = { error?: string };
 
@@ -32,7 +33,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(ticketOwner = 'user-1', mime = 'text/plain') {
+function makeDb(ticketOwner = 'user-1', mime = 'text/plain', role = 'user') {
   return {
     prepare(sql: string) {
       return {
@@ -53,7 +54,7 @@ function makeDb(ticketOwner = 'user-1', mime = 'text/plain') {
           return null;
         },
         async all() {
-          if (sql.includes('FROM user_roles')) return { results: [{ role: 'user' }] };
+          if (sql.includes('FROM user_roles')) return { results: [{ role }] };
           return { results: [] };
         },
         async run() {
@@ -64,11 +65,17 @@ function makeDb(ticketOwner = 'user-1', mime = 'text/plain') {
   };
 }
 
-function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain') {
+function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain', options: { role?: string; scoped?: boolean } = {}) {
   return async () => {
-    const token = await signJwt({ sub: userId, sid: 'sid-1' });
+    const sid = 'sid-1';
+    const token = await signJwt({ sub: userId, sid, roles: options.role === 'admin' ? ['admin'] : [] });
+    const headers = new Headers({ Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-attachment-test-01' });
+    if (options.scoped !== false) {
+      headers.set('X-FitFocus-State-Account', userId);
+      headers.set('X-FitFocus-State-Session', await stateSessionId({ sub: userId, sid }));
+    }
     const request = new Request('https://fitfocus.test/api/support/attachment?id=ticket-1&messageId=message-1&index=0', {
-      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'support-attachment-test-01' },
+      headers,
     });
     const encoder = new TextEncoder();
     const bucket = {
@@ -88,7 +95,7 @@ function makeContext(userId: string, ticketOwner = 'user-1', mime = 'text/plain'
       request,
       env: {
         AUTH_JWT_SECRET: SECRET,
-        DB: makeDb(ticketOwner, mime) as unknown as D1Database,
+        DB: makeDb(ticketOwner, mime, options.role) as unknown as D1Database,
         SUPPORT_ATTACHMENTS: bucket as SupportAttachmentBucket,
       },
       params: {},
@@ -106,6 +113,8 @@ describe('/api/support/attachment', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Request-ID')).toBe('support-attachment-test-01');
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');
     expect(response.headers.get('content-type')).toBe('text/plain');
     expect(await response.text()).toBe('hello');
   });
@@ -125,5 +134,31 @@ describe('/api/support/attachment', () => {
     expect(response.headers.get('content-type')).toBe('application/octet-stream');
     expect(response.headers.get('content-disposition')).toMatch(/^attachment;/);
     expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+
+  it('serves an admin attachment only with a scoped response that echoes the session', async () => {
+    const response = await makeContext('admin-1', 'user-1', 'text/plain', { role: 'admin', scoped: true })();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('admin-1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('rejects an admin attachment request without proof before reading the attachment', async () => {
+    const response = await makeContext('admin-1', 'user-1', 'text/plain', { role: 'admin', scoped: false })();
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+  });
+
+  it('rejects an owner attachment request without session proof', async () => {
+    const response = await makeContext('user-1', 'user-1', 'text/plain', { scoped: false })();
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('X-FitFocus-Support-Attachment-Guard')).toBe('1');
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
   });
 });

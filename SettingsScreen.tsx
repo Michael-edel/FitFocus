@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppLanguage, AppSettings, AppTheme, UserProfile, ProgressPhoto, WearableProvider } from './types';
 import { Goal } from './types';
 import { Check, Volume2, Music, Languages, Palette, AlertTriangle, UserCircle2, LogOut, Trash2, Cloud, RefreshCw, Watch, Smartphone, Copy, KeyRound, Link2, Bell, BellOff, Send, Camera, Upload } from 'lucide-react';
@@ -12,7 +12,12 @@ import { ensurePWAStarted } from './pwa';
 import { isUserProfilePayload } from './profileValidation';
 import { fetchWithResilience } from './services/httpClient';
 import { requestMobileToken } from './features/settings/mobileTokenApi';
-import { disconnectHuaweiHealth, requestHuaweiHealthStatus, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
+import type { OutboxCommitGuard, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
+import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSession } from './services/mobileTokenSession';
+import { prepareHuaweiSession, type HuaweiSession } from './services/huaweiSession';
+import { disconnectHuaweiHealth, requestHuaweiHealthStatus, startHuaweiHealthOAuth, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
+import { SessionReadError } from './storage/sessionRead';
+import { assertPushSession, preparePushSession, requestPushJson, type PushSession } from './services/pushSession';
 
 const MIN_HEIGHT_CM = 120;
 const MAX_HEIGHT_CM = 230;
@@ -24,6 +29,7 @@ const MAX_BMI = 60;
 type SyncState = 'idle' | 'saving' | 'saved' | 'error';
 
 type SettingsUiState = {
+  profileDirty?: boolean;
   draftName: string;
   draftGoal: Goal;
   draftTargetWeight: string;
@@ -49,15 +55,19 @@ type SettingsUiState = {
 const SETTINGS_UI_STORAGE_KEY = 'fitfocus.settings.ui.v1';
 
 type Props = {
+  allowCachedProfileDraftRestore?: boolean;
   serverSession?: boolean;
+  loginGuard?: OutboxReadGuard | null;
+  isCurrentSession?: () => boolean;
   onServerLogout?: () => Promise<void> | void;
   onDeleteAccount?: () => Promise<void> | void;
 
   settings: AppSettings;
   onChange: (next: AppSettings) => void;
   user?: UserProfile | null;
-  onChangeUser?: (next: UserProfile) => void;
-  onPatchUser?: (patch: Partial<UserProfile>) => Promise<void> | void;
+  onChangeUser?: (next: UserProfile, guard?: OutboxWriteGuard) => Promise<boolean>;
+  onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
+  onProfileDraftChange?: (dirty: boolean) => void;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
   onConnectAutosave?: () => Promise<boolean>;
@@ -346,16 +356,20 @@ const Toggle: React.FC<{
 );
 
 export default function SettingsScreen({
+  allowCachedProfileDraftRestore = true,
   settings,
   onChange,
   user,
   onChangeUser,
   onPatchUser,
+  onProfileDraftChange,
   onExportBackup,
   onImportBackup,
   onConnectAutosave,
   autosaveEnabled,
   serverSession,
+  loginGuard,
+  isCurrentSession,
   onServerLogout,
   onDeleteAccount,
   syncState,
@@ -365,15 +379,56 @@ export default function SettingsScreen({
   onReloadFromCloud,
   onResetUiState,
 }: Props) {
+  const mobileTokenScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
+  const wearableScopeKeyRef = useRef(mobileTokenScopeKey);
+  wearableScopeKeyRef.current = mobileTokenScopeKey;
+  const pushScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
+  const progressPhotoScopeKey = JSON.stringify([
+    user?.id ?? null,
+    loginGuard?.accountId ?? null,
+    loginGuard?.sessionEpoch ?? null,
+    loginGuard?.serverSessionId ?? null,
+    loginGuard?.authFence ?? null,
+  ]);
   const tdee = user ? Math.round(calculateTDEE({ ...user, adaptationMultiplier: user.adaptationMultiplier ?? 1 })) : null;
   const lossDef = user?.lossDeficit ?? DEFAULT_DEFICIT;
   const gainSur = user?.gainSurplus ?? DEFAULT_SURPLUS;
 
   const [ackLoss, setAckLoss] = useState(false);
   const [ackGain, setAckGain] = useState(false);
+  const [draftLossDeficit, setDraftLossDeficit] = useState('');
+  const [draftGainSurplus, setDraftGainSurplus] = useState('');
   const [cacheClearedTs, setCacheClearedTs] = useState<number | null>(null);
   const [cacheCleared, setCacheCleared] = useState(false);
   const [profileValidationError, setProfileValidationError] = useState<string | null>(null);
+  const [profileCommitError, setProfileCommitError] = useState<string | null>(null);
+  const [profileCommitBusy, setProfileCommitBusy] = useState(false);
+  const profileCommitBusyRef = useRef(false);
+
+  const commitProfileChange = useCallback(async (
+    next: UserProfile,
+    guard?: OutboxWriteGuard,
+  ): Promise<boolean> => {
+    if (!onChangeUser || profileCommitBusyRef.current) return false;
+    profileCommitBusyRef.current = true;
+    setProfileCommitBusy(true);
+    setProfileCommitError(null);
+    try {
+      const saved = await onChangeUser(next, guard);
+      if (saved !== true) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
+      return true;
+    } catch {
+      setProfileCommitError('Не удалось сохранить профиль. Данные не подтверждены — попробуйте ещё раз.');
+      return false;
+    } finally {
+      profileCommitBusyRef.current = false;
+      setProfileCommitBusy(false);
+    }
+  }, [onChangeUser]);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -397,19 +452,34 @@ export default function SettingsScreen({
   const [progressPhotoNote, setProgressPhotoNote] = useState('');
   const [progressPhotoBusy, setProgressPhotoBusy] = useState(false);
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
-  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileDirty, setProfileDirtyState] = useState(false);
+  const setProfileDirty = useCallback((dirty: boolean) => {
+    onProfileDraftChange?.(dirty);
+    setProfileDirtyState(dirty);
+  }, [onProfileDraftChange]);
   const [wearableBusy, setWearableBusy] = useState<WearableProvider | 'disconnect' | null>(null);
+  const [wearableError, setWearableError] = useState<string | null>(null);
   const [huaweiStatus, setHuaweiStatus] = useState<HuaweiHealthStatus | null>(null);
   const [huaweiBusy, setHuaweiBusy] = useState<'status' | 'connect' | 'sync' | 'disconnect' | null>(null);
   const [huaweiError, setHuaweiError] = useState<string | null>(null);
   const [huaweiNotice, setHuaweiNotice] = useState<string | null>(null);
   const [uiResetAt, setUiResetAt] = useState<number | null>(null);
   const [mobileTokenBusy, setMobileTokenBusy] = useState(false);
-  const [mobileTokenValue, setMobileTokenValue] = useState('');
-  const [mobileTokenExpiresAt, setMobileTokenExpiresAt] = useState<number | null>(null);
+  const [mobileTokenCredential, setMobileTokenCredential] = useState<{
+    scopeKey: string;
+    token: string;
+    expiresAt: number | null;
+    session: MobileTokenSession;
+  } | null>(null);
   const [mobileTokenError, setMobileTokenError] = useState<string | null>(null);
   const [mobileTokenCopiedAt, setMobileTokenCopiedAt] = useState<number | null>(null);
   const [bridgeSetupCopiedAt, setBridgeSetupCopiedAt] = useState<number | null>(null);
+  const [validatedMobileTokenScope, setValidatedMobileTokenScope] = useState<string | null>(null);
+  const mobileTokenControllerRef = useRef<AbortController | null>(null);
+  const mobileTokenAttemptRef = useRef(0);
+  const huaweiControllerRef = useRef<AbortController | null>(null);
+  const huaweiAttemptRef = useRef(0);
+  const wearableAttemptRef = useRef(0);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported');
@@ -424,8 +494,17 @@ export default function SettingsScreen({
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number>(0);
   const [pushLastDeliveryError, setPushLastDeliveryError] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftLossDeficit(String(user?.lossDeficit ?? DEFAULT_DEFICIT));
+    setDraftGainSurplus(String(user?.gainSurplus ?? DEFAULT_SURPLUS));
+  }, [user?.id, user?.lossDeficit, user?.gainSurplus]);
   const [pushNotice, setPushNotice] = useState<string | null>(null);
+  type PushAttempt = { id: number; controller: AbortController; scopeKey: string };
+  const pushControllerRef = useRef<AbortController | null>(null);
+  const pushAttemptRef = useRef(0);
   const progressPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
+  const progressPhotoAttemptRef = React.useRef(0);
 
   const latestMeasurement = useMemo(() => {
     const list = user?.measurementsHistory || [];
@@ -503,39 +582,174 @@ export default function SettingsScreen({
     ? wearableProviderLabel[user.wearableProvider]
     : 'Не подключено';
   const bridgeBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://fitfocus.pages.dev';
+  const activeMobileToken = serverSession && isCurrentSession?.() === true
+    && mobileTokenCredential?.scopeKey === mobileTokenScopeKey
+    && validatedMobileTokenScope === mobileTokenCredential?.scopeKey
+    ? mobileTokenCredential
+    : null;
   const bridgeSetupLink = useMemo(() => {
-    if (!mobileTokenValue || !bridgeBaseUrl) return '';
+    if (!activeMobileToken || !bridgeBaseUrl) return '';
     const params = new URLSearchParams({
       baseURL: bridgeBaseUrl,
-      token: mobileTokenValue,
+      token: activeMobileToken.token,
     });
-    if (mobileTokenExpiresAt) {
-      params.set('expiresAt', String(mobileTokenExpiresAt));
+    if (activeMobileToken.expiresAt) {
+      params.set('expiresAt', String(activeMobileToken.expiresAt));
     }
     return `fitfocusbridge://setup?${params.toString()}`;
-  }, [bridgeBaseUrl, mobileTokenExpiresAt, mobileTokenValue]);
+  }, [activeMobileToken, bridgeBaseUrl]);
 
-  const loadHuaweiStatus = React.useCallback(async () => {
-    if (!serverSession) {
+  useEffect(() => {
+    mobileTokenAttemptRef.current += 1;
+    mobileTokenControllerRef.current?.abort();
+    mobileTokenControllerRef.current = null;
+    setMobileTokenBusy(false);
+    setMobileTokenCredential(null);
+    setMobileTokenError(null);
+    setMobileTokenCopiedAt(null);
+    setBridgeSetupCopiedAt(null);
+    setValidatedMobileTokenScope(null);
+    return () => {
+      mobileTokenAttemptRef.current += 1;
+      mobileTokenControllerRef.current?.abort();
+      mobileTokenControllerRef.current = null;
+    };
+  }, [mobileTokenScopeKey]);
+
+  useEffect(() => {
+    if (!mobileTokenCredential) {
+      setValidatedMobileTokenScope(null);
+      return;
+    }
+    let disposed = false;
+    const validate = async () => {
+      try {
+        if (mobileTokenCredential.scopeKey !== mobileTokenScopeKey || !serverSession || !isCurrentSession?.()) {
+          throw new Error('MOBILE_TOKEN_SESSION_CHANGED');
+        }
+        await assertMobileTokenSession(mobileTokenCredential.session);
+        if (!disposed) setValidatedMobileTokenScope(mobileTokenCredential.scopeKey);
+      } catch {
+        if (disposed) return;
+        setValidatedMobileTokenScope(null);
+        setMobileTokenCredential(current => current === mobileTokenCredential ? null : current);
+        setMobileTokenCopiedAt(null);
+        setBridgeSetupCopiedAt(null);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') void validate();
+    };
+    void validate();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') void validate();
+    }, 1_000);
+    window.addEventListener('focus', onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onVisibilityChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isCurrentSession, mobileTokenCredential, mobileTokenScopeKey, serverSession]);
+
+  const huaweiScopeKey = loginGuard
+    ? JSON.stringify([loginGuard.accountId, loginGuard.sessionEpoch, loginGuard.serverSessionId, loginGuard.authFence])
+    : null;
+  const beginWearableProfileAttempt = () => {
+    if (!user || !serverSession || !loginGuard || loginGuard.accountId !== user.id
+      || !mobileTokenScopeKey || !isCurrentSession?.()) return null;
+    const id = ++wearableAttemptRef.current;
+    const scopeKey = mobileTokenScopeKey;
+    return {
+      isCurrent: () => wearableAttemptRef.current === id
+        && wearableScopeKeyRef.current === scopeKey
+        && !!isCurrentSession?.(),
+    };
+  };
+  useEffect(() => {
+    wearableAttemptRef.current += 1;
+    setWearableBusy(null);
+    setWearableError(null);
+  }, [mobileTokenScopeKey]);
+  type HuaweiAttempt = { id: number; controller: AbortController; scopeKey: string };
+  const beginHuaweiAttempt = useCallback((): HuaweiAttempt | null => {
+    if (!serverSession || !loginGuard || !isCurrentSession || !huaweiScopeKey) return null;
+    huaweiControllerRef.current?.abort();
+    const attempt = { id: ++huaweiAttemptRef.current, controller: new AbortController(), scopeKey: huaweiScopeKey };
+    huaweiControllerRef.current = attempt.controller;
+    return attempt;
+  }, [huaweiScopeKey, isCurrentSession, loginGuard, serverSession]);
+  const isHuaweiAttemptCurrent = useCallback((attempt: HuaweiAttempt) =>
+    huaweiAttemptRef.current === attempt.id && huaweiControllerRef.current === attempt.controller
+      && !attempt.controller.signal.aborted && huaweiScopeKey === attempt.scopeKey
+      && !!serverSession && !!isCurrentSession?.(),
+  [huaweiScopeKey, isCurrentSession, serverSession]);
+  const prepareHuawei = useCallback(async (attempt: HuaweiAttempt) => {
+    if (!loginGuard || !isHuaweiAttemptCurrent(attempt)) throw new SessionReadError('session');
+    return prepareHuaweiSession(loginGuard, attempt.controller, () => isHuaweiAttemptCurrent(attempt));
+  }, [isHuaweiAttemptCurrent, loginGuard]);
+  const finishHuaweiAttempt = (attempt: HuaweiAttempt) => {
+    if (huaweiAttemptRef.current !== attempt.id) return;
+    huaweiControllerRef.current = null;
+  };
+  const huaweiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof SessionReadError) {
+      return error.kind === 'protocol'
+        ? 'Сервер пока не поддерживает безопасную синхронизацию Huawei Health. Обновите приложение.'
+        : error.kind === 'access'
+          ? 'Нет доступа к Huawei Health.'
+          : 'Сессия изменилась. Войдите снова и повторите действие.';
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+  const refreshHuaweiStatus = useCallback(async (attempt: HuaweiAttempt, session?: HuaweiSession) => {
+    const activeSession = session ?? await prepareHuawei(attempt);
+    const next = await requestHuaweiHealthStatus(activeSession);
+    if (isHuaweiAttemptCurrent(attempt)) setHuaweiStatus(next);
+    return next;
+  }, [isHuaweiAttemptCurrent, prepareHuawei]);
+  const loadHuaweiStatus = useCallback(async () => {
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) {
       setHuaweiStatus(null);
+      setHuaweiBusy(null);
       return null;
     }
-    setHuaweiBusy((current) => current || 'status');
+    setHuaweiBusy('status');
     try {
-      const next = await requestHuaweiHealthStatus();
-      setHuaweiStatus(next);
+      const next = await refreshHuaweiStatus(attempt);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(null);
       return next;
     } catch (error) {
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось проверить Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось проверить Huawei Health.'));
       return null;
     } finally {
-      setHuaweiBusy((current) => current === 'status' ? null : current);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiBusy(null);
+      finishHuaweiAttempt(attempt);
     }
-  }, [serverSession]);
+  }, [beginHuaweiAttempt, isHuaweiAttemptCurrent, refreshHuaweiStatus]);
 
   useEffect(() => {
     void loadHuaweiStatus();
-  }, [loadHuaweiStatus]);
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      huaweiControllerRef.current?.abort();
+      huaweiControllerRef.current = null;
+      huaweiAttemptRef.current += 1;
+      setHuaweiBusy(null);
+      setWearableBusy(null);
+      void loadHuaweiStatus();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      huaweiAttemptRef.current += 1;
+      huaweiControllerRef.current?.abort();
+      huaweiControllerRef.current = null;
+    };
+  }, [loadHuaweiStatus, huaweiScopeKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -544,28 +758,35 @@ export default function SettingsScreen({
       setHuaweiNotice('Huawei Health подключён. Нажмите «Обновить Huawei», чтобы подтянуть данные за сегодня.');
       url.searchParams.delete('connected');
       window.history.replaceState({}, '', url.toString());
-      void loadHuaweiStatus();
     }
-  }, [loadHuaweiStatus]);
+  }, []);
 
   const connectHuaweiHealth = async () => {
     if (!serverSession) {
       setHuaweiError('Сначала войдите в аккаунт FitFocus.');
       return;
     }
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) return;
     setHuaweiBusy('connect');
     setHuaweiError(null);
     setHuaweiNotice(null);
     try {
-      const status = huaweiStatus || await loadHuaweiStatus();
+      const session = await prepareHuawei(attempt);
+      const status = huaweiStatus || await refreshHuaweiStatus(attempt, session);
       if (status && !status.configured) {
         throw new Error('Huawei Health API еще не настроен на сервере FitFocus.');
       }
       const redirect = typeof window !== 'undefined' ? window.location.href : bridgeBaseUrl;
-      window.location.href = `/api/wearable/huawei/start?redirect=${encodeURIComponent(redirect)}`;
+      const authorizeUrl = await startHuaweiHealthOAuth(session, redirect);
+      if (isHuaweiAttemptCurrent(attempt)) window.location.href = authorizeUrl;
     } catch (error) {
-      setHuaweiBusy(null);
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось начать подключение Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) {
+        setHuaweiBusy(null);
+        setHuaweiError(huaweiErrorMessage(error, 'Не удалось начать подключение Huawei Health.'));
+      }
+    } finally {
+      finishHuaweiAttempt(attempt);
     }
   };
 
@@ -575,55 +796,77 @@ export default function SettingsScreen({
       return;
     }
     if (!user || !onPatchUser) return;
+    const attempt = beginWearableProfileAttempt();
+    if (!attempt) return;
+    setWearableError(null);
     const now = new Date().toISOString();
     setWearableBusy(provider);
     try {
-      await onPatchUser({
+      const saved = await onPatchUser({
         wearableProvider: provider,
         wearableEnabled: true,
         wearableConnectedAt: user.wearableConnectedAt || now,
         wearableLastSyncAt: now,
       });
+      if (!attempt.isCurrent()) return;
+      if (saved === false) setWearableError('Не удалось сохранить источник данных. Повторите попытку.');
+    } catch {
+      if (attempt.isCurrent()) setWearableError('Не удалось сохранить источник данных. Повторите попытку.');
     } finally {
-      setWearableBusy(null);
+      if (attempt.isCurrent()) setWearableBusy(null);
     }
   };
 
   const disconnectWearable = async () => {
     if (!user || !onPatchUser) return;
     if (user.wearableProvider === 'huawei_health') {
+      const attempt = beginHuaweiAttempt();
+      if (!attempt) return;
       setWearableBusy('disconnect');
       setHuaweiBusy('disconnect');
       setHuaweiError(null);
       setHuaweiNotice(null);
       try {
-        const payload = await disconnectHuaweiHealth();
-        if (isUserProfilePayload(payload?.profile) && onChangeUser) {
-          onChangeUser(payload.profile);
-        } else {
-          await onPatchUser({ wearableEnabled: false });
-        }
+        const session = await prepareHuawei(attempt);
+        const payload = await disconnectHuaweiHealth(session);
+        if (!isHuaweiAttemptCurrent(attempt)) return;
+        if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
+        const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
+        if (!await commitProfileChange(payload.profile, commitGuard)) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
+        if (!isHuaweiAttemptCurrent(attempt)) return;
         setHuaweiNotice('Huawei Health отключён.');
-        await loadHuaweiStatus();
+        await refreshHuaweiStatus(attempt, session);
       } catch (error) {
-        setHuaweiError(error instanceof Error ? error.message : 'Не удалось отключить Huawei Health.');
+        if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось отключить Huawei Health.'));
       } finally {
-        setWearableBusy(null);
-        setHuaweiBusy(null);
+        if (isHuaweiAttemptCurrent(attempt)) {
+          setWearableBusy(null);
+          setHuaweiBusy(null);
+        }
+        finishHuaweiAttempt(attempt);
       }
       return;
     }
+    const attempt = beginWearableProfileAttempt();
+    if (!attempt) return;
+    setWearableError(null);
     setWearableBusy('disconnect');
     try {
-      await onPatchUser({
+      const saved = await onPatchUser({
         wearableEnabled: false,
       });
+      if (!attempt.isCurrent()) return;
+      if (saved === false) setWearableError('Не удалось отключить источник данных. Повторите попытку.');
+    } catch {
+      if (attempt.isCurrent()) setWearableError('Не удалось отключить источник данных. Повторите попытку.');
     } finally {
-      setWearableBusy(null);
+      if (attempt.isCurrent()) setWearableBusy(null);
     }
   };
 
   const syncHuaweiHealth = async () => {
+    const attempt = beginHuaweiAttempt();
+    if (!attempt) return;
     setHuaweiBusy('sync');
     setHuaweiError(null);
     setHuaweiNotice(null);
@@ -631,60 +874,87 @@ export default function SettingsScreen({
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const today = new Date();
       const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const payload = await requestHuaweiHealthSync(timezone, date);
-      if (isUserProfilePayload(payload?.profile) && onChangeUser) {
-        onChangeUser(payload.profile);
-      }
+      const session = await prepareHuawei(attempt);
+      const payload = await requestHuaweiHealthSync(session, timezone, date);
+      if (!isHuaweiAttemptCurrent(attempt)) return;
+      if (!isUserProfilePayload(payload?.profile) || !onChangeUser) throw new SessionReadError('protocol');
+      const commitGuard: OutboxCommitGuard = { readGuard: session.guard, canCommit: () => isHuaweiAttemptCurrent(attempt) };
+      if (!await commitProfileChange(payload.profile, commitGuard)) throw new Error('PROFILE_DURABLE_COMMIT_FAILED');
+      if (!isHuaweiAttemptCurrent(attempt)) return;
       const count = Array.isArray(payload.updatedFields) ? payload.updatedFields.length : 0;
       setHuaweiNotice(`Huawei Health синхронизирован: обновлено полей ${count}.`);
-      await loadHuaweiStatus();
+      await refreshHuaweiStatus(attempt, session);
     } catch (error) {
-      setHuaweiError(error instanceof Error ? error.message : 'Не удалось синхронизировать Huawei Health.');
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiError(huaweiErrorMessage(error, 'Не удалось синхронизировать Huawei Health.'));
     } finally {
-      setHuaweiBusy(null);
+      if (isHuaweiAttemptCurrent(attempt)) setHuaweiBusy(null);
+      finishHuaweiAttempt(attempt);
     }
   };
 
   const generateMobileToken = async () => {
-    if (!serverSession) return;
+    const isSessionCurrent = isCurrentSession;
+    if (!serverSession || !loginGuard || !isSessionCurrent || !isSessionCurrent()) return;
+    const scopeKey = mobileTokenScopeKey;
+    if (!scopeKey) return;
+    mobileTokenControllerRef.current?.abort();
+    const controller = new AbortController();
+    mobileTokenControllerRef.current = controller;
+    const attempt = ++mobileTokenAttemptRef.current;
     setMobileTokenBusy(true);
+    setMobileTokenCredential(null);
     setMobileTokenError(null);
     setMobileTokenCopiedAt(null);
     setBridgeSetupCopiedAt(null);
     try {
-      const { token, expiresAt } = await requestMobileToken();
-      setMobileTokenValue(token);
-      setMobileTokenExpiresAt(expiresAt);
+      const session = await prepareMobileTokenSession(loginGuard, controller, isSessionCurrent);
+      const { token, expiresAt } = await requestMobileToken(session);
+      await assertMobileTokenSession(session);
+      if (attempt !== mobileTokenAttemptRef.current || !isSessionCurrent()) return;
+      setMobileTokenCredential({ scopeKey, token, expiresAt, session });
       try {
+        await assertMobileTokenSession(session);
+        if (attempt !== mobileTokenAttemptRef.current || !isSessionCurrent()) return;
         await navigator.clipboard.writeText(token);
-        setMobileTokenCopiedAt(Date.now());
+        await assertMobileTokenSession(session);
+        if (attempt === mobileTokenAttemptRef.current && isSessionCurrent()) setMobileTokenCopiedAt(Date.now());
       } catch {
         // clipboard is optional
       }
     } catch (error) {
-      setMobileTokenError(error instanceof Error ? error.message : 'Не удалось создать мобильный токен');
+      if (attempt === mobileTokenAttemptRef.current && isSessionCurrent()) {
+        setMobileTokenError(error instanceof Error ? error.message : 'Не удалось создать мобильный токен');
+      }
     } finally {
-      setMobileTokenBusy(false);
+      if (attempt === mobileTokenAttemptRef.current) {
+        setMobileTokenBusy(false);
+      }
     }
   };
 
   const copyMobileToken = async () => {
-    if (!mobileTokenValue) return;
+    if (!activeMobileToken) return;
     try {
-      await navigator.clipboard.writeText(mobileTokenValue);
-      setMobileTokenCopiedAt(Date.now());
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey !== mobileTokenScopeKey || !isCurrentSession?.()) return;
+      await navigator.clipboard.writeText(activeMobileToken.token);
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenCopiedAt(Date.now());
     } catch {
-      setMobileTokenError('Не удалось скопировать токен');
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenError('Не удалось скопировать токен');
     }
   };
 
   const copyBridgeSetup = async () => {
-    if (!bridgeSetupLink) return;
+    if (!bridgeSetupLink || !activeMobileToken) return;
     try {
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey !== mobileTokenScopeKey || !isCurrentSession?.()) return;
       await navigator.clipboard.writeText(bridgeSetupLink);
-      setBridgeSetupCopiedAt(Date.now());
+      await assertMobileTokenSession(activeMobileToken.session);
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setBridgeSetupCopiedAt(Date.now());
     } catch {
-      setMobileTokenError('Не удалось скопировать ссылку для bridge');
+      if (activeMobileToken.scopeKey === mobileTokenScopeKey && isCurrentSession?.()) setMobileTokenError('Не удалось скопировать ссылку для bridge');
     }
   };
 
@@ -791,18 +1061,45 @@ export default function SettingsScreen({
     return navigator.serviceWorker.ready;
   };
 
-  const readPushStatus = async () => {
-    const browserLabel = getPushBrowserLabel();
-    const response = await fetchWithResilience('/api/push/status', {
-      cache: 'no-store',
-      credentials: 'include',
+  const beginPushAttempt = useCallback((): PushAttempt | null => {
+    if (!serverSession || !loginGuard || loginGuard.accountId !== user?.id || !isCurrentSession?.() || !pushScopeKey) return null;
+    pushControllerRef.current?.abort();
+    const attempt = { id: ++pushAttemptRef.current, controller: new AbortController(), scopeKey: pushScopeKey };
+    pushControllerRef.current = attempt.controller;
+    return attempt;
+  }, [isCurrentSession, loginGuard, pushScopeKey, serverSession, user?.id]);
+  const isPushAttemptCurrent = useCallback((attempt: PushAttempt) =>
+    pushAttemptRef.current === attempt.id && pushControllerRef.current === attempt.controller
+      && !attempt.controller.signal.aborted && pushScopeKey === attempt.scopeKey
+      && !!serverSession && !!isCurrentSession?.(),
+  [isCurrentSession, pushScopeKey, serverSession]);
+  const preparePush = useCallback(async (attempt: PushAttempt) => {
+    if (!loginGuard || !isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
+    return preparePushSession(loginGuard, attempt.controller, () => isPushAttemptCurrent(attempt));
+  }, [isPushAttemptCurrent, loginGuard]);
+  const finishPushAttempt = (attempt: PushAttempt) => {
+    if (pushAttemptRef.current !== attempt.id) return;
+    pushControllerRef.current = null;
+  };
+  const pushSessionError = (error: unknown, fallback: string) => {
+    if (error instanceof SessionReadError) {
+      return error.kind === 'protocol'
+        ? 'Сервер пока не поддерживает безопасную работу с push. Обновите приложение.'
+        : error.kind === 'access'
+          ? 'Нет доступа к push-уведомлениям.'
+          : 'Сессия изменилась. Войдите снова и повторите действие.';
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+
+  const readPushStatus = async (attempt: PushAttempt, session: PushSession) => {
+    const { response, body: payload } = await requestPushJson(session, '/api/push/status', {
       headers: {
         Accept: 'application/json',
-        'Cache-Control': 'no-store',
-        'X-FitFocus-Browser-Label': browserLabel,
+        'X-FitFocus-Browser-Label': getPushBrowserLabel(),
       },
     });
-    const payload = await readJsonRecord(response);
+    if (!isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
     if (!response.ok || !payload) {
       const code = trimmedTextFromUnknown(payload?.error);
       if (response.status === 401 || code === 'UNAUTH') {
@@ -817,6 +1114,7 @@ export default function SettingsScreen({
     const currentSubscriptionId = trimmedTextFromUnknown(payload.current_subscription_id) || null;
     const currentBrowserLabel = trimmedTextFromUnknown(payload.current_browser_label) || null;
     const lastDeliveryError = subscriptions.find((item) => item.lastError)?.lastError || null;
+    if (!isPushAttemptCurrent(attempt)) throw new SessionReadError('session');
     setPushConfigured(configured);
     setPushStatusChecked(true);
     setPushStatusError(null);
@@ -827,10 +1125,10 @@ export default function SettingsScreen({
     setPushDeviceCount(subscriptions.length || numberFromUnknown(payload.count));
     setPushLastDeliveryError(lastDeliveryError);
     setPushSubscribed(Boolean(currentSubscriptionId));
-    return { configured, publicKey, lastDeliveryError, currentSubscriptionId };
+    return { configured, publicKey, lastDeliveryError, currentSubscriptionId, payload };
   };
 
-  const refreshPushStatus = async () => {
+  const refreshPushStatus = useCallback(async () => {
     const supported = isPushSupported();
     setPushSupported(supported);
     setPushPermission(supported ? Notification.permission : 'unsupported');
@@ -846,7 +1144,7 @@ export default function SettingsScreen({
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
-      return;
+      return null;
     }
 
     if (!serverSession) {
@@ -860,25 +1158,35 @@ export default function SettingsScreen({
       setPushSubscriptionCount(0);
       setPushDeviceCount(0);
       setPushLastDeliveryError(null);
-      return;
+      return null;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return null;
     setPushStatusChecked(false);
 
     try {
-      await readPushStatus();
+      const session = await preparePush(attempt);
+      if (!isPushAttemptCurrent(attempt)) return null;
+      return await readPushStatus(attempt, session);
     } catch (error) {
-      setPushConfigured(false);
-      setPushStatusChecked(true);
-      setPushStatusError(error instanceof Error ? error.message : 'Не удалось проверить push-сервер.');
-      setPushCurrentSubscriptionId(null);
-      setPushCurrentBrowserLabel(null);
-      setPushPublicKey('');
-      setPushSubscriptionCount(0);
-      setPushDeviceCount(0);
-      setPushLastDeliveryError(null);
+      if (isPushAttemptCurrent(attempt)) {
+        setPushConfigured(false);
+        setPushStatusChecked(true);
+        setPushStatusError(pushSessionError(error, 'Не удалось проверить push-сервер.'));
+        setPushCurrentSubscriptionId(null);
+        setPushCurrentBrowserLabel(null);
+        setPushPublicKey('');
+        setPushSubscriptionCount(0);
+        setPushDeviceCount(0);
+        setPushLastDeliveryError(null);
+      }
+      return null;
+    } finally {
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
-  };
+  }, [beginPushAttempt, isPushAttemptCurrent, preparePush]);
 
   const subscribeToPush = async () => {
     if (!serverSession) {
@@ -889,40 +1197,36 @@ export default function SettingsScreen({
       setPushError('Этот браузер не поддерживает push-уведомления.');
       return;
     }
-    let publicKey = pushPublicKey || readBuildTimePushPublicKey();
-    try {
-      const status = await readPushStatus();
-      if (!status.configured) {
-        setPushError('Push-сервер не настроен.');
-        return;
-      }
-      publicKey = status.publicKey;
-    } catch (error) {
-      if (!publicKey) {
-        setPushError(error instanceof Error ? error.message : 'Не удалось получить push-конфигурацию.');
-        return;
-      }
-    }
-    if (!publicKey) {
-      setPushError('Push-сервер не настроен.');
-      return;
-    }
-
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
-
     try {
+      const session = await preparePush(attempt);
+      const status = await readPushStatus(attempt, session);
+      if (!status.configured) {
+        if (isPushAttemptCurrent(attempt)) setPushError('Push-сервер не настроен.');
+        return;
+      }
+      const publicKey = status.publicKey || pushPublicKey || readBuildTimePushPublicKey();
+      if (!publicKey) throw new Error('Push-сервер не настроен.');
       const permission = Notification.permission === 'granted'
         ? 'granted'
         : await Notification.requestPermission();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushPermission(permission);
       if (permission !== 'granted') {
         throw new Error('Разрешите уведомления в браузере.');
       }
 
       const registration = await getReadyServiceWorkerRegistration();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       let subscription = await registration.pushManager.getSubscription();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -930,9 +1234,10 @@ export default function SettingsScreen({
         });
       }
 
-      const response = await fetchWithResilience('/api/push/subscribe', {
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
+      const { response, body: payload } = await requestPushJson(session, '/api/push/subscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subscription: subscription.toJSON(),
@@ -940,18 +1245,19 @@ export default function SettingsScreen({
           browserLabel: getPushBrowserLabel(),
         }),
       });
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось сохранить push-подписку.'));
       }
 
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushSubscribed(true);
       setPushNotice(`Уведомления включены на устройстве ${trimmedTextFromUnknown(payload?.deviceLabel) || getPushDeviceDisplayLabel()}.`);
-      await refreshPushStatus();
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось включить push-уведомления.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось включить push-уведомления.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -962,50 +1268,61 @@ export default function SettingsScreen({
       return;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
 
     try {
+      const session = await preparePush(attempt);
+      const status = await readPushStatus(attempt, session);
+      if (!isPushAttemptCurrent(attempt)) return;
       const requestBody: Record<string, unknown> = {};
       let subscription: PushSubscription | null = null;
-      if (pushCurrentSubscriptionId) requestBody.subscriptionId = pushCurrentSubscriptionId;
+      if (status.currentSubscriptionId) requestBody.subscriptionId = status.currentSubscriptionId;
 
-      if (!pushCurrentSubscriptionId) {
+      if (!status.currentSubscriptionId) {
         const registration = await getReadyServiceWorkerRegistration();
+        await assertPushSession(session);
+        if (!isPushAttemptCurrent(attempt)) return;
         subscription = await registration.pushManager.getSubscription().catch(() => null);
+        await assertPushSession(session);
+        if (!isPushAttemptCurrent(attempt)) return;
         if (subscription?.endpoint) {
           requestBody.endpoint = subscription.endpoint;
         }
       }
 
-      const response = await fetchWithResilience('/api/push/unsubscribe', {
+      const { response, body: payload } = await requestPushJson(session, '/api/push/unsubscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
 
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось отключить push-уведомления.'));
       }
 
+      if (!isPushAttemptCurrent(attempt)) return;
       if (subscription) {
         try {
           await subscription.unsubscribe();
+          await assertPushSession(session);
         } catch {
           // server-side removal already happened; keep the UI moving
         }
       }
+      if (!isPushAttemptCurrent(attempt)) return;
       setPushSubscribed(false);
       setPushCurrentSubscriptionId(null);
       setPushNotice('Уведомления на этом устройстве отключены.');
-      await refreshPushStatus();
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось отключить push-уведомления.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось отключить push-уведомления.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -1019,14 +1336,21 @@ export default function SettingsScreen({
       return;
     }
 
+    const attempt = beginPushAttempt();
+    if (!attempt) return;
     setPushBusy(true);
     setPushError(null);
     setPushNotice(null);
 
     try {
+      const session = await preparePush(attempt);
       const registration = await getReadyServiceWorkerRegistration();
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
       const subscription = await registration.pushManager.getSubscription();
-      const response = await fetchWithResilience('/api/push/test', {
+      await assertPushSession(session);
+      if (!isPushAttemptCurrent(attempt)) return;
+      const { response, body: payload } = await requestPushJson(session, '/api/push/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1036,11 +1360,10 @@ export default function SettingsScreen({
           url: '/',
         }),
       });
-      const payload = await readJsonRecord(response);
       if (!response.ok) {
         throw new Error(pushApiErrorMessage(payload, 'Не удалось отправить тестовое уведомление.'));
       }
-      await refreshPushStatus();
+      if (!isPushAttemptCurrent(attempt)) return;
       const sent = numberFromUnknown(payload?.sent);
       const failed = numberFromUnknown(payload?.failed);
       const removed = numberFromUnknown(payload?.removed);
@@ -1064,10 +1387,12 @@ export default function SettingsScreen({
       } else {
         setPushNotice('Тест отправлен: 0 уведомлений.');
       }
+      await readPushStatus(attempt, session);
     } catch (error) {
-      setPushError(error instanceof Error ? error.message : 'Не удалось отправить push-тест.');
+      if (isPushAttemptCurrent(attempt)) setPushError(pushSessionError(error, 'Не удалось отправить push-тест.'));
     } finally {
-      setPushBusy(false);
+      if (isPushAttemptCurrent(attempt)) setPushBusy(false);
+      finishPushAttempt(attempt);
     }
   };
 
@@ -1075,10 +1400,12 @@ export default function SettingsScreen({
     if (!user) return;
     settingsUiSkipSaveRef.current = true;
     try {
-      const raw = localStorage.getItem(settingsUiStorageKey);
+      const raw = allowCachedProfileDraftRestore ? localStorage.getItem(settingsUiStorageKey) : null;
       if (raw) {
         const parsed = parseJsonRecord(raw);
         if (!parsed) throw new Error('Invalid settings UI state');
+        // A clean cached form is display state, not an unsaved intent from an older profile.
+        if (parsed.profileDirty === false) throw new Error('Clean settings UI state');
         const fallbackName = user.name || '';
         const fallbackGoal = user.goal || Goal.MAINTAIN;
         const fallbackTargetWeight = user.targetWeight ? String(user.targetWeight) : '';
@@ -1144,7 +1471,7 @@ export default function SettingsScreen({
         setAckLoss(nextAckLoss);
         setAckGain(nextAckGain);
         setProfileDirty(
-          nextDraftName !== fallbackName ||
+          parsed.profileDirty === true || nextDraftName !== fallbackName ||
           nextDraftGoal !== fallbackGoal ||
           nextDraftTargetWeight !== fallbackTargetWeight ||
           nextDraftAge !== fallbackAge ||
@@ -1166,7 +1493,7 @@ export default function SettingsScreen({
         return;
       }
     } catch {
-      // fall through to user snapshot
+      // fall through to the current profile snapshot
     }
 
     setDraftName(user.name || '');
@@ -1190,7 +1517,7 @@ export default function SettingsScreen({
     setAckLoss(!!user.riskAcknowledgedLoss);
     setAckGain(!!user.riskAcknowledgedGain);
     setProfileDirty(false);
-  }, [settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
+  }, [allowCachedProfileDraftRestore, settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -1206,12 +1533,21 @@ export default function SettingsScreen({
   }, [user?.id]);
 
   useEffect(() => {
+    progressPhotoAttemptRef.current += 1;
+    setProgressPhotoBusy(false);
+    setProgressPhotoError(null);
+    if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
+  }, [progressPhotoScopeKey]);
+
+  useEffect(() => {
     if (settingsUiSkipSaveRef.current) {
       settingsUiSkipSaveRef.current = false;
       return;
     }
+    if (!allowCachedProfileDraftRestore) return;
     try {
       localStorage.setItem(settingsUiStorageKey, JSON.stringify({
+        profileDirty,
         draftName,
         draftGoal,
         draftTargetWeight,
@@ -1257,7 +1593,9 @@ export default function SettingsScreen({
     draftTargetWeight,
     draftWaistCm,
     progressPhotoNote,
+    profileDirty,
     settingsUiStorageKey,
+    allowCachedProfileDraftRestore,
   ]);
 
   useEffect(() => {
@@ -1267,18 +1605,49 @@ export default function SettingsScreen({
   }, [uiResetAt]);
 
   useEffect(() => {
-    if (!serverSession) {
-      setPushSupported(false);
-      setPushPermission('unsupported');
+    pushAttemptRef.current += 1;
+    pushControllerRef.current?.abort();
+    pushControllerRef.current = null;
+    setPushBusy(false);
+    setPushError(null);
+    setPushNotice(null);
+    if (!serverSession || !loginGuard || loginGuard.accountId !== user?.id || !isCurrentSession?.()) {
+      const supported = isPushSupported();
+      setPushSupported(supported);
+      setPushPermission(supported ? Notification.permission : 'unsupported');
       setPushSubscribed(false);
       setPushConfigured(false);
+      setPushStatusChecked(true);
+      setPushStatusError(serverSession ? 'Нет подтверждённой сессии для безопасной проверки push.' : 'Нет активной серверной сессии. Войдите в аккаунт, чтобы проверить push.');
+      setPushCurrentSubscriptionId(null);
+      setPushCurrentBrowserLabel(null);
       setPushPublicKey('');
       setPushDeviceCount(0);
       setPushSubscriptionCount(0);
+      setPushLastDeliveryError(null);
       return;
     }
+
+    const hide = () => {
+      pushAttemptRef.current += 1;
+      pushControllerRef.current?.abort();
+      pushControllerRef.current = null;
+      setPushBusy(false);
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted) void refreshPushStatus();
+    };
+    window.addEventListener('pagehide', hide);
+    window.addEventListener('pageshow', show);
     void refreshPushStatus();
-  }, [serverSession, user?.id]);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pageshow', show);
+      pushAttemptRef.current += 1;
+      pushControllerRef.current?.abort();
+      pushControllerRef.current = null;
+    };
+  }, [isCurrentSession, loginGuard, pushScopeKey, refreshPushStatus, serverSession, user?.id]);
 
   const lossTooAggressive = user?.goal === Goal.LOSS && tdee && lossDef > Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3));
   const gainTooAggressive = user?.goal === Goal.GAIN && tdee && gainSur > AGGRESSIVE_SURPLUS;
@@ -1384,30 +1753,42 @@ export default function SettingsScreen({
     }
 
     if (serverSession && onPatchUser) {
-      await onPatchUser(patch);
+      if (await onPatchUser(patch) === false) return;
     } else if (onChangeUser) {
-      onChangeUser({ ...user, ...patch });
+      if (!await commitProfileChange({ ...user, ...patch })) return;
+    } else {
+      return;
     }
     setProfileValidationError(null);
     setProfileDirty(false);
   };
 
-  const saveProgressPhotos = async (nextPhotos: ProgressPhoto[]) => {
-    if (!user) return;
+  const saveProgressPhotos = async (
+    nextPhotos: ProgressPhoto[],
+    isCurrentAttempt: () => boolean,
+  ): Promise<boolean | null> => {
+    if (!user || !isCurrentAttempt()) return null;
     const patch: Partial<UserProfile> = { progressPhotos: nextPhotos.slice(0, 12) };
     if (serverSession && onPatchUser) {
-      await onPatchUser(patch);
+      const saved = await onPatchUser(patch);
+      return isCurrentAttempt() ? saved !== false : null;
     } else if (onChangeUser) {
-      onChangeUser({ ...user, ...patch });
+      const saved = await commitProfileChange({ ...user, ...patch });
+      return isCurrentAttempt() ? saved : null;
     }
+    return false;
   };
 
   const addProgressPhoto = async (file: File) => {
     if (!user) return;
+    const attempt = ++progressPhotoAttemptRef.current;
+    const isCurrentAttempt = () => attempt === progressPhotoAttemptRef.current
+      && isCurrentSession?.() !== false;
     setProgressPhotoBusy(true);
     setProgressPhotoError(null);
     try {
       const { photo, thumb } = await compressProgressPhoto(file);
+      if (!isCurrentAttempt()) return;
       const next: ProgressPhoto[] = [
         {
           date: new Date().toISOString(),
@@ -1417,20 +1798,38 @@ export default function SettingsScreen({
         },
         ...(user.progressPhotos || []),
       ].slice(0, 12);
-      await saveProgressPhotos(next);
+      const saved = await saveProgressPhotos(next, isCurrentAttempt);
+      if (saved === null || !isCurrentAttempt()) return;
+      if (!saved) {
+        setProgressPhotoError('Не удалось сохранить фото прогресса. Повторите попытку.');
+        return;
+      }
       setProgressPhotoNote('');
       if (progressPhotoInputRef.current) progressPhotoInputRef.current.value = '';
     } catch {
-      setProgressPhotoError('Не удалось добавить фото прогресса.');
+      if (isCurrentAttempt()) setProgressPhotoError('Не удалось добавить фото прогресса.');
     } finally {
-      setProgressPhotoBusy(false);
+      if (attempt === progressPhotoAttemptRef.current) setProgressPhotoBusy(false);
     }
   };
 
   const removeProgressPhoto = async (index: number) => {
     if (!user) return;
+    const attempt = ++progressPhotoAttemptRef.current;
+    const isCurrentAttempt = () => attempt === progressPhotoAttemptRef.current
+      && isCurrentSession?.() !== false;
     const next = (user.progressPhotos || []).filter((_, i) => i !== index);
-    await saveProgressPhotos(next);
+    setProgressPhotoBusy(true);
+    setProgressPhotoError(null);
+    try {
+      const saved = await saveProgressPhotos(next, isCurrentAttempt);
+      if (saved === null || !isCurrentAttempt()) return;
+      if (!saved) setProgressPhotoError('Не удалось сохранить изменения фото. Повторите попытку.');
+    } catch {
+      if (isCurrentAttempt()) setProgressPhotoError('Не удалось сохранить изменения фото. Повторите попытку.');
+    } finally {
+      if (attempt === progressPhotoAttemptRef.current) setProgressPhotoBusy(false);
+    }
   };
 
   const syncDescription = syncStateLabel(syncState);
@@ -1447,12 +1846,58 @@ export default function SettingsScreen({
     return 'Push-сервер ещё не настроен.';
   })();
 
+  const saveLossDeficitDraft = () => {
+    if (!user) return;
+    const parsed = Number(draftLossDeficit);
+    if (!Number.isFinite(parsed)) {
+      setProfileCommitError('Укажите корректный дефицит калорий.');
+      return;
+    }
+    const value = Math.max(MIN_DEFICIT, Math.min(MAX_DEFICIT, parsed));
+    const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
+    const aggressive = value > limit;
+    if (aggressive && !ackLoss) {
+      setProfileCommitError('Подтвердите риски перед сохранением агрессивного дефицита.');
+      return;
+    }
+    void commitProfileChange({
+      ...user,
+      lossDeficit: value,
+      riskAcknowledgedLoss: aggressive ? true : user.riskAcknowledgedLoss,
+    });
+  };
+
+  const saveGainSurplusDraft = () => {
+    if (!user) return;
+    const parsed = Number(draftGainSurplus);
+    if (!Number.isFinite(parsed)) {
+      setProfileCommitError('Укажите корректный профицит калорий.');
+      return;
+    }
+    const value = Math.max(MIN_SURPLUS, Math.min(MAX_SURPLUS, parsed));
+    const aggressive = value > AGGRESSIVE_SURPLUS;
+    if (aggressive && !ackGain) {
+      setProfileCommitError('Подтвердите риски перед сохранением агрессивного профицита.');
+      return;
+    }
+    void commitProfileChange({
+      ...user,
+      gainSurplus: value,
+      riskAcknowledgedGain: aggressive ? true : user.riskAcknowledgedGain,
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       <div className="mb-8 text-left">
         <div className="text-3xl font-black text-slate-100">Настройки</div>
         <div className="text-slate-400 mt-2">Персонализируйте интерфейс. Часть функций будет добавлена позже.</div>
       </div>
+      {profileCommitError && (
+        <div role="alert" className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
+          {profileCommitError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {user && onChangeUser && (
@@ -1564,6 +2009,7 @@ export default function SettingsScreen({
                     draftChestCm={draftChestCm}
                     draftHipsCm={draftHipsCm}
                     profileDirty={profileDirty}
+                    profileSaving={profileCommitBusy}
                     profileValidationError={profileValidationError}
                     profileSummary={profileSummary}
                     onProfileSave={saveProfileDraft}
@@ -1625,7 +2071,7 @@ export default function SettingsScreen({
                 </div>
 
                 {progressPhotoError && (
-                  <div className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
+                  <div role="alert" className="mt-3 rounded-[1rem] border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 font-semibold">
                     {progressPhotoError}
                   </div>
                 )}
@@ -1656,6 +2102,7 @@ export default function SettingsScreen({
                           <button
                             type="button"
                             onClick={() => void removeProgressPhoto(index)}
+                            disabled={progressPhotoBusy}
                             className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all w-8 h-8 rounded-full bg-black/70 border border-white/10 text-white flex items-center justify-center"
                             aria-label="Удалить фото"
                           >
@@ -1845,6 +2292,12 @@ export default function SettingsScreen({
                   </div>
                 </div>
 
+                {wearableError ? (
+                  <div role="alert" className="mt-4 rounded-[1rem] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                    {wearableError}
+                  </div>
+                ) : null}
+
                 <div className="grid grid-cols-1 gap-3 mt-4">
                   {wearableOptions.map((option) => {
                     const selected = user?.wearableProvider === option.value && user.wearableEnabled !== false;
@@ -1943,7 +2396,7 @@ export default function SettingsScreen({
                     <button
                       type="button"
                       onClick={() => void generateMobileToken()}
-                      disabled={!serverSession || mobileTokenBusy}
+                      disabled={!serverSession || !loginGuard || !isCurrentSession?.() || mobileTokenBusy}
                       className="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-[1rem] bg-sky-600 hover:bg-sky-500 text-white font-black transition-all disabled:opacity-50"
                     >
                       <KeyRound className="w-4 h-4" />
@@ -1957,13 +2410,13 @@ export default function SettingsScreen({
                     </div>
                   )}
 
-                  {mobileTokenValue && (
+                  {activeMobileToken && (
                     <div className="mt-3 rounded-[1rem] border border-slate-800 bg-slate-950/60 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Mobile token</div>
-                          <div className="mt-2 text-sm text-slate-100 break-all font-mono">{mobileTokenValue}</div>
-                          <div className="mt-2 text-xs text-slate-500">Срок: {formatMobileTokenExpiry(mobileTokenExpiresAt)}</div>
+                          <div className="mt-2 text-sm text-slate-100 break-all font-mono">{activeMobileToken.token}</div>
+                          <div className="mt-2 text-xs text-slate-500">Срок: {formatMobileTokenExpiry(activeMobileToken.expiresAt)}</div>
                         </div>
                         <div className="flex flex-col gap-2">
                           <button
@@ -1972,10 +2425,10 @@ export default function SettingsScreen({
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-[0.85rem] border border-slate-800 bg-slate-950/40 hover:bg-slate-900 text-slate-200 font-black transition-all"
                           >
                             <Copy className="w-4 h-4" />
-                            {mobileTokenCopiedAt ? 'Скопировано' : 'Копировать'}
+                            {mobileTokenCopiedAt && activeMobileToken ? 'Скопировано' : 'Копировать'}
                           </button>
                           <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">
-                            {mobileTokenCopiedAt ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
+                            {mobileTokenCopiedAt && activeMobileToken ? 'Токен уже в буфере' : 'Вставьте в bridge на iPhone'}
                           </div>
                         </div>
                       </div>
@@ -2192,11 +2645,13 @@ export default function SettingsScreen({
                     {[250, 400, 500, 650, 750].map(v => (
                       <button
                         key={v}
+                        type="button"
+                        disabled={profileCommitBusy}
                         onClick={() => {
                           const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
                           const isAgg = v > limit;
                           if (isAgg && !ackLoss) return;
-                          onChangeUser({ ...user, lossDeficit: v, riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
+                          void commitProfileChange({ ...user, lossDeficit: v, riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
                         }}
                         className={[
                           "px-4 py-2 rounded-full text-xs font-black border transition-all",
@@ -2219,10 +2674,12 @@ export default function SettingsScreen({
                       <input
                         type="checkbox"
                         checked={ackLoss}
+                        disabled={profileCommitBusy}
                         onChange={(e) => {
                           const next = e.target.checked;
-                          setAckLoss(next);
-                          if (next) onChangeUser({ ...user, riskAcknowledgedLoss: true });
+                          void commitProfileChange({ ...user, riskAcknowledgedLoss: next }).then(saved => {
+                            if (saved) setAckLoss(next);
+                          });
                         }}
                         className="mt-0.5"
                       />
@@ -2235,15 +2692,12 @@ export default function SettingsScreen({
                   <div className="flex items-center gap-3 p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
                     <div className="text-slate-400 text-sm font-semibold">Точное значение</div>
                     <input
-                      value={String(user.lossDeficit ?? 500)}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value || 0);
-                        const n = Math.max(MIN_DEFICIT, Math.min(MAX_DEFICIT, raw));
-                        const limit = tdee ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_DEFICIT;
-                        const isAgg = n > limit;
-                        if (isAgg && !ackLoss) return;
-                        onChangeUser({ ...user, lossDeficit: isFinite(n) ? n : (user.lossDeficit ?? DEFAULT_DEFICIT), riskAcknowledgedLoss: isAgg ? true : user.riskAcknowledgedLoss });
-                      }}
+                      aria-label="Точное значение дефицита калорий"
+                      value={draftLossDeficit}
+                      disabled={profileCommitBusy}
+                      onChange={(e) => setDraftLossDeficit(e.target.value)}
+                      onBlur={saveLossDeficitDraft}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       inputMode="numeric"
                       className="ml-auto w-28 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700 text-slate-100 font-black tabular-nums"
                     />
@@ -2258,11 +2712,13 @@ export default function SettingsScreen({
                     {[150, 250, 300, 400, 500].map(v => (
                       <button
                         key={v}
+                        type="button"
+                        disabled={profileCommitBusy}
                         onClick={() => {
                           const limit = AGGRESSIVE_SURPLUS;
                           const isAgg = v > limit;
                           if (isAgg && !ackGain) return;
-                          onChangeUser({ ...user, gainSurplus: v, riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
+                          void commitProfileChange({ ...user, gainSurplus: v, riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
                         }}
                         className={[
                           "px-4 py-2 rounded-full text-xs font-black border transition-all",
@@ -2285,10 +2741,12 @@ export default function SettingsScreen({
                       <input
                         type="checkbox"
                         checked={ackGain}
+                        disabled={profileCommitBusy}
                         onChange={(e) => {
                           const next = e.target.checked;
-                          setAckGain(next);
-                          if (next) onChangeUser({ ...user, riskAcknowledgedGain: true });
+                          void commitProfileChange({ ...user, riskAcknowledgedGain: next }).then(saved => {
+                            if (saved) setAckGain(next);
+                          });
                         }}
                         className="mt-0.5"
                       />
@@ -2301,15 +2759,12 @@ export default function SettingsScreen({
                   <div className="flex items-center gap-3 p-4 rounded-[1.25rem] border border-slate-800 bg-slate-950/30">
                     <div className="text-slate-400 text-sm font-semibold">Точное значение</div>
                     <input
-                      value={String(user.gainSurplus ?? 300)}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value || 0);
-                        const n = Math.max(MIN_SURPLUS, Math.min(MAX_SURPLUS, raw));
-                        const limit = AGGRESSIVE_SURPLUS;
-                        const isAgg = n > limit;
-                        if (isAgg && !ackGain) return;
-                        onChangeUser({ ...user, gainSurplus: isFinite(n) ? n : (user.gainSurplus ?? DEFAULT_SURPLUS), riskAcknowledgedGain: isAgg ? true : user.riskAcknowledgedGain });
-                      }}
+                      aria-label="Точное значение профицита калорий"
+                      value={draftGainSurplus}
+                      disabled={profileCommitBusy}
+                      onChange={(e) => setDraftGainSurplus(e.target.value)}
+                      onBlur={saveGainSurplusDraft}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       inputMode="numeric"
                       className="ml-auto w-28 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700 text-slate-100 font-black tabular-nums"
                     />

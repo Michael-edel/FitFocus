@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestDelete, onRequestGet, onRequestPut } from '../functions/api/state';
 import { isAllowedStateKey } from '../functions/api/_lib/state_keyspace';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type StatePutContext = Parameters<typeof onRequestPut>[0];
 type StateGetContext = Parameters<typeof onRequestGet>[0];
 type StateDeleteContext = Parameters<typeof onRequestDelete>[0];
@@ -31,6 +32,13 @@ async function signJwt(payload: Record<string, unknown>) {
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
   return `${data}.${b64url(sig)}`;
+}
+
+async function validStateScope() {
+  return {
+    'X-FitFocus-State-Account': 'user-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'user-1', sid: 'sid-1' }),
+  };
 }
 
 function makeDb(options: { atomicWriteChanges?: number } = {}) {
@@ -100,13 +108,18 @@ function makeDb(options: { atomicWriteChanges?: number } = {}) {
   };
 }
 
-async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function putState(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, protocol: string | null = '2') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StatePutContext['env'];
   const context: StatePutContext = {
     request: new Request('https://fitfocus.test/api/state', {
       method: 'PUT',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Cookie: `ff_session=${token}`,
+        ...await validStateScope(),
+        ...(protocol ? { 'X-FitFocus-State-Protocol': protocol } : {}),
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
     env,
@@ -124,7 +137,7 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string, includeDe
   const context: StateGetContext = {
     request: new Request(`https://fitfocus.test/api/state?prefix=${encodeURIComponent(prefix)}${includeDeleted ? '&includeDeleted=1' : ''}`, {
       method: 'GET',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: { Cookie: `ff_session=${token}`, ...await validStateScope() },
     }),
     env,
     params: {},
@@ -135,13 +148,17 @@ async function getState(db: ReturnType<typeof makeDb>, prefix: string, includeDe
   return onRequestGet(context);
 }
 
-async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersion?: number) {
+async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersion?: number, protocol: string | null = '2') {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database, REQUIRE_INVITE: '1' } as unknown as StateDeleteContext['env'];
   const context: StateDeleteContext = {
     request: new Request(`https://fitfocus.test/api/state?key=${encodeURIComponent(key)}${baseVersion === undefined ? '' : `&baseVersion=${baseVersion}`}`, {
       method: 'DELETE',
-      headers: { Cookie: `ff_session=${token}` },
+      headers: {
+        Cookie: `ff_session=${token}`,
+        ...await validStateScope(),
+        ...(protocol ? { 'X-FitFocus-State-Protocol': protocol } : {}),
+      },
     }),
     env,
     params: {},
@@ -153,6 +170,30 @@ async function deleteState(db: ReturnType<typeof makeDb>, key: string, baseVersi
 }
 
 describe('/api/state PUT', () => {
+  it.each([null, '1'])('rejects a legacy PUT without state protocol %s before database access', async (protocol) => {
+    const db = makeDb();
+    const response = await putState(db, {
+      key: 'fitfocus_data_user-1_food:3',
+      value: '{"legacy":true}',
+      baseVersion: 0,
+    }, protocol);
+
+    expect(response.status).toBe(426);
+    await expect(response.json()).resolves.toMatchObject({ error: 'STATE_PROTOCOL_REQUIRED' });
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([null, '1'])('rejects a legacy DELETE without state protocol %s before database access', async (protocol) => {
+    const db = makeDb();
+    const response = await deleteState(db, 'fitfocus_data_user-1_food:1', 1, protocol);
+
+    expect(response.status).toBe(426);
+    await expect(response.json()).resolves.toMatchObject({ error: 'STATE_PROTOCOL_REQUIRED' });
+    expect(db.runs).toHaveLength(0);
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('returns the committed deletion version and advertises the state protocol', async () => {
     const response = await deleteState(makeDb(), 'fitfocus_data_user-1_food:1', 1);
     expect(response.status).toBe(200);
@@ -269,6 +310,21 @@ describe('/api/state PUT', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
   });
 
+  it('rejects malformed batch items before writing any valid neighbor', async () => {
+    const db = makeDb();
+    const response = await putState(db, {
+      items: [
+        { key: 'fitfocus_data_user-1_food:1', value: '{"valid":true}', baseVersion: 1 },
+        null,
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO user_kv'))).toBe(false);
+  });
+
   it('rejects object values instead of coercing them into [object Object]', async () => {
     const db = makeDb();
     const response = await putState(db, {
@@ -342,7 +398,12 @@ describe('/api/state PUT', () => {
     const context: StatePutContext = {
       request: new Request('https://fitfocus.test/api/state', {
         method: 'PUT',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          ...await validStateScope(),
+          'X-FitFocus-State-Protocol': '2',
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ items: [{ key: 'fitfocus_data_user-1_food:1', value: 'x'.repeat(600 * 1024) }] }),
       }),
       env,

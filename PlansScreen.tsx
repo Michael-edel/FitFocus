@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, X, Crown, Users, Zap } from 'lucide-react';
 import { formatKzt, planLabel, setDevPlanOverride, getDevPlanOverride } from './money';
 import { TariffPlan } from './types';
@@ -25,6 +25,9 @@ export default function PlansScreen({
   };
 
   const [checkoutPlan, setCheckoutPlan] = useState<null | 'pro' | 'family'>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const checkoutAttemptRef = useRef(0);
+  useEffect(() => () => { checkoutAttemptRef.current += 1; }, []);
   const devEnabled = import.meta.env.DEV || import.meta.env.VITE_TEST_MODE === "1";
   const currentOverride = devEnabled ? getDevPlanOverride(userId) : null;
   const dismissGestures = useModalDismissGestures(() => {
@@ -34,7 +37,12 @@ export default function PlansScreen({
     }
     onClose();
   });
-  const checkoutDismissGestures = useModalDismissGestures(() => setCheckoutPlan(null));
+  const closeCheckout = () => {
+    checkoutAttemptRef.current += 1;
+    setCheckoutLoading(false);
+    setCheckoutPlan(null);
+  };
+  const checkoutDismissGestures = useModalDismissGestures(closeCheckout);
 
   const openPay = (url: string) => {
     try {
@@ -219,13 +227,13 @@ export default function PlansScreen({
         <div className="fixed inset-0 z-[450] flex items-end justify-center p-3 md:items-center md:p-4" role="dialog" aria-modal="true">
           <button
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
-            onClick={() => setCheckoutPlan(null)}
+            onClick={closeCheckout}
             aria-label="Закрыть оплату"
           />
           <div className="relative ff-plans__sheet z-[460] touch-pan-y max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain" {...checkoutDismissGestures}>
             <div className="ff-plans__sheetHead">
               <div className="ff-plans__sheetTitle">Оплата</div>
-              <button className="ff-plans__sheetX" onClick={() => setCheckoutPlan(null)} aria-label="Закрыть">
+              <button className="ff-plans__sheetX" onClick={closeCheckout} aria-label="Закрыть">
                 <X size={20} />
               </button>
             </div>
@@ -239,16 +247,25 @@ export default function PlansScreen({
 
             <button
               className="ff-plans__activate mt-4"
+              disabled={checkoutLoading}
               onClick={async () => {
-                const url = await onCheckoutPlan(checkoutPlan);
-                if (url) openPay(url);
-                setCheckoutPlan(null);
+                if (checkoutLoading) return;
+                const attempt = ++checkoutAttemptRef.current;
+                setCheckoutLoading(true);
+                try {
+                  const url = await onCheckoutPlan(checkoutPlan);
+                  if (attempt !== checkoutAttemptRef.current) return;
+                  if (url) openPay(url);
+                  closeCheckout();
+                } finally {
+                  if (attempt === checkoutAttemptRef.current) setCheckoutLoading(false);
+                }
               }}
             >
-              Открыть Stripe Checkout
+              {checkoutLoading ? 'Подготовка оплаты…' : 'Открыть Stripe Checkout'}
             </button>
 
-            <button className="ff-plans__back mt-2" onClick={() => setCheckoutPlan(null)}>
+            <button className="ff-plans__back mt-2" onClick={closeCheckout}>
               Назад
             </button>
           </div>

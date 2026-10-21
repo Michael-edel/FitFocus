@@ -1,6 +1,5 @@
 import { aggregateShoppingRows } from './ingredients';
-
-type ShoppingExportRow = { name?: string | null; grams?: number | null };
+import { readPersonalMenuItems } from './personal_menu_projection';
 
 export function isShoppingExportWeek(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -13,14 +12,9 @@ function formatQuantity(grams: number) {
 
 /** Builds a CSV export from the caller's personal shopping rows. */
 export async function buildPersonalShoppingExport(db: D1Database, userId: string, week: string) {
-  const rows = await db.prepare(
-    `SELECT ingredient_name as name, grams
-     FROM weekly_menu_items
-     WHERE user_id = ? AND week_start = ? AND family_id IS NULL
-     ORDER BY ingredient_name`,
-  ).bind(userId, week).all<ShoppingExportRow>();
+  const rows = await readPersonalMenuItems(db, userId, week);
   const lines = ['Продукт,Количество'];
-  for (const item of aggregateShoppingRows(rows.results || [])) {
+  for (const item of aggregateShoppingRows(rows)) {
     const safeName = `"${item.name.replace(/"/g, '""')}"`;
     lines.push(`${safeName},"${formatQuantity(item.grams)}"`);
   }

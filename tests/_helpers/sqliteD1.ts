@@ -32,9 +32,11 @@ export function sqliteD1(schema = readFileSync(new URL('../../db/schema.sql', im
         async run() {
           statements.push(sql);
           hooks.before?.(sql, this.binds);
-          const result = sqlite.prepare(sql).run(...this.binds);
+          const before = Number(sqlite.prepare('SELECT total_changes() AS n').get()?.n ?? 0);
+          sqlite.prepare(sql).run(...this.binds);
+          const changes = Number(sqlite.prepare('SELECT total_changes() AS n').get()?.n ?? 0) - before;
           hooks.after?.(sql, this.binds);
-          return { success: true, meta: { changes: Number(result.changes) } };
+          return { success: true, meta: { changes } };
         },
       };
       return statement;

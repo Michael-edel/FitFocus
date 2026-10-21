@@ -24,7 +24,9 @@ type CouncilScreenProps = {
   setCouncilInput: React.Dispatch<React.SetStateAction<string>>;
   councilLoading: boolean;
   councilStage: 'idle' | 'router' | 'experts' | 'review' | 'chairman';
+  councilError: string | null;
   councilMessages: CouncilChatMsg[];
+  canClearHistory: boolean;
   expandedCouncilThoughtIds: Record<string, boolean>;
   setExpandedCouncilThoughtIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   councilScrollRef: React.RefObject<HTMLDivElement | null>;
@@ -37,7 +39,9 @@ export default function CouncilScreen({
   setCouncilInput,
   councilLoading,
   councilStage,
+  councilError,
   councilMessages,
+  canClearHistory,
   expandedCouncilThoughtIds,
   setExpandedCouncilThoughtIds,
   councilScrollRef,
@@ -65,7 +69,9 @@ export default function CouncilScreen({
           <button
             type="button"
             onClick={onClearHistory}
-            className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all"
+            disabled={!canClearHistory}
+            title={canClearHistory ? undefined : 'Ожидается подтверждение активной сессии'}
+            className="flex items-center gap-2 text-slate-500 hover:text-rose-300 font-black text-[10px] uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={14} /> Очистить
           </button>
@@ -339,21 +345,24 @@ export default function CouncilScreen({
             e.preventDefault();
             void handleCouncilSubmit();
           }}
-          className="p-5 md:p-8 bg-slate-950 border-t border-slate-800 flex gap-4"
+          className="p-5 md:p-8 bg-slate-950 border-t border-slate-800 flex flex-col gap-3"
         >
-          <textarea
-            rows={1}
-            className="flex-1 bg-slate-900 border border-slate-800 p-4 md:p-6 rounded-3xl outline-none text-white focus:border-indigo-500 transition-all resize-none"
-            value={councilInput}
-            onChange={(e) => setCouncilInput(e.target.value)}
-            placeholder="Ваш вопрос экспертам..."
-          />
-          <button
-            disabled={councilLoading || !councilInput.trim()}
-            className="bg-indigo-600 p-4 md:p-6 rounded-3xl text-white hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center min-w-[64px]"
-          >
-            {councilLoading ? <Loader2 className="animate-spin" /> : <Send size={26} />}
-          </button>
+          <div className="flex gap-4">
+            <textarea
+              rows={1}
+              className="flex-1 bg-slate-900 border border-slate-800 p-4 md:p-6 rounded-3xl outline-none text-white focus:border-indigo-500 transition-all resize-none"
+              value={councilInput}
+              onChange={(e) => setCouncilInput(e.target.value)}
+              placeholder="Ваш вопрос экспертам..."
+            />
+            <button
+              disabled={councilLoading || !councilInput.trim()}
+              className="bg-indigo-600 p-4 md:p-6 rounded-3xl text-white hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center min-w-[64px]"
+            >
+              {councilLoading ? <Loader2 className="animate-spin" /> : <Send size={26} />}
+            </button>
+          </div>
+          {councilError && <p role="alert" className="text-sm font-bold text-rose-300">{councilError}</p>}
         </form>
       </div>
     </div>

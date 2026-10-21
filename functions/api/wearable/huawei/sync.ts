@@ -1,5 +1,5 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { requireUser, json } from "../../_lib/auth";
+import { json } from "../../_lib/auth";
 import { requireBetaAccess } from "../../_lib/access";
 import { requireDB } from "../../_lib/db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../../_lib/request_body";
@@ -14,6 +14,7 @@ import {
 } from "../../_lib/huawei_health";
 import { syncHuaweiProfile } from '../../_lib/huawei_sync';
 import { logApiEvent, requestIdFor, withRequestId } from '../../_lib/observability';
+import { requireScopedStateUser, withSessionGuard } from '../../_lib/state_session';
 
 type Env = HuaweiHealthEnv & { DB: D1Database };
 
@@ -21,7 +22,7 @@ type Env = HuaweiHealthEnv & { DB: D1Database };
 const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
     await requireBetaAccess(env, user);
   } catch {
     return json({ error: "UNAUTH" }, 401);
@@ -47,6 +48,12 @@ const handleHuaweiSyncPost: PagesFunction<Env> = async ({ request, env }) => {
   const { timezone, date, hasExplicitBaseVersion, baseVersion: requestedBaseVersion } = parseHuaweiSyncInput(body);
   if (requestedBaseVersion === null) return json({ error: "BAD_BASE_VERSION" }, 400);
   const snapshot = await fetchHuaweiDailySnapshot(env, request, accessToken, { timezone, date });
+  try {
+    user = await requireScopedStateUser(request, env);
+    await requireBetaAccess(env, user);
+  } catch {
+    return json({ error: "UNAUTH" }, 401);
+  }
   const updatedFields = huaweiChangedFields(snapshot);
   if (!updatedFields.length) {
     return json({ error: "NO_HUAWEI_DATA", provider, updatedFields: [] }, 422);
@@ -71,5 +78,5 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const response = await handleHuaweiSyncPost(context);
   const requestId = requestIdFor(context.request);
   logApiEvent('wearable.huawei.sync.response', { requestId, status: response.status });
-  return withRequestId(response, requestId);
+  return withSessionGuard(withRequestId(response, requestId), context.request, 'Huawei');
 };

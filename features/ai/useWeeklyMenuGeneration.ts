@@ -1,68 +1,119 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { generateWeeklyMenu } from '../../geminiService';
 import type { UserProfile, WeeklyMenu } from '../../types';
+import type { OutboxReadGuard } from '../../storage/durableOutbox';
+import { prepareAiSession } from '../../services/aiSession';
+import { isSoftWeeklyAiError } from '../../services/frontendErrors';
+import type { useProfilePersistence } from '../profile/useProfilePersistence';
+import { AiActionScope } from './actionScope';
 
 export const WEEKLY_MENU_GENERATION_ERROR = 'Не удалось сгенерировать меню на неделю.';
+export const WEEKLY_MENU_SAVE_ERROR = 'Меню не сохранено. Проверьте сообщение о хранилище и повторите попытку.';
+export const WEEKLY_MENU_PROFILE_CHANGED = 'Профиль изменился. Сгенерируйте меню ещё раз.';
 
 export type WeeklyMenuGenerationParams = {
   currentUser: UserProfile | null;
-  persistUser: (user: UserProfile) => void;
+  persistUser: ReturnType<typeof useProfilePersistence>;
+  isCurrentSession: () => boolean;
+  canCommitProfile: () => boolean;
+  controller: AbortController;
   checkAchievements: (trigger: string, context: { hasWeeklyMenu: boolean }) => unknown;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   requestMenu?: typeof generateWeeklyMenu;
+  prepareSession?: typeof prepareAiSession;
+  loginGuard?: OutboxReadGuard;
 };
 
 /** Generates and persists a personal weekly menu as one recoverable UI action. */
 export async function generatePersonalWeeklyMenu({
   currentUser,
   persistUser,
+  isCurrentSession,
+  canCommitProfile,
+  controller,
   checkAchievements,
   setLoading,
   setError,
   requestMenu = generateWeeklyMenu,
+  prepareSession = prepareAiSession,
+  loginGuard,
 }: WeeklyMenuGenerationParams): Promise<WeeklyMenu | null> {
-  if (!currentUser?.aiPlan) return null;
+  const current = () => !controller.signal.aborted && isCurrentSession();
+  if (!currentUser?.aiPlan || !current()) return null;
 
   setError(null);
   setLoading(true);
+  let saving = false;
   try {
-    const weeklyMenu = await requestMenu(currentUser, currentUser.aiPlan);
-    persistUser({ ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } });
+    const session = await prepareSession(currentUser.id, controller, current, { requireMenuProjection: true, previous: loginGuard });
+    if (!current()) return null;
+    if (!canCommitProfile()) throw new Error(WEEKLY_MENU_PROFILE_CHANGED);
+    const weeklyMenu = await requestMenu(currentUser, currentUser.aiPlan, session);
+    if (!current()) return null;
+    if (!canCommitProfile()) throw new Error(WEEKLY_MENU_PROFILE_CHANGED);
+    saving = true;
+    const operation = await persistUser(previous => {
+      if (!previous.aiPlan) throw new Error(WEEKLY_MENU_PROFILE_CHANGED);
+      return { ...previous, aiPlan: { ...previous.aiPlan, weeklyMenu } };
+    }, { readGuard: session.guard, canCommit: () => current() && canCommitProfile() });
+    if (!current()) return null;
+    if (!operation || operation.status !== 'pending') { setError(WEEKLY_MENU_SAVE_ERROR); return null; }
     void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
+    if (!current()) return null;
     return weeklyMenu;
-  } catch {
-    setError(WEEKLY_MENU_GENERATION_ERROR);
+  } catch (error) {
+    if (current() && !isSoftWeeklyAiError(error)) {
+      setError(!canCommitProfile() ? WEEKLY_MENU_PROFILE_CHANGED : saving ? WEEKLY_MENU_SAVE_ERROR : WEEKLY_MENU_GENERATION_ERROR);
+    }
     return null;
   } finally {
-    setLoading(false);
+    if (current()) setLoading(false);
   }
 }
 
 type UseWeeklyMenuGenerationParams = Pick<
   WeeklyMenuGenerationParams,
-  'currentUser' | 'persistUser' | 'checkAchievements'
->;
+  'currentUser' | 'persistUser' | 'checkAchievements' | 'isCurrentSession'
+> & { profileEditRevisionRef: MutableRefObject<number>; loginGuard: OutboxReadGuard | null };
 
 export function useWeeklyMenuGeneration({
   currentUser,
   persistUser,
   checkAchievements,
+  isCurrentSession,
+  profileEditRevisionRef,
+  loginGuard,
 }: UseWeeklyMenuGenerationParams) {
-  const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
-  const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
+  const scope = useMemo(() => new AiActionScope(isCurrentSession), [currentUser?.id, isCurrentSession]);
+  const [status, setStatus] = useState({ scope, loading: false, error: null as string | null });
+  useLayoutEffect(() => {
+    scope.activate();
+    const hide = () => scope.invalidate();
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      scope.activate(); setStatus({ scope, loading: false, error: null });
+    };
+    window.addEventListener('pagehide', hide); window.addEventListener('pageshow', show);
+    return () => { scope.invalidate(); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', show); };
+  }, [scope]);
 
-  const handleGenerateWeeklyMenu = useCallback(() => generatePersonalWeeklyMenu({
-    currentUser,
-    persistUser,
-    checkAchievements,
-    setLoading: setWeeklyMenuLoading,
-    setError: setWeeklyMenuError,
-  }), [checkAchievements, currentUser, persistUser]);
+  const handleGenerateWeeklyMenu = useCallback(() => {
+    if (!loginGuard) return Promise.resolve(null);
+    const attempt = scope.begin();
+    if (!attempt) return Promise.resolve(null);
+    const revision = profileEditRevisionRef.current;
+    return generatePersonalWeeklyMenu({
+      currentUser, persistUser, checkAchievements, controller: attempt.controller, loginGuard,
+      isCurrentSession: attempt.isCurrent, canCommitProfile: () => revision === profileEditRevisionRef.current,
+      setLoading: loading => setStatus(previous => ({ scope, loading, error: previous.scope === scope ? previous.error : null })),
+      setError: error => setStatus(previous => ({ scope, error, loading: previous.scope === scope && previous.loading })),
+    }).finally(attempt.finish);
+  }, [checkAchievements, currentUser, persistUser, profileEditRevisionRef, loginGuard, scope]);
 
   return {
-    weeklyMenuLoading,
-    weeklyMenuError,
+    weeklyMenuLoading: status.scope === scope && status.loading,
+    weeklyMenuError: status.scope === scope ? status.error : null,
     handleGenerateWeeklyMenu,
   };
 }

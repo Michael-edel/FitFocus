@@ -1,0 +1,422 @@
+# Origin preview и приёмка staging
+
+Сверено: 21.10.2026. PR #93: ветка `fix/durable-outbox` направлена в
+`fix/state-generations`; актуальные HEAD и CI фиксируются в
+[статусе проекта](project-status.md).
+
+### Read-only branch-preview smoke: `ed7100b`, 21.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Корень, `/api/env` и
+анонимный `/api/me` ответили 200; закрытые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload. HTML указывал
+на `/assets/index-zJV9V2Nq.js`; bundle metadata содержала ветку
+`fix/durable-outbox`, SHA `ed7100bb` и build `1646`.
+
+Визуальная проверка этого preview нашла неверную подпись: branch build показывался
+как `main`. Это наблюдение привело к исправлению в следующей ревизии.
+
+### Read-only branch-preview smoke: `1e0110a`, 21.10.2026
+
+Исправленная ветка опубликована по адресу
+`https://fix-durable-outbox.fitfocus.pages.dev/`; asset
+`/assets/index-BMyY-afF.js` содержит SHA
+`1e0110a8f697c038b433e723da73e87ddad1f037`. Повторный
+`npm run test:e2e:staging` завершился **8/8 GET-only**: корень, `/api/env` и
+анонимный `/api/me` вернули 200; закрытые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`; Service Worker
+контролировал страницу после reload. Playwright на опубликованной странице
+подтвердил подпись `Текущая сборка ветки fix/durable-outbox • 1e0110a8`, корректный
+preview-текст, отсутствие main-only подписей и page errors. Скриншот сохранён вне
+репозитория. Это подтверждает branch preview и выбранные анонимные GET-маршруты,
+но не отдельный staging, OAuth, D1 или авторизованные операции.
+
+### Read-only branch-preview smoke: `58f4d30`, 21.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Документ, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload. Загруженный
+`/assets/index-6mWogxmq.js` содержит полный SHA
+`58f4d309f7a8359c4233905cacdb49d6adb6f430`.
+
+Проверка ограничена публичным branch preview; она не подтверждает отдельный
+staging, авторизованные операции, OAuth, D1, APP_URL, миграции, edge rules или
+выпуск.
+
+### Read-only branch-preview smoke: `bd488ef`, 20.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` повторно выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Документ, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload.
+HTML и `/assets/index-ut6thhBx.js` вернули 200; загруженный bundle содержит полный
+SHA `bd488efd0a62a2275ea2b97f50da1569c376a395`.
+
+Проверка ограничена read-only branch preview. Она не подтверждает отдельный
+изолированный staging, авторизованные действия, OAuth, D1, APP_URL, миграции,
+edge-правила, старые/новые клиентские bundles или выпуск.
+
+### Read-only branch-preview smoke: `045f934`, 20.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Страница, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` вернули 401 без redirect и `Set-Cookie`.
+Загруженный asset `/assets/index-xMHVwOhL.js` содержит полный SHA
+`045f9345f9ef06f96febf3bd44ad5c6e9d71c05c`.
+
+Дополнительный Chromium smoke подтвердил, что same-origin `/sw.js` активируется,
+имеет область `/` и контролирует страницу после reload. Запросы ограничены тем же
+HTTPS origin и методом GET. Ответ продолжает включать
+`ambient-light-sensor=()` в `Permissions-Policy`; Chromium сообщает только точное
+известное предупреждение, поскольку поддержка этой стандартизованной директивы
+в Chrome включается флагом. Остальные page/console errors и warnings завершают
+проверку ошибкой.
+
+Это подтверждает опубликованный branch preview, не отдельный staging origin.
+OAuth, авторизованные действия, D1, APP_URL, edge-правила, миграции и выпуск
+этим read-only smoke не подтверждены.
+
+### Read-only branch-preview smoke: `a739c1e`, 19.10.2026
+
+Для опубликованной ветки выполнен `npm run test:e2e:staging` на
+`https://fix-durable-outbox.fitfocus.pages.dev/`: **7/7 GET-only** проверок.
+`/`, `/api/env` и анонимный `/api/me` вернули 200; защищённые
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` — 401 без
+redirect и `Set-Cookie`. Загруженный asset
+`/assets/index-BDc4XSZj.js` содержит полный SHA
+`a739c1e151d5bf33a99346ba24d95368272ecb10`.
+
+Это branch preview, а не отдельный staging origin; проверка не подтверждает
+авторизованные действия, OAuth, D1, миграции или релиз.
+
+### Read-only branch-preview smoke: current HEAD `1546073`, 19.10.2026
+
+`npm run test:e2e:staging` прошёл **7/7 GET-only** тестов на
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Корень страницы, `/api/env` и
+анонимный `/api/me` вернули 200; защищённые bootstrap/profile/state/push-status
+вернули 401 без redirect и `Set-Cookie`. В `/assets/index-CmecaeC0.js` найден
+полный SHA `1546073d72d8c81bb8628bf5dbedfab0c6430d12`.
+
+Это branch preview, не отдельный staging origin; OAuth, авторизованные действия,
+D1, миграции и выпуск этим smoke не подтверждены.
+
+## Разделение проверок
+
+Unit-тесты запускаются отдельно: `npm run test:unit`. Локальная браузерная
+матрица использует production build, локальный preview и синтетические API:
+`npm run test:e2e:mock`. Обычный CI выполняет именно эту матрицу и не обращается
+к staging.
+
+Реальная read-only проверка запускается отдельно и требует явный HTTPS origin
+изолированного staging-окружения:
+
+```powershell
+$env:FITFOCUS_STAGING_ORIGIN = 'https://<staging-host>'
+npm run test:e2e:staging
+```
+
+Playwright config откажется стартовать без переменной, с URL вместо чистого
+origin или с production hostname `fitfocus.pages.dev`. Staging suite выполняет
+только GET: загружает страницу, читает `/api/env` и анонимный `/api/me`, затем
+проверяет, что защищённые bootstrap/profile/state/push-status возвращают 401
+без redirect и `Set-Cookie`. В браузере Service Worker отключён, а любые
+не-GET и запросы за пределы выбранного origin блокируются и завершают тест
+ошибкой. Этот smoke не заменяет OAuth, авторизованные операции, миграцию,
+проверку D1 и release checklist. Его реальный запуск и точный проверенный SHA
+должны быть записаны отдельно; в текущем окружении staging origin не задан.
+
+## Исправляемое поведение
+
+Прежний [entry point](../index.tsx) безусловно переводил любой неканонический
+`*.pages.dev` на `https://fitfocus.pages.dev`, сохраняя path/query/hash.
+Поэтому открытие preview не проверяло нужную сборку и могло привести
+пользователя на production. Переход выполнялся ещё до монтажа приложения.
+
+В текущем компоненте этот клиентский redirect удалён. Приложение остаётся
+на origin, с которого загружено. Относительные API-запросы используют этот
+origin; UI сохраняет path/query/hash. Новый флаг окружения для этого не нужен.
+Серверный OAuth и конфигурация Cloudflare этим изменением не перенастраиваются.
+
+IndexedDB и Service Worker изолированы браузером по origin. Cookies имеют
+собственные правила host/domain/path/Secure; сама смена origin не доказывает
+изоляцию cookies или серверной сессии. Данные IDB production не появляются
+автоматически на другом hostname.
+Разные branch/commit preview также не образуют общий IDB-контекст.
+Проверка старой и новой сборок для миграции требует **одного origin и browser
+context**, как указано в [чек-листе выпуска](../RELEASE_CHECKLIST.md).
+
+## Что проверяет локальная регрессия
+
+[preview-origin.spec.ts](../e2e/preview-origin.spec.ts) загружает actual
+production build под тремя перехваченными HTTPS-origin:
+branch preview, commit preview и основной hostname. Все статические байты
+приходят с локального Vite preview `http://127.0.0.1:4173`; API/SW используют
+обычную app-фикстуру. Context route запрещает любые обращения к другому
+origin или непокрытому API, поэтому реальные Pages/production не используются.
+
+Проверяются URL с query/hash, заголовок FitFocus, доступный экран настроек,
+переключение темы, origin API-запросов, отсутствие framework overlay,
+неожиданных запросов и pageerror/console warning/error. Снимок и origin-proof
+сохраняются во внешнем каталоге результатов.
+
+RED на исходном `aefc463`: branch preview/desktop Chromium, workers=1/retries=0,
+1 failed. Trace содержит preview HTML=200, затем запрещённый переход на
+`https://fitfocus.pages.dev/?source=preview-smoke`=502 от самого теста.
+После удаления redirect тот же сценарий прошёл: 1 passed, 3,9 с теста.
+Это воспроизведение дефекта, а не падение из-за DNS или production-сервера.
+
+Первая полная матрица дала 25 passed / 3 failed: Firefox передавал исходный
+Host при получении локальных статических байтов, и Vite возвращал 403.
+Исправлен только Host запроса фикстуры к localhost; allowedHosts не ослаблен.
+Повтор трёх Firefox-сценариев прошёл 3/3. Итоговая матрица — **28 passed**,
+2,8 мин, семь конфигураций, workers=1/retries=0: 21 проверка origin и семь
+native PWA-shell. В итоговом логе нет preview ECONNREFUSED/proxy errors.
+Результат относится к компоненту поверх указанной базы, а не к CI этой базы.
+
+```text
+npm run test:e2e -- e2e/preview-origin.spec.ts e2e/pwa-shell.spec.ts --workers=1 --retries=0
+npm run typecheck
+```
+
+Локальные логи: `preview-origin-red.log`, `preview-origin-green.log`,
+`preview-origin-matrix.log`, `preview-origin-firefox-fixed.log`,
+`preview-origin-matrix-final.log`, `preview-origin-final-typecheck.log` во внешнем
+`C:\Users\User\Documents\Codex\2026-09-17\yf\outputs`.
+Root typecheck и 15 admin guards прошли. Browser plugin not available;
+использован существующий Playwright 1.61.1, Node v24.19.0.
+
+Просмотрены итоговые снимки desktop Chromium (1280×720) и iPhone Safari
+(390×664, DPR 3). Экран настроек отображается, выбор темы доступен;
+мобильный снимок сделан после прокрутки к кнопке темы. Эти снимки не являются
+полной визуальной приёмкой остальных экранов или подтверждением доставки
+изменения серверу: app-фикстура оставляет запись локально ожидающей.
+
+Эта подмена hostname не проверяет реальный DNS/TLS или deployed Cloudflare
+redirect rules. Native PWA-shell проверяется отдельно настоящим SW/native
+HTTP на localhost; это не проверка SW установленного preview на устройстве.
+
+## Обязательная приёмка целевого окружения
+
+### Read-only branch-preview smoke: `9825e8d`, 18.10.2026
+
+После push PR HEAD `9825e8d9bd3053b6158d06fdd4b04f32324b25d6` проверен на
+`https://fix-durable-outbox.fitfocus.pages.dev/`. `npm run test:e2e:staging`
+прошёл 7/7 GET-only проверок: `/`, `/api/env` и анонимный `/api/me` вернули 200;
+защищённые bootstrap/profile/state/push-status — 401 без redirect и
+`Set-Cookie`. Загруженный JS asset `/assets/index-C_UPaACd.js` содержит полный
+SHA текущего HEAD.
+
+Это branch preview, не отдельное staging-окружение; smoke не подтверждает
+авторизованные действия, OAuth, D1, миграции или release acceptance.
+
+### Read-only branch-preview smoke: `5d5dca8`, 18.10.2026
+
+Для текущего опубликованного PR HEAD проверен
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Suite прошёл **7/7** GET-only
+проверок: страница, `/api/env` и анонимный `/api/me` вернули 200; защищённые
+`/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` вернули 401
+без redirect и `Set-Cookie`. Страница осталась на том же origin, pageerror и
+не-GET запросов не было. JS asset
+`/assets/index-6747H75z.js` содержит полный SHA
+`5d5dca8ddc8e3d782fc4f44ccf1b1399878a3488`.
+
+Это branch preview, не отдельный изолированный staging. Проверка не подтверждает
+авторизованные запросы, OAuth, D1, миграции или приёмку релиза.
+
+### Read-only branch-preview smoke: `702b4d1`, 18.10.2026
+
+Для `https://fix-durable-outbox.fitfocus.pages.dev/` запущен staging smoke suite
+в режиме только GET. Все **7/7** проверок прошли. `/` и `/api/env` вернули 200,
+анонимный `/api/me` вернул 200 с `user: null`; защищённые `/api/bootstrap`,
+`/api/profile`, `/api/state` и `/api/push/status` вернули 401 без redirect и
+`Set-Cookie`. Загруженный JS bundle содержит полный SHA
+`702b4d15b2cc78b53b20a857078db478111075f0`.
+
+Это проверка опубликованного branch preview, а не отдельного изолированного
+staging. Она не подтверждает авторизованные запросы, OAuth, D1, миграции или
+приёмку релиза; эти gates остаются открытыми.
+
+### Read-only preview smoke: `45575d2`, 15.10.2026
+
+Публичный preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200.
+Production JS bundle содержит полный SHA `45575d2e75d9abfadbba804d1ac26d2c8a86d467`.
+В desktop Chromium страница FitFocus отрисовалась на том же origin; нажатие
+«Что нового» открыло changelog, который показал `45575d2e`. `/api/env` и
+анонимный `/api/me` запрашивались с `fix-durable-outbox.fitfocus.pages.dev`;
+`/api/me` вернул `user: null`, не выполнив redirect. При загрузке не было
+POST/PUT/PATCH/DELETE; браузер сообщил только предупреждение, что его сборка не
+распознаёт Permissions-Policy `ambient-light-sensor`.
+
+Это подтверждает текущий bundle, первый экран и эти GET-маршруты на preview
+origin; оно не доказывает edge-правила для всех путей, D1 binding, `APP_URL`,
+OAuth callback, безопасный тестовый аккаунт или миграции. Wrangler не смог
+получить deployment metadata в non-interactive shell без
+`CLOUDFLARE_API_TOKEN`; конфигурацию Pages/D1 через dashboard не меняли.
+Поэтому staging acceptance ниже остаётся незавершённой.
+
+### Read-only preview smoke: `8dfab60`, 16.10.2026
+
+Текущий branch preview `https://fix-durable-outbox.fitfocus.pages.dev/`
+ответил 200. Страница загрузила `/assets/index-B8tzhvK0.js`; bundle содержит
+точный SHA `8dfab604c97f90f6720e8185f0366bbe61b9383d`. GET `/api/env` и
+анонимный GET `/api/me` ответили 200; `/api/me` вернул `user: null`. `/api/env`
+вернул пустые `googleClientIdLocal`/`googleClientIdProd` и `requireInvite: false`.
+Анонимные GET `/api/bootstrap`, `/api/profile`, `/api/state` и `/api/push/status` ответили
+401 без `Location` и `Set-Cookie`. Проверка выполнялась без cookie/account proof;
+API-запросы остались на выбранном preview origin.
+
+Это подтверждает deployed bundle SHA, ответ страницы и перечисленные публичные
+GET-маршруты. OAuth start намеренно не вызывался. D1 binding, серверный `APP_URL`,
+OAuth callback, edge rules для всех путей, миграции и тестовые аккаунты не
+подтверждены; staging и выпуск остаются открытыми.
+
+### Read-only preview smoke: `0af2c30`, 17.10.2026
+
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200;
+статический bundle `/assets/index-BuAwXyl-.js` содержит точный SHA
+`0af2c30401c9893d1b49778111921e10df4ebef4`. Все проверки были GET без cookie,
+account proof и записи:
+
+- `/api/env` — 200, оба публичных Google Client ID пусты, `requireInvite=false`;
+- `/api/me` — 200 с `user: null`, без redirect и `Set-Cookie`;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401
+  `UNAUTH`, без redirect и `Set-Cookie`.
+
+Свежий Chromium browser smoke загрузил эту же страницу с HTTP 200: `title=FitFocus`,
+главная страница отрисована, `pageerror` и ошибки приложения не возникли,
+POST/PUT/PATCH/DELETE не отправлялись. Браузер вывел одно предупреждение о
+неизвестной ему директиве `ambient-light-sensor` в `Permissions-Policy` из
+`public/_headers`; оно не сопровождалось ошибкой страницы или приложения.
+
+Публичный preview обслуживает точный текущий branch bundle, сохраняет origin и
+ожидаемо закрывает перечисленные API без сессии. OAuth start не вызывался.
+Проверка не подтверждает D1 binding/изоляцию, `APP_URL`, OAuth callback,
+реальные edge rules, миграции или корректность аутентифицированных операций;
+staging acceptance и выпуск остаются открытыми.
+
+### Read-only preview API smoke: `dfe9b42`, 17.10.2026
+
+Branch preview `https://fix-durable-outbox.fitfocus.pages.dev/` ответил 200;
+статический bundle `/assets/index-i0UhY7Pn.js` содержит полный SHA
+`dfe9b42c97600e606ad5758672e9cc707f86ac16`. Проверка выполнена `HttpClient` с
+отключёнными auto-redirect и cookie и только GET-запросами:
+
+- `/api/env` и `/api/me` — 200;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401;
+- все запросы остались на `fix-durable-outbox.fitfocus.pages.dev`, без `Location`
+  и `Set-Cookie`.
+
+Это подтверждает доставку точного bundle и выбранные read-only API-маршруты.
+Браузерный smoke текущего SHA, все edge-маршруты, D1 binding/изоляция,
+`APP_URL`, OAuth, миграции и аутентифицированные операции не проверены;
+staging acceptance и выпуск остаются открытыми.
+
+Проверка конфигурации репозитория показывает один верхнеуровневый D1 binding
+`DB` (`database_name = "fitfocus"`, ID `061ae786-9341-4bd7-8efe-025dd1bac6d5`);
+`env.preview`/`env.production` overrides в `wrangler.toml` отсутствуют.
+[Документация Cloudflare Pages](https://developers.cloudflare.com/pages/functions/wrangler-configuration/)
+говорит, что Wrangler file становится источником конфигурации Pages после
+включения этого режима; preview overrides задаются через `env.preview`, а
+branch-specific config Pages не поддерживает. Без чтения текущей конфигурации
+Cloudflare аккаунта нельзя утверждать, применён ли этот файл к deployment и
+разделена ли preview D1 с production. До подтверждения dashboard/API preview
+нельзя считать изолированной серверной средой. D1-запросы к живой базе не
+выполнялись.
+
+### Read-only API smoke: `9c78726`, 16.10.2026
+
+Проверен commit preview `https://2d2f058c.fitfocus.pages.dev/`: корень ответил
+200, а `assets/index-DA9SX_GT.js` содержит полный SHA
+`9c78726fd6acb65b12a5ddbeb63e5c2afe9c8545`. В Chromium на этом же origin
+отрисовался экран входа FitFocus без console/page errors; ссылка Google OAuth
+содержит redirect на этот preview hostname.
+
+Все API-запросы ниже — GET, без cookie или account proof:
+
+- `/api/env` — 200; `requireInvite=false`, публичные Google client IDs не
+  настроены.
+- `/api/me` — 200 с `user: null`, без redirect.
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401
+  `UNAUTH`; bootstrap/profile/state также возвращают ожидаемые protocol/guard
+  headers.
+- `/api/auth/google/start` — 500 `AUTH_UNAVAILABLE`; ответ не установил cookie.
+  OAuth redirect к Google не открывался. Код маршрута возвращает этот ответ,
+  если отсутствует `GOOGLE_CLIENT_ID` или `AUTH_JWT_SECRET`; по публичному
+  ответу определить, какая именно переменная не задана, нельзя.
+
+Статическая сборка и анонимный отказ API подтверждены. Реальный OAuth, D1,
+серверный `APP_URL`, callback и edge rules остаются незавершёнными; preview
+сейчас не позволяет пройти OAuth start.
+
+### Deployed branch preview smoke: `bb94957`, 17.10.2026
+
+Cloudflare Pages check подтверждает успешный deploy commit `bb94957`:
+commit preview `https://71594efe.fitfocus.pages.dev/` и branch alias
+`https://fix-durable-outbox.fitfocus.pages.dev/`. Read-only HTTP проверки
+выполнены `HttpClient` без cookie и auto-redirect:
+
+- На обоих origin `/` — 200, `/api/env` — 200, `/api/me` — 200;
+- `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401;
+- redirect и `Set-Cookie` отсутствуют; `/api/env` сообщает пустые Google Client
+  IDs и `requireInvite=false`.
+
+Свежий Chromium подтвердил branch-preview страницу с HTTP 200 и `title=FitFocus`;
+page/console errors, off-origin requests и non-GET запросов не было. Все
+проверенные запросы остались на preview origin.
+
+Это ограниченный публичный smoke для текущего deployed bundle. Он не проверяет
+D1 binding/изоляцию, `APP_URL`, OAuth start/callback, реальные edge routes вне
+перечисленных GET, аутентифицированные изменения или миграции. OAuth start
+намеренно не вызывался; staging и выпуск остаются открытыми.
+
+- [ ] Подтвердить адрес и точный build SHA preview; браузер и edge-правила
+  не переводят его на production, API-запросы остаются на выбранном origin.
+  - [x] Cloudflare deployment check и GET/Chromium smoke подтвердили commit
+    `bb94957`, commit preview и branch alias, один origin для UI/проверенных API,
+    ожидаемый 401 анонимному доступу и отсутствие записывающих запросов. Остальные
+    edge routes и аутентифицированные сценарии остаются в общей приёмке.
+- [ ] Проверить D1 binding конкретного deployment и безопасные тестовые
+  аккаунты. Другой hostname сам по себе не создаёт другую серверную базу.
+- [ ] Проверить серверный `APP_URL`, если он задан: он должен выбирать нужный
+  origin среды. [OAuth start](../functions/api/auth/_oauth_start.ts) использует
+  его прежде request origin; production APP_URL может увести OAuth на production
+  даже после исправления entry point. Client `VITE_*` его не настраивает.
+- [ ] Сверить Google/Apple callback URLs и выполнить реальный login/logout
+  в нужной среде. Мок клиента не подтверждает настройки провайдера.
+- [ ] Пройти API/protocol, backup/restore, миграции, lifecycle и совместимый
+  rollback по [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md).
+
+До этих проверок staging и выпуск не подтверждены. Сохранение origin —
+один критерий общего [плана P0](../TASKS.md), не закрытие всех release gates.
+
+### Read-only branch preview smoke: `05bf14b`, 18.10.2026
+
+`https://fix-durable-outbox.fitfocus.pages.dev/` отдаёт статический bundle,
+содержащий полный SHA `05bf14ba282595a175570f57b8e42be1e8874132`.
+`HttpClient` без cookies и auto-redirect получил: `/`, `/api/env`, `/api/me` —
+200; `/api/bootstrap`, `/api/profile`, `/api/state`, `/api/push/status` — 401.
+Redirect и `Set-Cookie` не обнаружены; `/api/env` сообщает пустые Google Client
+IDs и `requireInvite=false`.
+
+Это подтверждает публикацию branch preview и выбранные анонимные GET-маршруты.
+Оно не проверяет D1 binding/изоляцию, `APP_URL`, OAuth start/callback,
+аутентифицированные записи, остальные edge routes или отдельную staging-базу.
+
+### Read-only branch preview smoke: `e91c134`, 18.10.2026
+
+После публикации `e91c134` branch alias
+`https://fix-durable-outbox.fitfocus.pages.dev/` вернул index и JS bundle со
+встроенным полным SHA коммита. Read-only GET без cookies показал: `/`,
+`/api/env`, `/api/me` — 200; `/api/bootstrap`, `/api/profile`, `/api/state` и
+`/api/push/status` — 401. Это подтверждает bundle и анонимные ответы на выбранные
+маршруты, но не D1, OAuth, авторизованные операции или отдельную staging-базу.
+
+Последующий HEAD `cff4b93` меняет только E2E-ожидание и документацию, поэтому
+runtime bundle preview остаётся `e91c134`. Точный [CI #1612](https://github.com/Michael-edel/FitFocus/actions/runs/39119924075)
+для `cff4b93` завершился success, включая E2E; это не заменяет staging
+acceptance и проверки OAuth, авторизованных операций или D1.

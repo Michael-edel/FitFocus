@@ -5,6 +5,7 @@ export async function shareWisCard(input: {
   card: HTMLElement;
   wis: number;
   waitForFonts: () => Promise<void>;
+  isCurrentSession?: () => boolean | Promise<boolean>;
   render?: (card: HTMLElement) => Promise<HTMLCanvasElement>;
 }): Promise<WisShareMethod> {
   const { card, wis, waitForFonts } = input;
@@ -16,6 +17,7 @@ export async function shareWisCard(input: {
     : await html2canvasModule!.default(card, { useCORS: true, scale: 1, backgroundColor: null });
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) throw new Error('canvas_to_blob_failed');
+  if (input.isCurrentSession && !await input.isCurrentSession()) throw new Error('share_session_changed');
   const file = new File([blob], `FitFocus_WIS_${wis}.png`, { type: 'image/png' });
   const canShareFiles = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
     && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });

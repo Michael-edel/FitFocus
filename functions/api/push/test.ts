@@ -1,10 +1,11 @@
-import { requireUser, json } from "../_lib/auth";
+import { json } from "../_lib/auth";
 import { requireDB, nowMs } from "../_lib/db";
 import { buildPushPayload } from "../_lib/push";
 import { deliverPushTest } from '../_lib/push_test_delivery';
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "../_lib/request_body";
 import { asString, isJsonObject } from "../_lib/json";
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -16,7 +17,7 @@ type Env = {
 const handlePushTestPost: PagesFunction<Env> = async ({ request, env }) => {
   let user;
   try {
-    user = await requireUser(request, env);
+    user = await requireScopedStateUser(request, env);
   } catch {
     return json({ error: "UNAUTH" }, 401);
   }
@@ -59,7 +60,8 @@ const handlePushTestPost: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const response = await handlePushTestPost(context);
+  let response = await handlePushTestPost(context);
+  if (response.status !== 401) response = withSessionGuard(response, context.request, 'Push');
   const requestId = requestIdFor(context.request);
   logApiEvent('push.test.response', { requestId, status: response.status });
   return withRequestId(response, requestId);

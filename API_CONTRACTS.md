@@ -1,9 +1,11 @@
 # Контракты API, критичные для синхронизации
 
-Обновлено: 09.10.2026. State описывает серверный компонент P0.7
-в `fix/state-generations` после миграции 0019; profile — снимок `810adb1`.
-Слияние и deploy этого контракта не подтверждены. [Область](docs/README.md).
-Это ограниченный реестр state/profile, не полная спецификация всех endpoints.
+Обновлено: 15.10.2026. State описывает серверный компонент P0.7
+в `fix/state-generations` после миграции 0019; profile включает guard/capability
+интеграционной ветки `fix/durable-outbox`.
+Серверная ветка объединена с клиентской коммитом `93f90c0`;
+слияние в main и deploy не подтверждены. [Область](docs/README.md).
+Это ограниченный реестр state/profile и привязки invite, не полная спецификация всех endpoints.
 
 Источники этой ветки: [state.ts](functions/api/state.ts),
 [state_write.ts](functions/api/_lib/state_write.ts),
@@ -13,7 +15,9 @@
 
 ## Общие условия в этих endpoints
 
-Проверяются пользовательская сессия/поддерживаемый bearer token и beta access.
+State/profile проверяют пользовательскую сессию/поддерживаемый bearer token
+и beta access. Invite redeem проверяет сессию и сам код приглашения;
+уже выданный beta access для активации кода не требуется.
 State дополнительно проверяет разрешённое пространство ключей пользователя.
 `X-Request-ID` возвращается заголовком; это не поле общей JSON-обёртки.
 Тела ответов ниже сохраняют действующие формы.
@@ -21,13 +25,49 @@ State дополнительно проверяет разрешённое пр�
 `X-API-Schema-Version: 3`; примеры показывают поля сценария.
 State также возвращает `X-FitFocus-State-Protocol: 2`. Новый клиент должен
 проверить успешный ответ и этот заголовок до трактовки tombstone-чтения.
+Для `PUT/DELETE /api/state` клиент обязан также отправить этот заголовок со
+значением `2`. Отсутствующая или неподдерживаемая версия получает `426`
+`STATE_PROTOCOL_REQUIRED` после проверки сессии и доступа, до чтения тела и
+изменения состояния. Текущий sender сохраняет операцию и ставит protocol-паузу.
+Это writer barrier; state GET остаётся доступен совместимым читателям.
 
+## Привязка новой отправки к сессии
+
+`GET /api/me` после requireUser возвращает также
+`stateSync: { protocol: 2, guard: 1, accountId, sessionId }` и hasAccess.
+sessionId — SHA-256 с разделителем назначения от subject/sid; raw sid не выдаётся.
+Новый sender проверяет capability и точное совпадение подтверждённого accountId.
+
+State GET/PUT/DELETE требуют парные `X-FitFocus-State-Account` и
+`X-FitFocus-State-Session` через `requireScopedStateUser` и сравнивают их с
+фактической сессией. Отсутствующая, неполная или устаревшая пара → 401 до
+прикладного state-чтения или мутации. Старые bundles без proof необходимо
+обновить до rollout. Ответ state содержит
+`X-FitFocus-State-Guard: 1` и переданную привязку; новый sender принимает ack
+только с проверенными scope, key, exists, ok и версией своей операции.
+[Порядок отправки и паузы](docs/state-sender.md).
+
+Общие ошибки state/profile:
 | Ответ | Значение |
 |---|---|
 | 401 `{"error":"UNAUTH"}` | Не удалось подтвердить пользователя |
 | 403 `{"error":"ACCESS_REQUIRED"}` | Нет требуемого доступа |
 | 403 `{"error":"FORBIDDEN_KEYSPACE"}` | Запрещённое пространство ключей |
 | 413 `{"error":"PAYLOAD_TOO_LARGE","message":"Payload too large"}` | Превышен лимит JSON-body 512 KiB |
+
+### Активация приглашения при регистрации
+
+`/api/me` также возвращает `inviteSync: { protocol: 1, guard: 1 }`.
+Новая регистрация требует эту capability и свежий state account/session proof
+перед POST `/api/invite/redeem`. [Обработчик](functions/api/invite/redeem.ts)
+проверяет парные заголовки до body/DB/consume; смена аккаунта или cookie,
+отсутствующая либо неполная привязка → 401 `{"ok":false,"error":"UNAUTH"}`.
+Ответ содержит `X-FitFocus-Invite-Guard: 1` и переданные account/session.
+Новый клиент требует совпадающий scope и ok=true для подтверждения успеха.
+Запрос без парных заголовков отклоняется до чтения body и consume; старые
+сборки, которые не передают scope, должны обновиться до регистрации с invite.
+Profile создаётся локальной операцией, затем отправляется общим sender,
+без прямого PUT из регистрации. [Порядок и границы](docs/registration-persistence.md).
 
 ## GET /api/state?prefix=…
 
@@ -45,8 +85,10 @@ State также возвращает `X-FitFocus-State-Protocol: 2`. Новый
 Поддерживается одиночная форма `{ "key": "…", "value": "…", "baseVersion": 1 }`.
 
 Фактическая нормализация: отсутствующее/null значение превращается в пустую
-строку; иное нестроковое значение отклоняется. Элементы с пустым ключом
-пропускаются; если не остаётся ни одного, возвращается `NO_ITEMS`.
+строку; иное нестроковое значение отклоняется. Элементы `items` должны быть
+объектами со строковым ключом; иначе весь пакет получает `BAD_ITEM` до записи.
+Элементы с явно пустым строковым ключом пропускаются; если не остаётся ни
+одного, возвращается `NO_ITEMS`.
 Повторяющийся ключ в пакете запрещён.
 Максимум 32 элемента; более крупный пакет получает 400 TOO_MANY_ITEMS.
 
@@ -76,7 +118,7 @@ State также возвращает `X-FitFocus-State-Protocol: 2`. Новый
 value="", его положительная version, exists=false. 409 — диагностический
 снимок после отклонённой записи, а не подтверждение мутации.
 
-Ошибки 400: `BAD_JSON`, `NO_ITEMS`, `DUPLICATE_KEY`, `BAD_VALUE`,
+Ошибки 400: `BAD_JSON`, `NO_ITEMS`, `BAD_ITEM`, `DUPLICATE_KEY`, `BAD_VALUE`,
 `BAD_BASE_VERSION`, `TOO_MANY_ITEMS`; у части ответов присутствует `key`.
 
 ## DELETE /api/state?key=…&baseVersion=…
@@ -95,6 +137,17 @@ baseVersion конфликтует; клиент не выдумывает ack �
 
 ## /api/profile
 
+`/api/me` сообщает `profileSync: { protocol: 1, guard: 1 }`; после миграции
+0020 и проверки таблицы/обоих triggers добавляет `weeklyMenuProjection: 1`.
+Проверенные accountId/sessionId берутся из stateSync того же ответа /me.
+Sender `4736ff5` требует state/profile capabilities и новый projection marker
+для отправки profile. Без него операция остаётся pending с protocol-паузой.
+GET/PUT/PATCH требуют парные X-FitFocus-State-Account/Session через
+`requireScopedStateUser`; отсутствие, неполная пара или изменение cookie
+возвращает 401 до чтения, разбора body или записи профиля. Ответ profile
+содержит X-FitFocus-Profile-Protocol: 1, X-FitFocus-Profile-Guard: 1 и
+переданную привязку. Старые bundles без proof необходимо обновить до rollout.
+
 GET возвращает 200 `{ "profile": … }`.
 PUT заменяет профиль через сценарий `replace`, PATCH применяет сценарий `patch`.
 Оба принимают разрешённые поля профиля прямо в JSON-body вместе с baseVersion,
@@ -108,12 +161,91 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 
 Успех записи содержит `profile`, `updatedFields`, `stateItems`, `mode`, `version`.
 `stateItems` в этом ответе — число, а не массив state-записей.
+Для ack нового sender нужны совпадающие scope и profile.id, целая версия
+больше baseVersion и равенство version в ответе и profile.version.
+409 сохраняет конфликт; автоматического PATCH с новой серверной базой нет.
+[Граница редактора и общей outbox](docs/profile-persistence.md).
 409: `{ "error": "PROFILE_CONFLICT", "profile": …, "version": … }`.
 400: `BAD_JSON`, `BAD_BASE_VERSION`, `EMPTY_PATCH`, `STATE_ITEMS_USE_STATE_ENDPOINT`.
+422: `PROFILE_INVALID_WEEKLY_MENU` на `830caf4`: присутствующее меню должно
+содержать weekStart в форме YYYY-MM-DD и массив shoppingListItems.
+Неверный input отклоняется до persistence, унаследованная неверная форма —
+до CAS. Явное удаление допускается; SQL triggers сохраняют атомарную защиту.
 Загрузка state и сохранение профиля — отдельные пути, которые нужно тестировать
 по отдельности; наличие `stateItems` в ответе не означает общую атомарную outbox.
 
-## Изменения, которые ещё предстоит внедрить
+## Bootstrap и загрузка state
+
+Компонент `dac2de2` добавляет в `/api/me` независимую
+`bootstrapSync: { protocol: 1, guard: 1 }`. Новый клиент передаёт парные
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session` для bootstrap и state GET.
+Bootstrap требует их через `requireScopedStateUser` и проверяет привязку до
+чтения профиля, state и features; отсутствующая, неполная или устаревшая пара
+возвращает 401. Успешный ответ подтверждает scope и
+`X-FitFocus-Bootstrap-Protocol: 1` /
+`X-FitFocus-Bootstrap-Guard: 1`. `user` содержит публичные поля без сырого sid.
+State GET использует protocol 2 / guard 1 и ту же пару scope headers.
+
+Старые bundles без scope headers получают 401 до чтения данных и должны
+обновиться до rollout. До применения облачных
+данных IDB-транзакция проверяет epoch/auth-fence, revision и pending.
+[Контракт, исходники и границы проверки](docs/bootstrap-hydration.md).
+Capability и серверный guard должны быть развёрнуты до включения нового
+клиента; CI не подтверждает deploy или прекращение работы старых сборок.
+
+## AI и нормализованный список покупок
+
+Серверный компонент `16d3c34` добавляет в `/api/me` независимые
+`aiSync: { protocol: 1, guard: 1 }` и `weeklyMenuSync: { protocol: 1, guard: 1 }`.
+POST `/api/ai` и `/api/weekly_menu/items` проверяют парные
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session` до прикладных эффектов.
+Другой аккаунт, новая сессия того же аккаунта и неполная пара дают 401.
+
+Ответы содержат соответственно `X-FitFocus-AI-Protocol` / `-Guard` или
+`X-FitFocus-Weekly-Menu-Protocol` / `-Guard` со значением 1 и переданный scope.
+Заголовки присутствуют также на ошибках; клиент проверяет статус и текущую
+сессию отдельно. Оба scope headers обязательны: старые запросы без proof
+получают 401 до разбора тела и прикладных эффектов; старые bundles нужно
+обновить перед rollout.
+Исторический персональный menu-сценарий на `f4b4eee` проверял свежий proof и обе
+capabilities, передавал scope, ждал guarded profile commit и только затем
+отправлял items. Таймаут запроса сохраняет возможность показать ошибку и
+повторить действие; logout/pagehide отменяют прежнюю попытку.
+Личные покупки связаны с profile CAS, семейное меню — с family/week CAS и
+durable outbox; остальные callbacks и staging-приёмка остаются открытыми.
+[Полный контракт и приёмка](docs/ai-session-guard.md).
+Capabilities должны быть развёрнуты и проверены до выпуска нового клиента.
+
+Компонент `4736ff5` связывает личные покупки с profile CAS и убирает
+вторичный личный items POST. Profile CAS и запись `personal_menu_projections`
+атомарны; покупки и CSV читают проекцию, а legacy — только при отсутствии
+её строки. Пустой/повреждённый канонический снимок не включает legacy fallback.
+Личный POST `/api/weekly_menu/items` с корректным `week_start` возвращает
+409 `{ "error": "PERSONAL_MENU_PROFILE_REQUIRED", "requestId": "…" }` без записи
+покупок. Семейный POST после миграции 0021 блокируется; семейный список следует
+каноническому family/week поколению через `/api/family/menu/state`, CAS и
+durable `familyMenu` outbox. [Личный контракт и проверки](docs/personal-menu-projection.md),
+[семейный контракт](docs/family-menu-state.md).
+В переходном режиме до блокировки семейного writer поле `items` обязательно
+должно быть массивом до 500 элементов; каждый элемент требует непустой текстовый
+`name` и конечное положительное `grams` не выше 1e9. `BAD_ITEMS`, `BAD_ITEM` или
+`TOO_MANY_ITEMS` отклоняют запрос до замены списка; только явный `items: []`
+означает очистку.
+Реализация в ветке не подтверждает deploy; подготовительный сервер с RETURNING
+должен предшествовать миграции 0020.
+
+## Достижения
+
+Компонент достижений `57da2cf` добавляет capability
+`achievementSync: { protocol: 1, guard: 1 }` в `/api/me` и account/session guard
+для GET `/api/achievements` и POST `/api/achievements/check` до прикладных
+эффектов. Оба scope headers обязательны: отсутствие proof возвращает 401 до
+feature/application effects; старые bundles нужно обновить до rollout. Ответы
+содержат `X-FitFocus-Achievements-Protocol` / `-Guard: 1` и переданный scope.
+Новый клиент требует исходный login proof и проверяет поздние ответы; POST
+требует JSON-объект. [Подробный контракт](docs/achievement-session.md).
+
+## Оставшиеся условия выпуска
 
 Серверный компонент P0.7 реализован и проверяется в этой ветке; его
 [условия выпуска](docs/state-generations.md#условия-выпуска-и-отката)
@@ -125,3 +257,200 @@ PUT заменяет профиль через сценарий `replace`, PATCH
 но не локальное сохранение. 403 разбирается по коду причины. Эти требования
 к новому клиенту описаны в [модели синхронизации](docs/sync-model.md);
 текущий клиент им полностью не соответствует.
+
+## Семейные запросы: исходная сессия
+
+Компонент `9c44c21` добавляет `familySync: { protocol: 1, guard: 1 }` в `/api/me`;
+коммит `2bbec11` расширяет capability до `target: 1` для явных целей семейных
+мутаций. Новые клиенты отправляют `POST /api/family/invite` и
+`PATCH /api/family/member` только с непустым `familyId`, полученным из выбранной
+семьи. Без `familySync.target === 1` клиент блокирует эти запросы до отправки.
+Invite требует владельца именно указанной активной семьи; member mutation
+проверяет активное членство именно в указанной семье и повторяет условие
+family/user/active в SQL `UPDATE`. Отсутствующая цель возвращает 400,
+неподходящее членство/владелец — 403.
+`useFamilyCloud` получает исходный login guard из hydration и обновляет proof
+перед каждым HTTP, не принимая другой вход того же аккаунта. Запросы передают
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session`; family handlers и
+shopping list/check/export/bulk проверяют их до body и прикладных эффектов.
+Все семейные endpoints требуют парный scope: отсутствие, неполная пара или
+несовпадение возвращают 401 до чтения body/DB side effects. Старые сборки без
+proof должны обновиться; сервер больше не принимает их family/shopping запросы.
+
+При возврате из BFCache (`pageshow.persisted`) клиент заново получает ранее
+запрошенный семейный контекст и, если он уже загружался, список покупок.
+Запросы до `pagehide` остаются недействительными; новые чтения используют
+исходный login guard и обычные response markers. HTTP-мутации автоматически не
+повторяются.
+
+Ответы этих handlers содержат `X-FitFocus-Family-Protocol: 1`,
+`X-FitFocus-Family-Guard: 1` и публичный scope. Клиент проверяет headers,
+IDB epoch/auth-fence, familyId/week и форму загружаемых данных до применения.
+Mutation HTTP не повторяется автоматически. Запросы без scope сохраняют
+совместимость лишь на других endpoints; каждый семейный и shopping route выше
+требует парный scope. `/api/family/menu/state` возвращает `Family-Menu`
+protocol/guard markers.
+
+Это не вводит family CAS или постоянную очередь. AI-путь `useFamilyMenu`
+пока использует прежние writers; полные границы, методы и проверки —
+в [контракте семьи](docs/family-session.md).
+
+## Семейное меню: рабочий CAS-протокол 12.10.2026
+
+[Контракт](docs/family-menu-state.md), [ADR-008](docs/adr/ADR-008-family-menu-generation.md).
+Компонент реализован локально; общий CI и выпуск ещё не приняты.
+`familyMenuSync` требует protocol=1, guard=1, cas=1. Capability отсутствует
+до полного 0021; неполная миграция не включает прежний writer.
+GET/PUT `/api/family/menu/state` требуют state account/session headers и
+подтверждают Family-Menu protocol/guard. PUT принимает явные familyId,
+weekStart, baseVersion и полный menu; только владелец с family plan пишет.
+Один SQL CAS сохраняет menu/portions/structured shopping; возвращает собственный
+RETURNING version. 409 содержит проверенный snapshot без удаления local intent.
+Серверный `/api/family/menu/generate` на новой схеме принимает preview:true
+и явный familyId, возвращает shared.menu и ничего не сохраняет.
+Старые menu/items POST и генерация без preview после 0021 возвращают 409.
+Generic state отклоняет family-menu key с 403. Empty canonical не читает
+legacy; повреждённый canonical возвращает ошибку и требует восстановления.
+
+## Административные маршруты: session guard
+
+Все `/api/admin/*` требуют парные `X-FitFocus-State-Account` и
+`X-FitFocus-State-Session`, совпадающие с cookie-сессией. `requireAdminRequest`
+проверяет обязательную пару до D1-проверки admin-роли и записи admin-session
+activity. Отсутствующий/неполный proof возвращает 401 как `STATE_SESSION_REQUIRED`,
+устаревший — 401 как `STATE_SESSION_CHANGED`; middleware добавляет admin
+protocol/guard markers. Старые bundles без proof получают 401 и должны быть
+обновлены до серверного rollout. Клиентский контракт и тесты описаны в
+[документе сессии административной панели](docs/admin-session.md).
+
+## Обращения пользователя в поддержку: session guard
+
+Новые клиенты читают свои тикеты через `GET /api/support/feedback/my` и
+`GET /api/support/feedback/my?id=…`, создают обращение через
+`POST /api/support/feedback`, отвечают через `POST /api/support/feedback/my`.
+Запросы передают парные `X-FitFocus-State-Account` /
+`X-FitFocus-State-Session`; все пользовательские и административные handlers
+`/api/support/feedback` требуют их через `requireScopedStateUser` и сравнивают
+с фактической cookie-сессией до разбора тела, проверки admin-роли и прикладной
+работы с тикетами. Отсутствующая, неполная или устаревшая пара возвращает 401.
+
+Ответы пользовательских endpoints кроме 401 содержат
+`X-FitFocus-Support-Protocol: 1`, `X-FitFocus-Support-Guard: 1` и переданный
+публичный state scope. Новые клиенты проверяют все четыре значения до
+применения результата к UI. Мутации не повторяются автоматически.
+Старые bundles без state-заголовков получают 401 и должны быть обновлены до
+выпуска нового серверного контракта. Контракт React lifetime и локальных проверок — в
+[документе сессии поддержки](docs/support-session.md).
+
+`GET /api/support/attachment` также требует полный account/session proof через
+`requireScopedStateUser`; отсутствующий, неполный или несовпадающий proof
+получает 401 до проверки тикета и чтения файла. Доступ после этого ограничен
+владельцем тикета или администратором. Приватный файл возвращается с
+`private, no-store`, `nosniff` и sandbox CSP. Каждый ответ получает
+`X-FitFocus-Support-Attachment-Protocol: 1` и
+`X-FitFocus-Support-Attachment-Guard: 1`; переданные account/session headers
+эхо-возвращаются. Для администратора дополнительно проверяется роль через
+`requireAdminRequest`. Поскольку `<img>`, `<video>` и `<audio>` не могут задать
+эти заголовки, SupportScreen использует `requestSupportAttachmentBlob`, а
+AdminScreen — `requestAdminResponse`; оба проверяют scope markers и показывают
+временный Blob URL, удаляемый при смене тикета или размонтировании. Старые
+bundles, загружающие файл напрямую из media tag без proof, получают 401 и должны
+обновиться до rollout.
+
+## Выдача мобильного bearer-токена
+
+`POST /api/mobile/token` в актуальном Settings-клиенте сначала получает свежий
+`/api/me` proof исходной login-сессии, затем передаёт парные
+`X-FitFocus-State-Account` и `X-FitFocus-State-Session`. Сервер использует
+`requireScopedStateUser` до выпуска токена; отсутствующий, устаревший или
+неполный proof отвергается как 401. Успешный scoped-ответ содержит
+`X-FitFocus-Mobile-Token-Protocol: 1`,
+`X-FitFocus-Mobile-Token-Guard: 1` и echo обоих публичных scope headers, а все
+ответы `POST` используют `Cache-Control: no-store`.
+
+Клиент отправляет этот POST один раз без автоматических повторов. После ответа
+он сверяет серверные markers и ещё раз проверяет durable read guard до
+возвращения секрета в Settings; UI скрывает токен и bridge setup link при смене
+guard и проверяет его перед копированием. Старые unscoped-вызовы получают 401;
+открытые bundles нужно обновить до rollout. Проверки и ограничения:
+[wearable sync](docs/wearable-sync.md).
+
+## Push: обязательная привязка к сессии
+
+`GET /api/push/status` и `POST /api/push/subscribe`, `/unsubscribe`, `/test`
+требуют парные `X-FitFocus-State-Account` / `X-FitFocus-State-Session` через
+`requireScopedStateUser`. Отсутствующая, неполная или устаревшая пара получает
+401 до чтения JSON, работы с подписками или отправки уведомления. Ответы кроме
+401 возвращают `X-FitFocus-Push-Protocol: 1`, `X-FitFocus-Push-Guard: 1` и
+публичный scope; новый клиент проверяет markers перед применением результата.
+Старые открытые сборки без proof получают 401 и требуют обновления до server
+rollout. Подробности Service Worker и lifecycle — в
+[контракте push-сессии](docs/push-session.md).
+
+## Huawei Health: session guard
+
+Текущий Settings-клиент получает Huawei capability из `/api/me`, затем передаёт
+парные `X-FitFocus-State-Account` / `X-FitFocus-State-Session` в status, OAuth
+start, sync и disconnect. Все эти routes требуют обе части proof через
+`requireScopedStateUser`: отсутствующий или неполный scope (включая
+account-only) отклоняется до session lookup, чужой — после аутентификации, но
+до чтения body и прикладных D1/provider действий. Scoped-ответы содержат
+`X-FitFocus-Huawei-Protocol: 1`, `X-FitFocus-Huawei-Guard: 1` и точное эхо scope.
+POST start возвращает authorization URL только для совпавшей сессии. GET
+redirect также требует proof; старые вызовы без scope получают 401 и требуют
+обновить Settings bundle до rollout.
+
+OAuth callback не получает клиентские scope headers от провайдера. Подписанный
+OAuth state содержит публичный digest исходного session id; callback сверяет
+user/session до обмена authorization code и повторно проверяет вход перед
+записью credentials и profile. Huawei sync повторяет серверную
+проверку после внешнего запроса к provider перед CAS-профильной записью.
+Клиент отбрасывает поздний ответ после смены IndexedDB session и пишет профиль
+через guarded outbox commit. Подробности и границы проверок:
+[Huawei session contract](docs/huawei-health-session.md).
+
+## Stripe Checkout и смена тарифа: session guard
+
+`POST /api/billing/checkout` и `POST /api/admin/subscription` в новом paywall
+получают capability `billingSync` из `/api/me` и передают исходный публичный
+account/session scope. Сервер требует парный scope через `requireScopedStateUser`
+до разбора тела, создания Stripe Checkout session, role lookup или записи тарифа.
+Старые запросы без proof получают 401 и требуют обновления клиента до rollout.
+Ответы кроме 401 несут
+`X-FitFocus-Billing-Protocol: 1`, `X-FitFocus-Billing-Guard: 1` и echo scope;
+ответы используют `Cache-Control: no-store`.
+
+Клиент выполняет mutation один раз, затем проверяет маркеры, совпадение активной
+IDB-сессии и lifetime действия до открытия HTTPS Checkout URL или публикации
+нового тарифа. Полный CI, старые bundles, staging и реальный Stripe checkout
+проверяются отдельно. [Контракт](docs/billing-session.md).
+
+## Выход и удаление аккаунта: session guard
+
+Новый `POST /api/logout` передаёт proof исходного guard. Сервер проверяет пару
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session` по подписанному cookie и
+отзывает только совпавшую сессию. Отсутствующая или неполная пара возвращает
+401 до чтения cookie и отзыва сессии; несовпадающая пара также получает 401.
+Сервер не истекает общую cookie в ответе, чтобы поздний ответ не удалил cookie
+более нового входа. Старые bundles без proof должны обновиться до rollout.
+
+`POST /api/account/delete` требует scope обязательно, сверяет его до account
+side effects и возвращает `Account-Delete` protocol/guard markers с эхом proof.
+Запрос legacy-клиента без пары заголовков получает 401. Успешный ответ не
+истекает общую cookie: удаление отзывает серверные сессии аккаунта, а клиент
+очищает только его локальные данные после проверки ответа.
+[Контракт и lifecycle-границы](docs/account-lifecycle-session.md).
+
+## GET /api/export — экспорт пользовательских данных
+
+Экспорт требует полный account/session proof через `requireScopedStateUser`.
+Отсутствующий, частичный или не совпадающий с текущей cookie proof получает 401;
+отсутствующий/частичный proof отклоняется до построения экспорта и запросов к D1.
+Пользователь также должен иметь beta access; иначе возвращается 403
+`ACCESS_REQUIRED`. Успешный ответ — JSON-вложение с `Cache-Control: no-store`,
+`X-Content-Type-Options: nosniff` и `Referrer-Policy: no-referrer`.
+Ответы обёрнуты маркерами `X-FitFocus-Export-Protocol: 1` и
+`X-FitFocus-Export-Guard: 1`; переданные scope headers эхо-возвращаются.
+Старые внешние вызовы без полного proof должны обновиться. В текущем исходном
+коде frontend-вызов `/api/export` не найден; перед rollout это нужно подтвердить
+на staging и для любых внешних клиентов.

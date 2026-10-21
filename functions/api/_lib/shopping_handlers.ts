@@ -1,4 +1,4 @@
-import { requireUser } from "./auth";
+import { requireScopedStateUser } from "./state_session";
 import { ensureUserRow, requireDB, toApiError } from "./db";
 import { readJsonRequest, RequestBodyTooLargeError, SMALL_JSON_BODY_LIMIT_BYTES } from "./request_body";
 import { updateShoppingCheck, updateShoppingChecks } from "./shopping_checks";
@@ -9,7 +9,7 @@ export type ShoppingEnv = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 type ShoppingRequest = { request: Request; env: ShoppingEnv; requestId: string };
 
 function errorStatus(error: ReturnType<typeof toApiError>) {
-  return error.code === "UNAUTH" ? 401 : error.code === "FORBIDDEN" ? 403 : error.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400;
+  return ["UNAUTH", "STATE_SESSION_CHANGED", "STATE_SESSION_REQUIRED"].includes(error.code) ? 401 : error.code === "FORBIDDEN" ? 403 : error.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400;
 }
 
 function failedResponse(event: string, requestId: string, error: unknown) {
@@ -19,7 +19,7 @@ function failedResponse(event: string, requestId: string, error: unknown) {
 
 export async function handleShoppingListGet({ request, env, requestId }: ShoppingRequest): Promise<Response> {
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
     const url = new URL(request.url);
@@ -58,7 +58,7 @@ function isResponse(value: unknown): value is Response {
 
 export async function handleShoppingCheckUpdate({ request, env, requestId }: ShoppingRequest): Promise<Response> {
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
     const body = await readShoppingBody(request, "shopping.check.response", requestId);
@@ -78,7 +78,7 @@ export async function handleShoppingCheckUpdate({ request, env, requestId }: Sho
 
 export async function handleShoppingBulkPatch({ request, env, requestId }: ShoppingRequest): Promise<Response> {
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
     const body = await readShoppingBody(request, "shopping.bulk.response", requestId);

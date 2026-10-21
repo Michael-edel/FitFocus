@@ -1,0 +1,126 @@
+# JSON-резервная копия и восстановление
+
+## Форматы
+
+Новый экспорт использует `version: 3`. Помимо строк localStorage он содержит
+`durableState` — снимок всех пяти долговечных stores общей IndexedDB:
+`values`, `outbox`, `outbox_migration_items`, `outbox_migration_unknown` и
+`outbox_meta`. Store `meta` не копирует временные `active-session` и
+`auth-fence`; владелец, ревизии, ledger, карантин и сохранённые legacy-снимки
+сохраняются. Поле `indexedDb` оставлено как совместимая проекция объёмных
+значений для прежних клиентов.
+
+Форматы `version: 1` и `version: 2` остаются импортируемыми; их объёмные
+значения восстанавливаются одной проверяемой транзакцией и не перезаписывают
+ключи, уже принадлежащие durable outbox. Эти старые файлы не содержат очередь
+и миграционный ledger, поэтому восстановить из них pending операции и карантин
+невозможно.
+
+## Снимок
+
+Экспорт читает пять stores одной readonly-транзакцией IndexedDB, поэтому
+значения, операции, подтверждения и прогресс миграции относятся к одному
+снимку. Ошибка чтения хранилища прерывает экспорт; неполная копия не выдаётся
+за успешную. Файл сериализуется один раз как JSON-объект, а не как строка,
+содержащая экранированный JSON.
+
+В копию входит ключ `fitfocus.remote-kv-outbox.v1`, пока он есть в localStorage.
+Он сохраняется как источник миграции, не становится новой очередью.
+
+## Восстановление
+
+Формат v3 валидируется до изменения базы. Восстановление добавляет отсутствующие
+записи; повтор того же файла идемпотентен. Если primary key уже существует с
+другим содержимым, вся одна readwrite-транзакция пяти stores откатывается.
+Текущие owned values и pending операции не перезаписываются копией.
+
+После восстановления старый флаг `sendAllowed` из migration progress
+принудительно закрывается, а статус становится `partial`. Следующий запуск
+runtime должен заново сравнить исходный legacy-ключ и подтвердить текущий
+build id Service Worker и всех открытых окон; только после нового аудита
+разрешается отправка legacy-операции. `active-session` и `auth-fence` остаются
+текущими для браузера и из файла не импортируются.
+
+Restore держит зависимые операции внутри активной IndexedDB-транзакции:
+сначала читается текущая meta для tombstone-фильтра, затем все candidate primary
+keys читаются заранее. В success-событии последнего чтения сравниваются
+канонические записи; только после полной проверки ставятся все отсутствующие
+`add` запросы. Различающаяся существующая строка отменяет общую транзакцию до
+commit, включая изменения в других stores. Пустой набор candidate-строк тоже
+обрабатывается без ожидания несуществующего request event.
+
+Экспорт включает локальные account deletion tombstones в `outbox_meta`, а
+валидатор проверяет их формат. Если tombstone для аккаунта есть в текущей базе
+или backup, старые account-owned values, операции, ledger и owner metadata
+этого аккаунта пропускаются при восстановлении. Sender блокирует claim/finish
+уже существующей legacy operation при наличии tombstone. Это не удаляет payload
+из общего legacy source/snapshot.
+
+Для строк `values` старого формата, где нет явного `accountId`, v3 restore выводит
+владельца из распознанного account-scoped volume key. Поэтому tombstone проверяется
+и для volume-only backup без outbox или owner metadata. Совместимые v1/v2 файлы
+проверяют тот же tombstone при атомарной записи volume values. Локальные ключи
+проверяются до импорта и ещё раз после него; если tombstone появился во время
+восстановления, импортированное значение удаляется или возвращается прежнее.
+Очистка аккаунта делает завершающий повторный проход по его localStorage ключам
+после IDB-транзакции, чтобы убрать запись, успевшую появиться во время удаления.
+
+localStorage не поддерживает транзакцию вместе с IndexedDB. Импорт сохраняет
+его предыдущие значения и восстанавливает их, если запись localStorage или
+IDB-восстановление завершились ошибкой. Атомарная граница новых очереди,
+ledger, карантина, значений и meta — единая IndexedDB-транзакция; это не
+обещание общей транзакции браузерных хранилищ.
+
+## Проверки и границы
+
+`tests/backup.test.ts` покрывает экспорт/восстановление пяти stores, pending и
+unknown legacy-записи, недействительность старого writer proof, повторный
+импорт, запрет восстановления старых localStorage и IndexedDB данных удалённого
+аккаунта в v2/v3, сохранение соседнего аккаунта, rollback всех IDB stores при
+конфликте, возврат localStorage к прежнему значению, старый формат и пригодный
+для чтения скачиваемый JSON. `tests/local_privacy.test.ts` проверяет гонку записи
+backup во время tombstone удаления.
+
+Кодовый follow-up [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9)
+добавляет эти проверки и закрывает обнаруженный путь возврата volume-only v3
+данных без `accountId`. Локально на установленном из lock-файла Vite 6.4.4
+прошли 1477 unit-тестов / 217 файлов, три typecheck, dependency audit без
+уязвимостей, schema/privacy/auth/API guards и production build. Точный
+[CI #1846](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287)
+для PR-head `0c44c0e` завершился success: 1641 browser passed / 74 skipped,
+native BFCache 1/1 и rollback/CAS 23/23 также прошли. Сохранены [browser
+diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12336870919)
+и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39571977287/artifacts/12337295421).
+
+На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
+добавлен [браузерный сценарий](../e2e/durable-backup-restore.spec.ts) импорта
+через экран Settings. 64 value rows,
+conflicted operation, quarantine и owner metadata восстанавливаются из v3
+backup; второй сценарий подтверждает полный rollback IDB и localStorage при
+конфликте. Целевые Firefox и Android Chrome прошли 4/4 без retries. Также
+прошли 1133 unit-теста / 198 файлов, общий, domain-strict и storage-strict
+typecheck и production build. Следующий полный PR CI
+[38586274014](https://github.com/Michael-edel/FitFocus/actions/runs/38586274014)
+проверил документирующий HEAD `23c8be6`, включавший этот код, и завершился
+success. E2E-шаг занял 30 мин 43 сек, полный job — около 33 мин. Новый callback
+тест смены аккаунта добавлен позже в `2c09825` и этим запуском не проверялся.
+Полный P0.8 lifecycle остаётся открытым.
+
+Реализация опубликована в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Локально прошли 7/7 backup-тестов, все 1073 unit / 196 файлов, три typecheck и
+production build. [Полный CI PR-head](https://github.com/Michael-edel/FitFocus/actions/runs/38327323270)
+завершился success: 390 browser passed / 9 skipped, audit и обязательные guards
+прошли; rollback HTTP/D1-проверка выполнила 23 запроса.
+
+Это локальная переносимая копия браузерных данных. Она не содержит OAuth
+сессию, не меняет серверный `/api/export` и не является удалённым staging
+backup. Коммит `b53a55e` добавил локальную очистку точных account-owned строк
+пяти IDB stores и scoped localStorage; его CI прошёл. Она сохраняет общий
+legacy-источник и snapshots; физическое удаление payload из общей evidence,
+UI конфликтов и lifecycle остаются открытыми критериями P0.8. Локальный
+tombstone блокирует повторный импорт и восстановление старых account-owned
+строк, но общий legacy payload сохраняется. Коммит `c7700eb` прошёл локально
+1082 unit-теста и 7/7 migration browser projects; точный
+[CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+завершился success на SHA `57e0a93`.
+[Контракт очистки](account-data-cleanup.md).

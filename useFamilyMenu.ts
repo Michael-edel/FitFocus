@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { FamilyWeeklyMenu, UserProfile } from './types';
-import { persistAllUsersSnapshot, safeSetItem } from './storage/hybrid';
+import { useOwnedState } from './features/state/useOwnedState';
+import type { StateCodec } from './storage/stateEditor';
 import { errorMessage, isRecord, parseJson } from './safeJson';
-import { saveFamilyMenu, saveFamilyShoppingItems } from './features/family/familyApi';
+import type { CloudFamily, CloudFamilyMember, FamilyShoppingState } from './features/family/familyApi';
+import { FamilyActionScope } from './features/family/actionScope';
+import { useFamilyState } from './features/family/useFamilyState';
+import { familyProfiles } from './features/family/familyProfiles';
+import { generateOwnedFamilyMenu } from './features/family/familyMenuGeneration';
+import { familyShoppingProjection } from './features/family/shoppingProjection';
+import type { FamilyMenuRepository } from './storage/familyMenuRepository';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
+import type { useProfilePersistence } from './features/profile/useProfilePersistence';
+import type { AiSession } from './services/aiSession';
 
-export type FamilyMenuPrefs = {
-  includeIds: string[];
-  cookingMode: 'all_meals' | 'once_per_day';
-  budgetPerWeek: string;
-  currency: string;
-};
+import type { FamilyMenuPrefs } from './storage/stateTypes';
+export type { FamilyMenuPrefs } from './storage/stateTypes';
 
 export const DEFAULT_FAMILY_MENU_PREFS: FamilyMenuPrefs = {
   includeIds: [],
@@ -44,129 +51,91 @@ export function readFamilyMenuPrefs(raw: string | null, defaultIncludeIds: strin
   };
 }
 
+const familyPrefsCodec: StateCodec<FamilyMenuPrefs> = {
+  decode: (raw, fallback) => readFamilyMenuPrefs(raw, fallback.includeIds), encode: JSON.stringify,
+};
+
+function isStaleFamilyMenuSessionError(error: unknown): boolean {
+  return error instanceof SessionReadError && (error.kind === 'session' || error.kind === 'auth')
+    || error instanceof Error && error.message === 'LOGIN_SESSION_CHANGED';
+}
+
 type UseFamilyMenuParams = {
-  allUsers: UserProfile[];
-  cloudFamily: { id?: string | null } | null;
-  cloudFamilyMenu: FamilyWeeklyMenu | null;
-  currentUser: UserProfile | null;
-  generateFamilyWeeklyMenu: (user: UserProfile, users: UserProfile[], prefs: { includeIds: string[]; cookingMode: 'all_meals' | 'once_per_day'; budgetPerWeek?: number; currency: string }) => Promise<FamilyWeeklyMenu>;
-  loadCloudFamily: () => Promise<void>;
-  loadFamilyShopping: () => Promise<void>;
-  setAllUsers: Dispatch<SetStateAction<UserProfile[]>>;
+  cloudFamily: CloudFamily | null; cloudFamilyMembers: CloudFamilyMember[];
+  cloudFamilyMenu: FamilyWeeklyMenu | null; currentUser: UserProfile | null;
+  generateFamilyWeeklyMenu: (user: UserProfile, users: UserProfile[], prefs: import('./types').FamilyMenuPrefs, session: AiSession) => Promise<FamilyWeeklyMenu>;
+  familyMenuRepository: FamilyMenuRepository | null;
+  loginGuard: OutboxReadGuard | null; isCurrentSession: () => boolean;
+  profileEditRevisionRef: MutableRefObject<number>;
+  persistUser: ReturnType<typeof useProfilePersistence>;
   setCloudFamilyMenu: Dispatch<SetStateAction<FamilyWeeklyMenu | null>>;
-  setCurrentUser: Dispatch<SetStateAction<UserProfile | null>>;
+  setFamilyShopping: Dispatch<SetStateAction<FamilyShoppingState>>;
   weekStartISO: () => string;
 };
 
-export function useFamilyMenu({
-  allUsers,
-  cloudFamily,
-  cloudFamilyMenu,
-  currentUser,
-  generateFamilyWeeklyMenu,
-  loadCloudFamily,
-  loadFamilyShopping,
-  setAllUsers,
-  setCloudFamilyMenu,
-  setCurrentUser,
-  weekStartISO,
-}: UseFamilyMenuParams) {
-  const [familyMenuLoading, setFamilyMenuLoading] = useState(false);
-  const [familyMenuError, setFamilyMenuError] = useState<string | null>(null);
-  const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useState(false);
-  const [familyMenuPrefs, setFamilyMenuPrefs] = useState<FamilyMenuPrefs>(DEFAULT_FAMILY_MENU_PREFS);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setFamilyMenuPrefs(DEFAULT_FAMILY_MENU_PREFS);
-      return;
-    }
-    const prefsKey = `fitfocus_data_${currentUser.id}_family_menu_prefs`;
-    try {
-      const next = readFamilyMenuPrefs(localStorage.getItem(prefsKey), allUsers.map((user) => user.id));
-      setFamilyMenuPrefs(next);
-      safeSetItem(prefsKey, JSON.stringify(next));
-    } catch {
-      setFamilyMenuPrefs({
-        ...DEFAULT_FAMILY_MENU_PREFS,
-        includeIds: allUsers.map((user) => user.id),
-      });
-    }
-  }, [allUsers, currentUser?.id]);
-
-  const familyMenu = useMemo(() => cloudFamilyMenu ?? currentUser?.aiPlan?.familyWeeklyMenu ?? null, [cloudFamilyMenu, currentUser?.aiPlan?.familyWeeklyMenu]);
-
+export function useFamilyMenu({ cloudFamily, cloudFamilyMembers, cloudFamilyMenu, currentUser,
+  generateFamilyWeeklyMenu, familyMenuRepository, loginGuard, isCurrentSession, profileEditRevisionRef,
+  persistUser, setCloudFamilyMenu, setFamilyShopping, weekStartISO }: UseFamilyMenuParams) {
+  const scope = useMemo(() => new FamilyActionScope(() => Boolean(loginGuard && loginGuard.accountId === currentUser?.id && isCurrentSession())),
+    [currentUser?.id, cloudFamily?.id, isCurrentSession, loginGuard]);
+  const [familyMenuLoading, setFamilyMenuLoading] = useFamilyState(scope, false);
+  const [familyMenuError, setFamilyMenuError] = useFamilyState<string | null>(scope, null);
+  const [familyMenuPrefsOpen, setFamilyMenuPrefsOpen] = useFamilyState(scope, false);
+  useLayoutEffect(() => {
+    scope.activate();
+    const hide = () => scope.invalidate();
+    const show = (event: PageTransitionEvent) => { if (event.persisted) { scope.activate(); setFamilyMenuLoading(false); } };
+    window.addEventListener('pagehide', hide); window.addEventListener('pageshow', show);
+    return () => { scope.invalidate(); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', show); };
+  }, [scope, setFamilyMenuLoading]);
+  const familyMenuProfiles = useMemo(() => currentUser ? familyProfiles(currentUser, cloudFamily ? cloudFamilyMembers : null) : [],
+    [currentUser, cloudFamily, cloudFamilyMembers]);
+  const preferences = useOwnedState(currentUser?.id, 'family_menu_prefs', {
+    ...DEFAULT_FAMILY_MENU_PREFS, includeIds: familyMenuProfiles.map(profile => profile.id),
+  }, familyPrefsCodec);
+  const allowed = new Set(familyMenuProfiles.map(profile => profile.id));
+  const selected = preferences.value.includeIds.filter(id => allowed.has(id));
+  const familyMenuPrefs = { ...preferences.value, includeIds: selected.length ? selected : [...allowed] };
+  const inputKey = JSON.stringify({ familyId: cloudFamily?.id, profiles: familyMenuProfiles, prefs: familyMenuPrefs });
+  const inputsRef = useRef(inputKey); inputsRef.current = inputKey;
+  const setFamilyMenuPrefs = useCallback<Dispatch<SetStateAction<FamilyMenuPrefs>>>(action => {
+    if (!loginGuard || !scope.isCurrent()) return;
+    void preferences.persistGenerated(action, { readGuard: loginGuard, canCommit: () => scope.isCurrent() }).catch(() => {});
+  }, [loginGuard, preferences.persistGenerated, scope]);
+  // An empty canonical family generation never resurrects an old personal profile snapshot.
+  const familyMenu = cloudFamily ? cloudFamilyMenu : currentUser?.aiPlan?.familyWeeklyMenu ?? null;
   const handleGenerateFamilyWeeklyMenu = useCallback(async () => {
-    if (!currentUser?.aiPlan) return;
-    setFamilyMenuError(null);
-    const includeIds = (familyMenuPrefs.includeIds?.length ? familyMenuPrefs.includeIds : allUsers.map(u => u.id));
-    if (!includeIds.length || !familyMenuPrefs.cookingMode) {
-      setFamilyMenuPrefsOpen(true);
-      return;
-    }
-
-    setFamilyMenuLoading(true);
+    if (!currentUser?.aiPlan || !loginGuard) return null;
+    const attempt = scope.begin('generate'); if (!attempt) return null;
+    setFamilyMenuError(null); setFamilyMenuLoading(true);
+    const revision = profileEditRevisionRef.current, week = weekStartISO();
     try {
-      const prefs = {
-        includeIds,
-        cookingMode: familyMenuPrefs.cookingMode,
-        budgetPerWeek: familyMenuPrefs.budgetPerWeek ? Number(familyMenuPrefs.budgetPerWeek) : undefined,
-        currency: familyMenuPrefs.currency || 'KZT',
-      };
-
-      try {
-        safeSetItem(`fitfocus_data_${currentUser.id}_family_menu_prefs`, JSON.stringify(prefs));
-      } catch {}
-
-      const familyWeeklyMenu = await generateFamilyWeeklyMenu(currentUser, allUsers, prefs);
-      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, familyWeeklyMenu } };
-      setCurrentUser(updatedUser);
-      setAllUsers(prev => {
-        const next = prev.map(u => (u.id === updatedUser.id ? updatedUser : u));
-        persistAllUsersSnapshot(updatedUser.id, next);
-        return next;
+      if (cloudFamily && cloudFamily.owner_user_id !== currentUser.id) throw new Error('Только владелец семьи может менять общее меню.');
+      if (cloudFamily && !familyMenuRepository) throw new Error('Сначала обновите семейное меню.');
+      const menu = await generateOwnedFamilyMenu({ owner: currentUser, profiles: familyMenuProfiles,
+        prefs: { includeIds: familyMenuPrefs.includeIds, cookingMode: familyMenuPrefs.cookingMode,
+          ...(familyMenuPrefs.budgetPerWeek ? { budgetPerWeek: Number(familyMenuPrefs.budgetPerWeek) } : {}), currency: familyMenuPrefs.currency },
+        week, loginGuard, controller: attempt.controller, isCurrent: attempt.isCurrent,
+        inputsCurrent: () => inputsRef.current === inputKey && revision === profileEditRevisionRef.current && weekStartISO() === week,
+        repository: cloudFamily ? familyMenuRepository : null, persistUser,
+        persistPreferences: guard => preferences.persistGenerated(familyMenuPrefs, guard), requestMenu: generateFamilyWeeklyMenu,
       });
-
-      if (cloudFamily?.id) {
-        const week = weekStartISO();
-        await saveFamilyMenu(week, familyWeeklyMenu);
-        setCloudFamilyMenu(familyWeeklyMenu);
+      if (!menu || !attempt.isCurrent()) return null;
+      if (cloudFamily) {
+        setCloudFamilyMenu(menu);
+        setFamilyShopping(previous => familyShoppingProjection(week, menu, previous));
       }
-
-      if (cloudFamily?.id && Array.isArray(familyWeeklyMenu.shoppingListItems) && familyWeeklyMenu.shoppingListItems.length) {
-        const week = weekStartISO();
-        await saveFamilyShoppingItems(week, cloudFamily.id, familyWeeklyMenu.shoppingListItems);
-        await loadFamilyShopping();
+      return menu;
+    } catch (error) {
+      if (attempt.isCurrent() && !isStaleFamilyMenuSessionError(error)) {
+        setFamilyMenuError(errorMessage(error, 'Не удалось сгенерировать семейное меню на неделю.'));
       }
-      await loadCloudFamily();
-    } catch (e: unknown) {
-      setFamilyMenuError(errorMessage(e, 'Не удалось сгенерировать семейное меню на неделю.'));
-    } finally {
-      setFamilyMenuLoading(false);
-    }
-  }, [
-    allUsers,
-    cloudFamily?.id,
-    currentUser,
-    familyMenuPrefs,
-    generateFamilyWeeklyMenu,
-    loadCloudFamily,
-    loadFamilyShopping,
-    setAllUsers,
-    setCloudFamilyMenu,
-    setCurrentUser,
-    weekStartISO,
-  ]);
+      return null;
+    } finally { if (attempt.isCurrent()) setFamilyMenuLoading(false); attempt.finish(); }
+  }, [cloudFamily, currentUser, loginGuard, scope, profileEditRevisionRef, weekStartISO, familyMenuRepository,
+    familyMenuProfiles, familyMenuPrefs, inputKey, persistUser, preferences.persistGenerated, generateFamilyWeeklyMenu,
+    setFamilyMenuError, setFamilyMenuLoading, setCloudFamilyMenu, setFamilyShopping]);
 
-  return {
-    familyMenu,
-    familyMenuError,
-    familyMenuLoading,
-    familyMenuPrefs,
-    familyMenuPrefsOpen,
-    handleGenerateFamilyWeeklyMenu,
-    setFamilyMenuError,
-    setFamilyMenuPrefs,
-    setFamilyMenuPrefsOpen,
-  };
+  return { familyMenu, familyMenuError, familyMenuLoading, familyMenuPrefs, familyMenuPrefsOpen, familyMenuProfiles,
+    handleGenerateFamilyWeeklyMenu, setFamilyMenuError, setFamilyMenuPrefs, setFamilyMenuPrefsOpen };
 }

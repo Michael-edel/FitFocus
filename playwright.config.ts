@@ -6,12 +6,15 @@ const npmCommand = process.env.npm_execpath
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['staging/**'],
+  globalSetup: './e2e/support/preparePwaFixture.ts',
   timeout: 45_000,
   expect: {
     timeout: 10_000,
   },
   fullyParallel: true,
-  retries: process.env.CI ? 1 : 0,
+  // A retry can hide a flaky acceptance test; require every CI project to pass first try.
+  retries: 0,
   reporter: process.env.CI
     ? [['github'], ['html', { open: 'never' }]]
     : [['list'], ['html', { open: 'never' }]],

@@ -1,4 +1,5 @@
 import type { WeeklyStoredReport } from '../../weeklyAutoEngine';
+import { isPdfExportSessionCurrent, type PdfExportOptions } from '../../pdf/exportSession';
 
 type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 
@@ -17,7 +18,7 @@ export function buildWeeklyReportRows(report: WeeklyStoredReport): string[][] {
 }
 
 /** Exports one persisted weekly intelligence report as a Cyrillic-capable PDF. */
-export async function exportWeeklyReportPdf(report: WeeklyStoredReport): Promise<void> {
+export async function exportWeeklyReportPdf(report: WeeklyStoredReport, options?: PdfExportOptions): Promise<boolean> {
   const [{ default: jsPDF }, autoTableModule, { ensurePdfInterFont }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -45,5 +46,7 @@ export async function exportWeeklyReportPdf(report: WeeklyStoredReport): Promise
     doc.setFontSize(10);
     doc.text(doc.splitTextToSize(report.aiText, 180), 14, finalY + 18);
   }
+  if (!await isPdfExportSessionCurrent(options)) return false;
   doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
+  return true;
 }

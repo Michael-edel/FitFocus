@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onRequestPut as putProfile, onRequestPatch as patchProfile } from '../functions/api/profile';
 import { onRequestPost as postWearableSync } from '../functions/api/wearable/sync';
 import { onRequestPost as postInviteRedeem } from '../functions/api/invite/redeem';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type PutProfileContext = Parameters<typeof putProfile>[0];
 type PatchProfileContext = Parameters<typeof patchProfile>[0];
 type WearableSyncContext = Parameters<typeof postWearableSync>[0];
@@ -34,6 +35,13 @@ async function signJwt(payload: Record<string, unknown>) {
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
   return `${data}.${b64url(sig)}`;
+}
+
+async function validProfileScope() {
+  return {
+    'X-FitFocus-State-Account': 'user-1',
+    'X-FitFocus-State-Session': await stateSessionId({ sub: 'user-1', sid: 'sid-1' }),
+  };
 }
 
 function makeDb(options: { betaAccess?: boolean } = {}) {
@@ -97,7 +105,7 @@ async function putProfileBody(db: ReturnType<typeof makeDb>, body: Record<string
   const context: PutProfileContext = {
     request: new Request('https://fitfocus.test/api/profile', {
       method: 'PUT',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
     env,
@@ -115,7 +123,7 @@ async function patchProfileBody(db: ReturnType<typeof makeDb>, body: Record<stri
   const context: PatchProfileContext = {
     request: new Request('https://fitfocus.test/api/profile', {
       method: 'PATCH',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
     env,
@@ -135,7 +143,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: PutProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PUT',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
       env,
@@ -188,7 +196,7 @@ describe('bounded JSON body guards on user routes', () => {
     const context: PatchProfileContext = {
       request: new Request('https://fitfocus.test/api/profile', {
         method: 'PATCH',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: { Cookie: `ff_session=${token}`, ...await validProfileScope(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'x'.repeat(600 * 1024) }),
       }),
       env,
@@ -247,11 +255,13 @@ describe('bounded JSON body guards on user routes', () => {
   it('rejects oversized invite redeem bodies before consuming invites', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
     const env = { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as InviteRedeemContext['env'];
     const context: InviteRedeemContext = {
       request: new Request('https://fitfocus.test/api/invite/redeem', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'invite-redeem-test-01' },
+        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-Request-ID': 'invite-redeem-test-01',
+          'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof },
         body: JSON.stringify({ code: 'INVITE', payload: 'x'.repeat(80 * 1024) }),
       }),
       env,

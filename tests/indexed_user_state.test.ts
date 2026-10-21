@@ -4,7 +4,7 @@ import {
   clearIndexedUserStateForUser,
   isIndexedUserStateStorageKey,
   readIndexedUserStateRaw,
-  renameIndexedUserStatePrefix,
+  restoreIndexedUserStateBackup,
   writeIndexedUserStateRaw,
 } from '../storage/indexedUserState';
 
@@ -19,23 +19,24 @@ afterEach(async () => {
 });
 
 describe('Indexed user state', () => {
-  it('stores volume state outside localStorage and can move it to a resolved account id', async () => {
+  it('accepts an empty backup restore without waiting for nonexistent IDB requests', async () => {
+    await expect(restoreIndexedUserStateBackup({})).resolves.toBe(true);
+  });
+
+  it('stores volume state under the exact account prefix without exposing it to another account', async () => {
     expect(isIndexedUserStateStorageKey(firstKey)).toBe(true);
-    expect(isIndexedUserStateStorageKey(`fitfocus_data_${firstUserId}_settings`)).toBe(false);
+    expect(isIndexedUserStateStorageKey(`fitfocus_data_${firstUserId}_settings`)).toBe(true);
 
     expect(await writeIndexedUserStateRaw(firstKey, '[{"weekKey":"2026-41"}]')).toBe(true);
     expect(await readIndexedUserStateRaw(firstKey)).toBe('[{"weekKey":"2026-41"}]');
-
-    expect(await renameIndexedUserStatePrefix(`fitfocus_data_${firstUserId}_`, `fitfocus_data_${secondUserId}_`)).toBe(true);
-    expect(await readIndexedUserStateRaw(firstKey)).toBeNull();
-    expect(await readIndexedUserStateRaw(secondKey)).toBe('[{"weekKey":"2026-41"}]');
+    expect(await readIndexedUserStateRaw(secondKey)).toBeNull();
   });
 
   it('clears only the requested account data', async () => {
     await writeIndexedUserStateRaw(firstKey, '[]');
     await writeIndexedUserStateRaw(secondKey, '[1]');
 
-    expect(await clearIndexedUserStateForUser(firstUserId)).toBe(true);
+    expect(await clearIndexedUserStateForUser(firstUserId)).toEqual({ cleared: true, legacyEvidenceRetained: false });
     expect(await readIndexedUserStateRaw(firstKey)).toBeNull();
     expect(await readIndexedUserStateRaw(secondKey)).toBe('[1]');
   });

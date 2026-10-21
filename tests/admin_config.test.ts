@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPut as putFeatureFlag } from '../functions/api/admin/feature_flags';
 import { onRequestPut as putSetting } from '../functions/api/admin/settings';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminFeatureFlagContext = Parameters<typeof putFeatureFlag>[0];
 type AdminSettingContext = Parameters<typeof putSetting>[0];
 
@@ -95,10 +96,13 @@ async function put(path: string, db: ReturnType<typeof makeDb>, body: Record<str
 
 async function putRaw(path: string, db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   const request = new Request(`https://fitfocus.test${path}`, {
     method: 'PUT',
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       'Content-Type': 'application/json',
       'X-Request-ID': path.includes('feature_flags') ? 'admin-flags-put-test-01' : 'admin-settings-put-test-01',
     },

@@ -1,7 +1,8 @@
-import { requireUser, json } from '../_lib/auth';
+import { json } from '../_lib/auth';
 import { requireDB } from '../_lib/db';
 import { readPushStatus } from '../_lib/push_subscriptions';
 import { logApiEvent, requestIdFor, withRequestId } from '../_lib/observability';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 
 type Env = {
   AUTH_JWT_SECRET?: string;
@@ -13,7 +14,7 @@ type Env = {
 
 const handlePushStatusGet: PagesFunction<Env> = async ({ request, env }) => {
   let user;
-  try { user = await requireUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
+  try { user = await requireScopedStateUser(request, env); } catch { return json({ error: 'UNAUTH' }, 401); }
   const payload = await readPushStatus({
     db: requireDB(env), env, userId: user.sub,
     userAgent: request.headers.get('user-agent'),
@@ -23,7 +24,8 @@ const handlePushStatusGet: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const response = await handlePushStatusGet(context);
+  let response = await handlePushStatusGet(context);
+  if (response.status !== 401) response = withSessionGuard(response, context.request, 'Push');
   const requestId = requestIdFor(context.request);
   logApiEvent('push.status.response', { requestId, status: response.status });
   return withRequestId(response, requestId);

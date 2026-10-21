@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/family/menu/generate';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyMenuGenerateContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -100,10 +101,12 @@ function makeDb(options: { existingMenuId?: string | null } = {}) {
 
 async function generateMenu(db: ReturnType<typeof makeDb>, url = 'https://fitfocus.test/api/family/menu/generate?week=2026-06-22', requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMenuGenerateContext = {
     request: new Request(url, {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof,
+        ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
     params: {},

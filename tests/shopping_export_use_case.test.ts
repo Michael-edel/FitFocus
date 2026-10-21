@@ -9,10 +9,11 @@ describe('shopping export use case', () => {
 
   it('aggregates rows and escapes CSV fields', async () => {
     const db = {
-      prepare() {
+      prepare(sql: string) {
         return {
           bind() { return this; },
           async all() {
+            if (sql.includes('FROM personal_menu_projections')) return { results: [] };
             return { results: [
               { name: 'Яблоко', grams: 600 },
               { name: 'Яблоко', grams: 500 },

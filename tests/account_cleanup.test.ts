@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from '../functions/api/_lib/account_cleanup';
 import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
 import { onRequestPost as onAdminCleanupPost } from '../functions/api/admin/cleanup_deleted';
@@ -248,10 +249,16 @@ describe('cleanupDeletedAccounts', () => {
   it('rejects oversized admin cleanup bodies before running cleanup', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin' });
+    const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
     const context: AdminCleanupContext = {
       request: new Request('https://fitfocus.test/api/admin/cleanup_deleted', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-FitFocus-State-Account': 'admin-1',
+          'X-FitFocus-State-Session': stateSession,
+        },
         body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
       }),
       env: { DB: db as unknown as D1Database, AUTH_JWT_SECRET: SECRET },

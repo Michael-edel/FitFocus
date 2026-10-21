@@ -2,7 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BadgeInfo, CalendarDays, CheckCircle2, History, Sparkles } from 'lucide-react';
 import { BUILD_SOURCE } from './build-info.generated';
 import { formatReleaseTitle, localizeCommitSubject, releaseNotes } from './releaseNotes';
-import { APP_VERSION_STRING, APP_VERSION_UI_LABEL, versioningLayers, versioningRules } from './versioning';
+import {
+  APP_VERSION_STRING,
+  APP_VERSION_UI_LABEL,
+  formatBuildSequenceLabel,
+  formatBuildShortLabel,
+  isMainBuildBranch,
+  versioningLayers,
+  versioningRules,
+} from './versioning';
 import { isRecord, parseJson } from './safeJson';
 
 type GitHubCommitItem = {
@@ -16,6 +24,7 @@ type GitHubCommitItem = {
 };
 
 type MainBuildEntry = {
+  branch: string;
   sha: string;
   shortSha: string;
   committedAt: string;
@@ -26,7 +35,7 @@ type MainBuildEntry = {
 
 const GITHUB_COMMITS_URL = 'https://api.github.com/repos/Michael-edel/FitFocus/commits?sha=main&per_page=25';
 const GITHUB_COUNT_URL = 'https://api.github.com/repos/Michael-edel/FitFocus/commits?sha=main&per_page=1&page=1';
-const BUILD_HISTORY_CACHE_KEY = 'fitfocus.build-history.v4';
+const BUILD_HISTORY_CACHE_KEY = 'fitfocus.build-history.v5';
 const BUILD_HISTORY_CACHE_TTL_MS = 15 * 60 * 1000;
 
 function parseLastPage(linkHeader: string | null): number | null {
@@ -45,6 +54,7 @@ function getCommitSubject(message?: string): string {
 
 function isMainBuildEntry(value: unknown): value is MainBuildEntry {
   return isRecord(value)
+    && typeof value.branch === 'string'
     && typeof value.sha === 'string'
     && typeof value.shortSha === 'string'
     && typeof value.committedAt === 'string'
@@ -64,8 +74,11 @@ function isGitHubCommitItem(value: unknown): value is GitHubCommitItem {
 }
 
 function buildFallbackEntries(): MainBuildEntry[] {
-  const baseCount = BUILD_SOURCE.commitCount > 0 ? BUILD_SOURCE.commitCount : null;
+  const baseCount = isMainBuildBranch(BUILD_SOURCE.branch) && BUILD_SOURCE.commitCount > 0
+    ? BUILD_SOURCE.commitCount
+    : null;
   return (BUILD_SOURCE.recentBuilds || []).map((build, index) => ({
+    branch: BUILD_SOURCE.branch || 'unknown',
     sha: build.sha || build.shortSha || `fallback-${index}`,
     shortSha: build.shortSha || build.sha?.slice(0, 7) || 'unknown',
     committedAt: build.committedAt || BUILD_SOURCE.builtAt,
@@ -130,6 +143,7 @@ async function fetchMainBuildEntries(signal: AbortSignal): Promise<MainBuildEntr
       const subject = getCommitSubject(item.commit?.message);
       const committedAt = item.commit?.author?.date || BUILD_SOURCE.builtAt;
       return {
+        branch: 'main',
         sha: item.sha,
         shortSha: item.sha.slice(0, 7),
         committedAt,
@@ -142,13 +156,17 @@ async function fetchMainBuildEntries(signal: AbortSignal): Promise<MainBuildEntr
 }
 
 function formatBuildLabel(entry: MainBuildEntry) {
-  return entry.sequence ? `Сборка main №${entry.sequence}` : `Сборка main • ${entry.shortSha}`;
+  return formatBuildSequenceLabel(entry);
 }
 
 export default function ChangelogScreen() {
   const [mainBuildEntries, setMainBuildEntries] = useState<MainBuildEntry[]>(() => buildFallbackEntries());
+  const isMainBuild = isMainBuildBranch(BUILD_SOURCE.branch);
+  const branchName = BUILD_SOURCE.branch || 'unknown';
 
   useEffect(() => {
+    if (!isMainBuild) return;
+
     const cached = readCachedEntries();
     if (cached?.length) {
       setMainBuildEntries(cached);
@@ -166,7 +184,7 @@ export default function ChangelogScreen() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [isMainBuild]);
 
   const historicalReleaseNotes = useMemo(
     () => releaseNotes.filter((release) => !release.isCurrent),
@@ -182,7 +200,9 @@ export default function ChangelogScreen() {
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-slate-100">Изменения по версиям</h1>
         <p className="max-w-3xl text-slate-400 font-medium leading-7">
-          Верхний блок показывает каждую отдельную main-сборку после пуша: у каждой есть свой номер, SHA, дата и краткое описание на русском. Ниже остаются более крупные релизные версии продукта, такие как 2.4.0 Бета и 2.3.0 Бета.
+          {isMainBuild
+            ? 'Верхний блок показывает каждую отдельную main-сборку после пуша: у каждой есть свой номер, SHA, дата и краткое описание на русском.'
+            : `Верхний блок показывает сборки ветки ${branchName}; точную ревизию определяет SHA. Ниже остаются более крупные релизные версии продукта, такие как 2.4.0 Бета и 2.3.0 Бета.`}
         </p>
       </div>
 
@@ -193,7 +213,9 @@ export default function ChangelogScreen() {
               <div className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">Схема версий</div>
               <h2 className="mt-2 text-2xl md:text-3xl font-black text-slate-100">Как теперь ведём версии в FitFocus</h2>
               <p className="mt-2 max-w-3xl text-slate-400 font-medium leading-7">
-                Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а номер main-сборки увеличивается на 1 с каждым новым коммитом в ветку main, чтобы можно было быстро понять, какой именно код сейчас стоит у тестера.
+                {isMainBuild
+                  ? 'Есть два уровня истории: релиз приложения и отдельные main-сборки. Релиз меняется редко, а номер main-сборки увеличивается на 1 с каждым новым коммитом в ветку main.'
+                  : `Для preview есть два уровня: публичный релиз и сборка ветки ${branchName}. Preview определяется по SHA; номер main-сборки к ней не применяется.`}
               </p>
             </div>
             <div className="flex flex-col gap-2 items-start md:items-end">
@@ -202,7 +224,13 @@ export default function ChangelogScreen() {
                 {APP_VERSION_UI_LABEL}
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-slate-200">
-                {mainBuildEntries[0] ? formatBuildLabel(mainBuildEntries[0]) : `Сборка main • ${BUILD_SOURCE.shortSha}`}
+                {mainBuildEntries[0]
+                  ? formatBuildLabel(mainBuildEntries[0])
+                  : formatBuildShortLabel({
+                    branch: branchName,
+                    sequence: isMainBuild && BUILD_SOURCE.commitCount > 0 ? BUILD_SOURCE.commitCount : null,
+                    shortSha: BUILD_SOURCE.shortSha,
+                  })}
               </div>
             </div>
           </div>
@@ -294,7 +322,9 @@ export default function ChangelogScreen() {
                   </li>
                   <li className="flex gap-3 text-slate-200 font-medium leading-7">
                     <span className="mt-2 h-2 w-2 rounded-full bg-indigo-400 shrink-0" />
-                    <span>{entry.isCurrent ? 'Это текущая сборка, которая стоит на устройстве.' : 'Это предыдущая main-сборка в истории изменений.'}</span>
+                    <span>{entry.isCurrent
+                      ? `Это текущая сборка ${entry.branch === 'main' ? 'main' : `ветки ${entry.branch}`}.`
+                      : `Это предыдущая сборка ${entry.branch === 'main' ? 'main' : `ветки ${entry.branch}`} в истории изменений.`}</span>
                   </li>
                   <li className="flex gap-3 text-slate-200 font-medium leading-7">
                     <span className="mt-2 h-2 w-2 rounded-full bg-indigo-400 shrink-0" />

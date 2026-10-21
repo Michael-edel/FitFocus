@@ -3,6 +3,7 @@ import { safeRemoveItem } from '../../storage/hybrid';
 export function appUiStorageKeys(userId: string): string[] {
   return [
     `fitfocus.dashboard.new-weight.v1:${userId}`,
+    `fitfocus.nutrition.selected-day.v1:${userId}`,
     `fitfocus.course.ui.v1:${userId}`,
     `fitfocus.plan.ui.v1:${userId}`,
     `fitfocus.plan.active-day.v1:${userId}`,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet as getAdminEvents } from '../functions/api/admin/admin_events';
 import { onRequestGet as getAiLogs } from '../functions/api/admin/ai_logs';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminEventsContext = Parameters<typeof getAdminEvents>[0];
 type AiLogsContext = Parameters<typeof getAiLogs>[0];
 
@@ -77,7 +78,13 @@ function makeDb() {
 
 async function adminRequest(url: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
-  return new Request(url, { headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': 'admin-events-test-01' } });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
+  return new Request(url, { headers: {
+    Cookie: `ff_session=${token}`,
+    'X-FitFocus-State-Account': 'admin-1',
+    'X-FitFocus-State-Session': stateSession,
+    'X-Request-ID': 'admin-events-test-01',
+  } });
 }
 
 function pagesContext(request: Request, db: ReturnType<typeof makeDb>) {

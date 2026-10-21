@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/mobile/token';
 import { verifySessionJwt } from '../functions/api/_lib/auth';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type MobileTokenContext = Parameters<typeof onRequestPost>[0];
 type MobileTokenBody = { tokenType?: string; token?: string; error?: string; user?: { id?: string } };
 
@@ -33,7 +34,8 @@ async function signJwt(payload: Record<string, unknown>) {
 }
 
 function makeDb(options: { revoked?: number; expiresAt?: number } = {}) {
-  return {
+  const calls = { tokenSessionReads: 0 };
+  const db = {
     prepare(sql: string) {
       return {
         bind() {
@@ -41,6 +43,7 @@ function makeDb(options: { revoked?: number; expiresAt?: number } = {}) {
         },
         async first() {
           if (sql.includes('FROM sessions')) {
+            if (sql.startsWith('SELECT id, expires_at, revoked FROM sessions')) calls.tokenSessionReads += 1;
             return { id: 'sid-1', revoked: options.revoked ?? 0, expires_at: options.expiresAt ?? NOW + 3600 };
           }
           if (sql.includes('FROM users')) return { is_active: 1, deleted_at: null };
@@ -56,16 +59,26 @@ function makeDb(options: { revoked?: number; expiresAt?: number } = {}) {
       };
     },
   };
+  return { db, calls };
 }
 
-async function postMobileToken(db: ReturnType<typeof makeDb>, requestId = 'mobile-token-test-01') {
+async function postMobileToken(
+  fake: ReturnType<typeof makeDb>,
+  requestId = 'mobile-token-test-01',
+  scope: { account?: string; session?: string } | false = {},
+) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1', email: 'u@example.com', name: 'User' });
+  const headers = new Headers({ Cookie: `ff_session=${token}`, 'X-Request-ID': requestId });
+  if (scope !== false) {
+    headers.set('X-FitFocus-State-Account', scope.account ?? 'user-1');
+    headers.set('X-FitFocus-State-Session', scope.session ?? await stateSessionId({ sub: 'user-1', sid: 'sid-1' }));
+  }
   const context: MobileTokenContext = {
     request: new Request('https://fitfocus.test/api/mobile/token', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
+      headers,
     }),
-    env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+    env: { AUTH_JWT_SECRET: SECRET, DB: fake.db as unknown as D1Database },
     params: {},
     data: {},
     waitUntil: () => undefined,
@@ -76,10 +89,17 @@ async function postMobileToken(db: ReturnType<typeof makeDb>, requestId = 'mobil
 
 describe('/api/mobile/token', () => {
   it('issues a mobile-audience bearer token from a valid web session', async () => {
-    const response = await postMobileToken(makeDb());
+    const fake = makeDb();
+    const response = await postMobileToken(fake);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Request-ID')).toBe('mobile-token-test-01');
+    expect(response.headers.get('X-FitFocus-Mobile-Token-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBe('1');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe(await stateSessionId({ sub: 'user-1', sid: 'sid-1' }));
+    expect(fake.calls.tokenSessionReads).toBe(1);
     const body = await response.json() as MobileTokenBody;
     expect(body.tokenType).toBe('Bearer');
     expect(body.user.id).toBe('user-1');
@@ -96,5 +116,25 @@ describe('/api/mobile/token', () => {
     expect(response.status).toBe(401);
     const body = await response.json() as MobileTokenBody;
     expect(body.error).toBe('UNAUTH');
+  });
+
+  it('rejects a stale session scope before token issuance', async () => {
+    const fake = makeDb();
+    const response = await postMobileToken(fake, 'mobile-token-stale-scope', { session: 'f'.repeat(64) });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+    expect(fake.calls.tokenSessionReads).toBe(0);
+    expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBeNull();
+  });
+
+  it('rejects unscoped legacy callers before minting a bearer token', async () => {
+    const fake = makeDb();
+    const response = await postMobileToken(fake, 'mobile-token-legacy-client', false);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+    expect(fake.calls.tokenSessionReads).toBe(0);
+    expect(response.headers.get('X-FitFocus-Mobile-Token-Guard')).toBeNull();
   });
 });

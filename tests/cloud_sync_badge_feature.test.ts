@@ -11,6 +11,11 @@ const input = (overrides: Partial<Parameters<typeof buildCloudSyncBadge>[0]> = {
 });
 
 describe('cloud sync badge', () => {
+  it('never reports a saved profile as full success while state intent or a storage error remains', () => {
+    expect(buildCloudSyncBadge(input({ state: 'saved', stateQueue: { pending: 1, sending: 0, conflicted: 0, failed: 0 } })).label).toBe('Cloud: pending');
+    expect(buildCloudSyncBadge(input({ state: 'saved', localSaveError: true })).label).toBe('Cloud: error');
+    expect(buildCloudSyncBadge(input({ state: 'saved', stateQueue: { pending: 0, sending: 0, conflicted: 1, failed: 0 } })).label).toBe('Cloud: error');
+  });
   it('explains local-only mode without a cloud session', () => {
     expect(buildCloudSyncBadge(input({ hasCloudSession: false, state: 'error', note: 'ignored' }))).toMatchObject({ label: 'Cloud: local' });
   });

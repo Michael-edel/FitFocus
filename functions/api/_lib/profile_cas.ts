@@ -24,12 +24,14 @@ export async function writeProfileCas(
   const statement = expectedVersion === 0
     ? db.prepare(
         "INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?) " +
-          "ON CONFLICT(user_id) DO NOTHING"
+          "ON CONFLICT(user_id) DO NOTHING RETURNING version"
       ).bind(userId, profileJson, updatedAt, Number(profile.version || 1))
     : db.prepare(
         "UPDATE user_profiles SET profile_json = ?, updated_at = ?, version = ? " +
-          "WHERE user_id = ? AND version = ?"
+          "WHERE user_id = ? AND version = ? RETURNING version"
       ).bind(profileJson, updatedAt, Number(profile.version || expectedVersion + 1), userId, expectedVersion);
 
-  return changedRows(await statement.run()) === 1;
+  // D1 meta.changes includes trigger writes. RETURNING belongs only to this guarded mutation.
+  const written = await statement.first<{ version: number }>();
+  return written?.version === Number(profile.version || expectedVersion + 1);
 }

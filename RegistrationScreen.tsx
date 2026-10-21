@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
-import { trackOnboardingEvent } from './analytics/onboarding';
 import { Gender, Goal, ActivityLevel, type TariffPlan } from './types';
 
 type ActivationStep = {
@@ -88,8 +87,6 @@ export default function RegistrationScreen({
   handleActivateWithTransition,
   onOpenVersionInfo,
 }: RegistrationScreenProps) {
-  const onboardingStartedRef = useRef(false);
-
   const regAnthroError = useMemo(() => {
     const weight = Number(regData.weight) || 0;
     const height = Number(regData.height) || 0;
@@ -104,31 +101,7 @@ export default function RegistrationScreen({
 
   const regStep1Valid = Boolean(Number(regData.weight) > 0 && Number(regData.height) > 0 && Number(regData.age) > 0 && regData.activityLevel && !regAnthroError);
 
-  useEffect(() => {
-    if (onboardingStartedRef.current) return;
-    onboardingStartedRef.current = true;
-    trackOnboardingEvent('onboarding_started', {
-      step: 1,
-      goal: regData.goal,
-      activityLevel: regData.activityLevel,
-    });
-  }, [regData.activityLevel, regData.goal]);
-
   const onCreatePlan = () => {
-    trackOnboardingEvent('onboarding_basic_completed', {
-      goal: regData.goal,
-      activityLevel: regData.activityLevel,
-      weight: regData.weight,
-      height: regData.height,
-      age: regData.age,
-    });
-    trackOnboardingEvent('aha_card_cta_clicked', {
-      goal: regData.goal,
-      weight: regData.weight,
-      height: regData.height,
-      age: regData.age,
-      activityLevel: regData.activityLevel,
-    });
     handleActivateWithTransition();
   };
 

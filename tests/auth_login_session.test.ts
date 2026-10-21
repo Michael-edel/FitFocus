@@ -1,48 +1,36 @@
-import { describe, expect, it, vi } from "vitest";
-import { prepareLoginSession } from "../features/auth/loginSession";
-import type { UserProfile } from "../types";
-
-const user = { id: "legacy-user", name: "Тест", email: "old@example.test" } as UserProfile;
-
-describe("prepareLoginSession", () => {
-  it("moves local state to the verified identity before hydrating the cloud session", async () => {
-    const renameStoragePrefix = vi.fn();
-    const persistUsersSnapshot = vi.fn();
-    const hydrateSession = vi.fn(async (input: UserProfile) => ({
-      currentUser: { ...input },
-      allUsers: [], weeklyReports: [], foodDiary: [], habits: [], foodHistory: [], foodFavorites: [], coachCard: null,
-    }));
-    const buildFallbackPlan = vi.fn(() => ({ title: "fallback" } as NonNullable<UserProfile["aiPlan"]>));
-
-    const prepared = await prepareLoginSession(user, { sub: "verified-user", email: "new@example.test" }, {
-      initialHabits: [],
-      resetUsageIfNewTime: (profile) => profile,
-      hydrateSession: hydrateSession as never,
-      buildFallbackPlan: buildFallbackPlan as never,
-      renameStoragePrefix,
-      persistUsersSnapshot,
-      readUsersSnapshot: () => [user],
-    });
-
-    expect(renameStoragePrefix).toHaveBeenCalledWith("fitfocus_data_legacy-user_", "fitfocus_data_verified-user_");
-    expect(persistUsersSnapshot).toHaveBeenCalledWith("verified-user", [expect.objectContaining({ id: "verified-user", email: "new@example.test" })]);
-    expect(hydrateSession).toHaveBeenCalledWith(expect.objectContaining({ id: "verified-user", googleSub: "verified-user" }), expect.any(Object));
-    expect(prepared.currentUser).toMatchObject({ id: "verified-user", googleSub: "verified-user", email: "new@example.test" });
-    expect(prepared.shouldPersistFallbackPlan).toBe(true);
+import { describe, expect, it, vi } from 'vitest';
+import { prepareLoginSession } from '../features/auth/loginSession';
+import { userProfile } from './_helpers/userProfile';
+const user = userProfile('verified-user');
+const hydrated = (currentUser = user) => ({ currentUser, allUsers: [], weeklyReports: [], foodDiary: [], habits: [], foodHistory: [], foodFavorites: [], coachCard: null });
+const basic = { initialHabits: [], resetUsageIfNewTime: (profile: typeof user) => profile };
+describe('prepareLoginSession', () => {
+  it('rejects legacy or other account identities without renaming storage or hydrating', async () => {
+    const hydrateSession = vi.fn(async () => hydrated());
+    await expect(prepareLoginSession({ ...user, id: 'legacy-user' }, { sub: user.id, email: user.email }, { ...basic, hydrateSession })).rejects.toThrow('PROFILE_ACCOUNT_MISMATCH');
+    expect(hydrateSession).not.toHaveBeenCalled();
   });
-
-  it("keeps an existing AI plan without requesting a fallback", async () => {
-    const withPlan = { ...user, id: "verified-user", aiPlan: { title: "existing" } } as UserProfile;
-    const buildFallbackPlan = vi.fn();
-    const prepared = await prepareLoginSession(withPlan, { sub: "verified-user" }, {
-      initialHabits: [],
-      resetUsageIfNewTime: (profile) => profile,
-      hydrateSession: (async () => ({ currentUser: withPlan, allUsers: [], weeklyReports: [], foodDiary: [], habits: [], foodHistory: [], foodFavorites: [], coachCard: null })) as never,
-      buildFallbackPlan: buildFallbackPlan as never,
-    });
-
-    expect(prepared.currentUser.aiPlan).toEqual({ title: "existing" });
-    expect(prepared.shouldPersistFallbackPlan).toBe(false);
-    expect(buildFallbackPlan).not.toHaveBeenCalled();
+  it('keeps an existing AI plan and filters the local profile list to the verified owner', async () => {
+    const withPlan = { ...user, aiPlan: { title: 'existing' } } as typeof user;
+    const prepared = await prepareLoginSession(withPlan, { sub: user.id }, { ...basic,
+      hydrateSession: async () => ({ ...hydrated(withPlan), allUsers: [userProfile('other')] }) });
+    expect(prepared.currentUser.aiPlan).toEqual({ title: 'existing' });
+    expect(prepared.hydrated.allUsers).toEqual([withPlan]);
+  });
+  it('keeps a missing fallback plan absent until the caller durably commits it', async () => {
+    const withoutPlan = { ...user, aiPlan: undefined };
+    const prepared = await prepareLoginSession(withoutPlan, { sub: user.id }, { ...basic,
+      hydrateSession: async () => hydrated(withoutPlan) });
+    expect(prepared.currentUser.aiPlan).toBeUndefined();
+    expect(prepared.hydrated.allUsers).toEqual([withoutPlan]);
+  });
+  it('does not activate a session after hydration was cancelled', async () => {
+    let current = true;
+    await expect(prepareLoginSession(user, { sub: user.id }, { ...basic, isCurrentSession: () => current,
+      hydrateSession: async () => { current = false; return hydrated(); } })).rejects.toThrow('LOGIN_SESSION_CHANGED');
+  });
+  it('rejects an unexpected hydrated identity instead of relabelling its data', async () => {
+    await expect(prepareLoginSession(user, { sub: user.id }, { ...basic,
+      hydrateSession: async () => hydrated(userProfile('other')) })).rejects.toThrow('PROFILE_ACCOUNT_MISMATCH');
   });
 });

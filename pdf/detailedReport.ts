@@ -4,6 +4,7 @@ import type { FoodItem, UserHabit, UserProfile } from '../types';
 import { Gender, Goal } from '../types';
 import { formatBloodGlucose, getBloodGlucoseGuidance } from '../profileMath';
 import { ensurePdfInterFont } from './font';
+import { isPdfExportSessionCurrent, type PdfExportOptions } from './exportSession';
 import { toLocalDayKey } from '../dateUtils';
 import { PDF_COLORS, pdfCard, pdfFooter, pdfH1, pdfSectionTitle, pdfHeader, pdfPaintBackground, pdfLastAutoTableY } from './theme';
 import { aggregateWeek, bmiCategory, calcBmi, calcGoalProgressPct, habitCompliance, resolveBloodGlucose, weekRangeISO } from './metrics';
@@ -53,7 +54,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   foodDiary: FoodItem[];
   habits: UserHabit[];
   includeMealLog: boolean;
-}) {
+} & PdfExportOptions): Promise<boolean> {
   const { user, targets, foodDiary, habits, includeMealLog } = opts;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
   await ensurePdfInterFont(doc);
@@ -342,5 +343,7 @@ export async function downloadDetailedHealthReportPdf(opts: {
   }
 
   pdfFooter(doc, generatedAt);
+  if (!await isPdfExportSessionCurrent(opts)) return false;
   doc.save(`FitFocus_${user.name}_Performance_Report.pdf`);
+  return true;
 }

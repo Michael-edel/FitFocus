@@ -1,8 +1,131 @@
 # Документация FitFocus
 
-Обновлено: 09.10.2026.
+Обновлено: 15.10.2026.
+
+Начните с [текущего состояния проекта](project-status.md): проверенный SHA,
+готовые компоненты, оставшаяся работа и ближайшие шаги.
+Локальный follow-up уже описан в статусе и журнале. Актуальный статус workflow
+смотрите в [checks PR #93](https://github.com/Michael-edel/FitFocus/pull/93/checks),
+поскольку новые push могут отменять предыдущий CI run.
+Ниже — полная карта документов и область архитектурного снимка.
+
+## Как пользоваться MD-файлами
+
+| Вопрос | Где искать ответ |
+|---|---|
+| Что представляет собой FitFocus и какие функции есть? | [PRODUCT](../PRODUCT.md) |
+| Что уже сделано и что проверено? | [Текущий статус](project-status.md), затем [журнал проверок](stabilization-progress.md) |
+| Что реализовать следующим и когда задача считается готовой? | [TASKS](../TASKS.md), [матрица проверок P0](verification-matrix.md) |
+| Где искать код функции и её проверки? | [Карта кода](code-map.md) |
+| Как устроены данные и синхронизация? | [Архитектура](current-architecture.md), [данные](data-model.md), [синхронизация](sync-model.md) и документ затронутого компонента |
+| Как импортируется старая очередь и проверяются legacy-записи? | [Контракт legacy-миграции](legacy-migration.md), [реализация outbox](outbox-implementation.md) |
+| Что входит в JSON backup и как восстанавливается outbox? | [Резервная копия и восстановление](backup-restore.md) |
+| Как удаляются локальные данные аккаунта и что остаётся в legacy-источнике? | [Очистка локальных данных аккаунта](account-data-cleanup.md) |
+| Почему принято архитектурное решение? | [DECISIONS](../DECISIONS.md) и связанный ADR |
+| Как запустить, проверить и выпустить изменение? | [CONTRIBUTING](../CONTRIBUTING.md), затем [чек-лист выпуска](../RELEASE_CHECKLIST.md) |
+| Как перейти на новую схему личных покупок? | [Подготовительный сервер и миграция 0020](profile-cas-rollout.md) |
+| Как подготовить и проверить совместимый откат? | [Артефакт клиента, SW и Pages Worker](release-artifacts.md) |
+| Как проверить origin preview и изоляцию staging? | [Origin и приёмка окружения](staging-origin.md) |
+| Что проверяется в завершении mock API-тестов? | [Жизненный цикл mock API](mock-api-lifecycle.md) |
+| Как сессия AI Совета защищает серию запросов и её историю? | [Сессия и история AI Совета](ai-council-session.md) |
+| Как аккаунт и сессия ограничивают обращения поддержки? | [Сессия обращений](support-session.md) |
+| Как административная панель привязана к login-сессии? | [Сессия админ-панели](admin-session.md) |
+| Как настройки и Service Worker привязывают push к активной сессии? | [Сессия push-уведомлений](push-session.md) |
+| Как checkout и смена тарифа привязаны к login-сессии? | [Сессия оплаты](billing-session.md) |
+| Как выход и удаление аккаунта защищены при смене входа? | [Session guard account actions](account-lifecycle-session.md) |
+| Как Huawei OAuth, sync и профильные изменения привязаны к входу? | [Сессия Huawei Health](huawei-health-session.md), затем [wearable API](wearable-sync.md) |
+| С чего начать помощнику при следующей работе? | [AGENTS](../AGENTS.md), текущий статус, задача и её контракт |
+
+Сначала выбирается конкретная задача и её критерии готовности. После изменения
+кода обновляются затронутый контракт, TASKS и журнал с SHA и результатами.
+Краткий статус связывает эти документы; он не заменяет подробные контракты.
+Согласованный план, реализованный код, прошедший CI и выпуск отмечаются отдельно.
+
+## Рабочий цикл проекта
+
+1. Открыть [статус](project-status.md), сверить ветку, HEAD и рабочие правки.
+2. Выбрать один открытый пункт [TASKS](../TASKS.md) и прочитать его контракт.
+3. Найти исходники и тесты через [карту кода](code-map.md), воспроизвести дефект.
+4. Исправить код и выполнить проверки из [CONTRIBUTING](../CONTRIBUTING.md).
+5. Обновить контракт при изменении поведения, TASKS — при изменении готовности,
+   [журнал](stabilization-progress.md) — результатами с точным SHA.
+6. Сделать commit/push, проверить workflow нового HEAD и обновить статус результата.
+   Выпуск проверять отдельно по [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md).
+
+Каждый факт хранится в документе своего назначения; остальные файлы ссылаются
+на него. Новую функцию сначала описывают в PRODUCT и задаче с критериями
+приёмки. Архитектурное решение оформляют ADR, отдельный контракт — только
+если существующий документ его не покрывает. Секреты, токены и реальные
+пользовательские данные в MD не помещают.
+
+## Предыдущая успешная ревизия до P0.5
+
+Последний успешный CI до P0.5 callbacks — [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6):
+[run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли.
+Предыдущая acceptance JSON backup на `2aff6c3` также прошла CI, как и old/new
+migration smoke `00cd005`; каждый результат подтверждает только соответствующий
+SHA. См. [статус проекта](project-status.md). Более ранние проверки ниже
+привязаны к отдельным ревизиям.
+
+Текущий компонент — client AI callbacks для coach, плана и плато. Реализация
+опубликована в [`75e4d35`](https://github.com/Michael-edel/FitFocus/commit/75e4d35bb7ba48970eac6f20898f73108116215e).
+Точный [PR CI run 38379449644](https://github.com/Michael-edel/FitFocus/actions/runs/38379449644)
+завершился E2E failure: 463 browser passed / 9 skipped, один failed и три flaky;
+остальные CI-проверки прошли. Причина единственного failure — отсутствующий в
+weekly-menu fixture ответ на фоновый AI-report `wis_text`. После добавления
+mock-ответа локально прошёл weekly-menu spec Firefox 8/8, основной сценарий —
+5/5 повторов без retries. Фикстура закоммичена в [`ec29f41`](https://github.com/Michael-edel/FitFocus/commit/ec29f41c88045c1d7a933a461260744f9a641070);
+точный [PR CI run 38385161995](https://github.com/Michael-edel/FitFocus/actions/runs/38385161995)
+завершился success: 1115 unit / 198 файлов, 466 browser passed / 9 skipped.
+Один flaky тест — iPhone PWA preview-origin, с `route.fetch: socket hang up`; retry
+прошёл, причина неизвестна. Coach/plateau account-switch acceptance добавлена
+в [`9bc98ee`](https://github.com/Michael-edel/FitFocus/commit/9bc98ee43e14559fa9fd1578fdf939ba9292acbc)
+и прошла локально 6/6 на трёх desktop engines; её точный [CI run 38410002498](https://github.com/Michael-edel/FitFocus/actions/runs/38410002498)
+завершился success. [Контракт](ai-callback-sessions.md).
+
+Предыдущий компонент — недельный AI-отчёт, коммит `0b7062d`; его CI завершился
+E2E failure в [run 38357547143](https://github.com/Michael-edel/FitFocus/actions/runs/38357547143).
+Локальные проверки и ограничения этого компонента: [отдельный контракт](weekly-ai-report-session.md).
+Recovery UI acceptance расширена в [`4e2ccb7`](https://github.com/Michael-edel/FitFocus/commit/4e2ccb769d9e325abdfd3abf105f805f86520ac5):
+три основных E2E-файла прошли 189/189; после добавления multi-edit сценария
+`storage-durability.spec.ts` прошёл 70/70 на семи проектах, совокупно подтверждены
+196 проверок. [CI run 38352095311](https://github.com/Michael-edel/FitFocus/actions/runs/38352095311)
+на SHA `4e2ccb7` завершился success: 1092 unit / 197 файлов, 446 browser passed /
+9 skipped, три typecheck, build и 23 rollback-запроса; rollback-артефакт сохранён.
+Следующий commit [`fe0b528`](https://github.com/Michael-edel/FitFocus/commit/fe0b5287b533a4a725d83b5ac365ba37a72588e6)
+включил multi-edit сценарий. Его точный [CI run 38354517668](https://github.com/Michael-edel/FitFocus/actions/runs/38354517668)
+завершился success: 1092 unit / 197 файлов, 453 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и rollback-проверка прошли. См.
+[текущий статус](project-status.md).
+Семейное меню в `405238b`
+опубликовано и прошло CI; оставшаяся приёмка описана в
+[текущей работе](project-status.md#текущая-работа--семейное-меню).
+Результаты опубликованного коммита не переносятся на рабочее дерево.
+
+PWA-компонент опубликован в `8d32f12`;
+его [workflow](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)
+завершился success. Локальные результаты и ограничения находятся
+в [контракте PWA](pwa-updates.md) и [статусе](project-status.md#рабочее-дерево--обновление-pwa).
+Поправка первого SW-клиента `574de76` прошла CI. Удаление неиспользуемого
+SDK опубликовано в `98d4910`; локально до CI прошли 7/7 auth-shell
+и 7/7 forward SW-сценариев без retries. Результат CI приведён выше.
+[Новый артефакт отката](release-artifacts.md) закреплён за `98d4910`:
+82 файла; локально 28/28 fresh-install/rollback/forward на семи конфигурациях,
+workers=1/retries=0. HTTP/D1-переход `bd763ec` → архив `98d4910` прошёл
+23 запроса. Компонент опубликован в `bd763ec`, поправка workflow — в `5b90249`.
+CI выполнил 23 HTTP/D1-запроса и сохранил архив; скачанный ZIP и inventory
+82 файлов проверены. Flaky WebKit и staging остаются открытыми.
+Mock-фикстура опубликована в `085fcc1`; её приёмка и оставшиеся ограничения описаны
+[отдельно](mock-api-lifecycle.md).
 
 ## Область и достоверность
+
+Актуальные изменения ветки `fix/durable-outbox`, результаты CI и незавершённые
+проверки перечислены в [статусе проекта](project-status.md), а контракты компонентов
+закреплены за их собственными SHA. Базовый снимок ниже описывает исходную
+интеграционную ревизию; последующие изменения нужно читать вместе с ним.
 
 Фактическое описание сверено с ревизией
 [`810adb11b01447114de9f240c6e2d520f747470b`](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b)
@@ -16,30 +139,73 @@
 модули уже присутствующими в GitHub `main`. При интеграции кода снимок нужно
 обновить по фактическому diff и повторным проверкам.
 
-Пакет создаёт документацию. Он не реализует P0, не подтверждает staging,
-production-интеграции или отсутствие секретов. Результаты прошлых тестов
-в старом README относятся к указанным там датам и ревизиям.
+Документы описывают исходный снимок и последующие изменения с отдельными
+результатами. Они не подтверждают staging, production-интеграции или отсутствие
+секретов. Результаты прошлых тестов в архивном README относятся к указанным
+там датам и ревизиям.
+
+Актуальные SHA и результаты находятся в [статусе проекта](project-status.md).
+Исторические этапы и неуспешные проверки сохраняются в
+[журнале стабилизации](stabilization-progress.md); результат прежнего
+коммита не подтверждает новую рабочую версию.
 
 ## Что читать
 
-Последующее изменение к исходному снимку: [серверные поколения P0.7](state-generations.md)
-в ветке `fix/state-generations`. [Контракт API](../API_CONTRACTS.md) описывает
-эту ветку после миграции 0019; слияние и deploy проверяются отдельно.
+Текущий реализованный компонент `405238b` описан в
+[контракте семейного меню](family-menu-state.md) и [ADR-008](adr/ADR-008-family-menu-generation.md).
+Его PWA-приёмка и выпуск остаются открытыми; незакоммиченная подготовка
+обновления приложения отмечена [в статусе](project-status.md#рабочее-дерево--обновление-pwa).
+
+Предыдущий компонент `4736ff5` с валидацией `830caf4` описан в
+[контракте личных покупок](personal-menu-projection.md).
+[CI документирующей ревизии `2d1f480`](https://github.com/Michael-edel/FitFocus/actions/runs/38194485398)
+прошёл: 976 unit и 236 browser passed / 9 skips. Staging остаётся открытым.
+[Подготовительная версия и локально проверенный переход](profile-cas-rollout.md)
+фиксируются отдельно; общая приёмка сведена в [матрицу P0](verification-matrix.md).
+Точная ревизия, приёмка и оставшиеся шаги — в [статусе проекта](project-status.md).
+История предыдущих компонентов, включая неуспешные проверки, находится
+[в журнале](stabilization-progress.md). Условия совместимого серверного
+выпуска — в [API](../API_CONTRACTS.md) и [чек-листе](../RELEASE_CHECKLIST.md).
 
 | Документ | Назначение |
 |---|---|
+| [Обновление PWA](pwa-updates.md) | Явная активация custom SW, сохранность локальных операций, old/new HTTP-сценарий и границы проверки |
+| [JSON backup и restore](backup-restore.md) | Формат v3, пять IDB stores, атомарный restore, legacy proof и обратная совместимость |
+| [Версия и доставка семейного меню](family-menu-state.md) | Family/week CAS, единая outbox, preview, миграция 0021 и открытая приёмка |
+| [ADR-008](adr/ADR-008-family-menu-generation.md) | Одно семейное поколение, SQL-барьер прежних writers и IDB v3 |
+| [Текущее состояние](project-status.md) | Краткий статус проекта и следующий этап с границей проверенного кода |
+| [Матрица проверок P0](verification-matrix.md) | Подтверждённые части, связанные тесты и открытые критерии |
+| [Личное меню и покупки](personal-menu-projection.md) | Одна profile-операция, SQL-проекция, проверки и приёмка выпуска |
+| [Переход на схему покупок 0020](profile-cas-rollout.md) | Подготовительная версия CAS, последовательность выпуска и опасный откат reader |
+| [Сессии семьи](family-session.md) | Guarded family API, исходный login proof, lifetime и оставшиеся AI/callback lifecycle-проверки |
+| [ADR-007](adr/ADR-007-personal-menu-projection.md) | Причина выбора проекции, альтернативы и порядок совместимого выпуска |
+| [Карта кода](code-map.md) | Функции, основные модули, проверки и границы текущей реализации |
+| [Пользовательские записи](owned-state-writers.md) | 15 управляемых ключей, редакторы, удаление старого sender и границы profile/legacy |
+| [Сохранение профиля](profile-persistence.md) | Общая IDB-outbox, отдельный HTTP-контракт, form-draft и граница регистрации/lifecycle |
+| [Регистрация](registration-persistence.md) | Локальный commit до AI, canonical account, invite guard и собственный IDB-профиль при reload |
+| [Bootstrap/hydration](bootstrap-hydration.md) | Guarded HTTP-чтение, атомарный auth-fence, профиль и повторная загрузка во второй вкладке |
+| [AI и список покупок](ai-session-guard.md) | Серверная привязка account/session, реализация персонального меню, открытая приёмка и остальные writers |
+| [Клиентские AI callbacks](ai-callback-sessions.md) | Контракт coach/плана/плато и фото; полный PR CI `38634080772` прошёл (1153 unit, 583 browser passed / 95 skipped, 1 flaky retry); P0.5 lifecycle остаётся открыт |
+| [Сессия недельного AI-отчёта](weekly-ai-report-session.md) | Свежая сессия, guarded durable write, повтор и локальные проверки; остальные AI/family writers остаются открытыми |
+| [Сессия достижений](achievement-session.md) | Исходный login proof, scoped GET/POST, throttle-очередь и page lifetime |
 | [PRODUCT](../PRODUCT.md) | Пользовательская ценность, возможности и приоритет этапа |
 | [Текущая архитектура](current-architecture.md) | Реальное устройство проверенного кода |
 | [Модель данных](data-model.md) | Владение данными и существующие хранилища |
 | [Модель синхронизации](sync-model.md) | Текущее поведение, целевые гарантии и матрица приёмки |
 | [API_CONTRACTS](../API_CONTRACTS.md) | Действующие state/profile-контракты и их ограничения |
 | [TASKS](../TASKS.md) | P0/P1, зависимости и критерии готовности |
+| [CONTRIBUTING](../CONTRIBUTING.md) | Запуск, проверка и порядок изменений |
+| [AGENTS](../AGENTS.md) | Инструкции помощнику по работе с репозиторием |
 | [DECISIONS](../DECISIONS.md) | Журнал согласованных решений и статус внедрения |
 | [ADR-005](adr/ADR-005-durable-outbox.md) | Единая IDB-outbox и миграция legacy |
+| [Legacy migration](legacy-migration.md) | Реализованный импорт, его предусловия и ограничения |
+| [Реализация P0.8](outbox-implementation.md) | Проверенный фундамент и оставшиеся этапы подключения |
+| [Runtime state](runtime-state.md) | Атомарный repository, managed hydration, статусы сохранения и восстановление outbox |
+| [State sender](state-sender.md) | Исторический контракт sender шести ключей; расширение до 15 описано в пользовательских записях |
 | [Наблюдаемость](observability.md) | Что уже измеряется и что нужно добавить |
 | [RELEASE_CHECKLIST](../RELEASE_CHECKLIST.md) | Проверка, staging, выпуск и откат |
 
-Первое изменение реализации: **P0.1**, исправление зависимостей GitHub main
+Первым изменением реализации стал **P0.1**, исправление зависимостей GitHub main
 и проверки push при интеграции переработки. CI документации
 [на SHA 8b13b25](https://github.com/Michael-edel/FitFocus/actions/runs/37910803294)
 остановился на audit: 16 уязвимостей, остальные проверки пропущены.
@@ -50,8 +216,40 @@ production-интеграции или отсутствие секретов. Р
 [журнал стабилизации](stabilization-progress.md). Исторический audit failure
 выше сохранён как основание задачи; актуальный статус определяется по HEAD PR.
 
+Последующий клиентский этап: шесть ключей repository используют атомарные
+value/outbox, managed hydration сохраняет локальное намерение, UI показывает
+ошибки и ожидание. Серверный компонент PR #94 объединён коммитом `93f90c0`;
+зависимость PR #93 теперь проходит через #94 к #90. Проверки и ограничения:
+[runtime state](runtime-state.md). Следующий этап [sender](state-sender.md)
+подключён для шести ключей; оставшиеся writers и полный lifecycle ещё открыты.
+
+Следующее изменение [подключает остальные state-записи](owned-state-writers.md):
+15 управляемых ключей и удаление прежнего sender из текущей сборки.
+Фраза о незакрытых profile и runtime legacy-импорте относилась к той ревизии.
+Поздние изменения profile, registration, bootstrap и legacy runtime описаны ниже
+в отдельных контрактах. JSON backup v3 добавлен в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5)
+([формат и восстановление](backup-restore.md)); полное account-scoped удаление
+legacy evidence и UI конфликтов остаются открытыми по [текущему статусу](project-status.md).
+
+Следующий этап [подключает редактор профиля](profile-persistence.md) к той же
+IDB-outbox и sender. Удалена прежняя Promise-очередь profileSync; конфликт
+не повторяется с новой базой. Создание профиля в registrationFlow и полный
+auth/bootstrap/legacy lifecycle этим этапом не закрыты.
+
+Следующий этап [переводит регистрацию](registration-persistence.md) на эту
+outbox до AI-запроса и убирает угадывание владельца/перенос storage prefix
+при входе. HTTP bootstrap/state-hydration и auth-fence добавлены следующим
+компонентом `dac2de2`; [проверки и границы](bootstrap-hydration.md).
+Runtime legacy уже подключён: владелец выводится только из свежего `/api/me`,
+а отправка требует Service Worker подтверждения всех same-origin вкладок.
+Проверка настоящей legacy-записи на паре old/new bundles прошла локально 7/7;
+полный CI точного smoke SHA `00cd005` завершился success: 390 browser passed /
+9 skipped, 20,1 минуты ([run 38324638965](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965)).
+Также остаются другие callbacks и полный lifecycle.
+
 ## Прежние материалы
 
+[Архив README](history/README-2026-08-29.md),
 [ARCHITECTURE](../ARCHITECTURE.md), [ARCHITECTURE_V2](../ARCHITECTURE_V2.md)
 и [исторический roadmap](https://github.com/Michael-edel/FitFocus/blob/810adb11b01447114de9f240c6e2d520f747470b/docs/architecture-roadmap.md)
 содержат ранние описания и этапы переработки. При расхождениях состояние

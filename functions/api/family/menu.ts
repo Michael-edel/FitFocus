@@ -1,20 +1,21 @@
 // /api/family/menu
 // GET: returns shared menu for week + personalized portions for current user
 // POST: saves the family's weekly menu as the server source of truth
-import { requireUser } from '../_lib/auth';
+import { requireScopedStateUser, withSessionGuard } from '../_lib/state_session';
 import { requireDB, ensureUserRow, toApiError } from '../_lib/db';
 import { defaultFamilyMenuWeekStart, readFamilyMenu, saveFamilyMenu } from '../_lib/family_menu';
 import { familyResponse } from '../_lib/family_response';
 import { requestIdFor } from '../_lib/observability';
 import { readJsonRequest, RequestBodyTooLargeError } from '../_lib/request_body';
+import { familyMenuStateReady } from '../_lib/family_menu_state';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 const FAMILY_MENU_JSON_BODY_LIMIT_BYTES = 256 * 1024;
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+const handleGet: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
     await ensureUserRow(db, user);
 
@@ -25,7 +26,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       weekStart: requestedWeek || defaultFamilyMenuWeekStart(),
     });
     if (result.kind === 'invalid-week') return familyResponse('family.menu.read', requestId, { error: 'BAD_WEEK' }, 400);
-    if (result.kind === 'empty') return familyResponse('family.menu.read', requestId, { weekStart: result.weekStart, shared: null, portions: null }, 200);
+    if (result.kind === 'empty') return familyResponse('family.menu.read', requestId, { weekStart: result.weekStart, shared: null, portions: null,
+      ...(result.version === undefined ? {} : { version: result.version }) }, 200);
     return familyResponse('family.menu.read', requestId, {
       weekStart: result.weekStart,
       shared: result.shared,
@@ -33,15 +35,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.read', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.read', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   const requestId = requestIdFor(request);
   try {
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = requireDB(env);
+    if (await familyMenuStateReady(db)) return familyResponse('family.menu.save', requestId, { error: 'FAMILY_MENU_STATE_REQUIRED' }, 409);
     await ensureUserRow(db, user);
 
     let body: unknown = {};
@@ -55,10 +58,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
 
     const result = await saveFamilyMenu({ db, userId: user.sub, body });
-    if (result.kind === 'invalid') return familyResponse('family.menu.save', requestId, { error: result.error }, 400);
-    return familyResponse('family.menu.save', requestId, { ok: true, weekStart: result.weekStart, menuId: result.menuId }, 200);
+    if (result.kind === 'invalid') return familyResponse('family.menu.save', requestId, { error: result.error },
+      result.error === 'FAMILY_MENU_STATE_REQUIRED' ? 409 : result.error === 'BAD_MENU' ? 422 : 400);
+    if (result.kind === 'conflicted') return familyResponse('family.menu.save', requestId, { error: 'VERSION_CONFLICT', snapshot: result.snapshot }, 409);
+    return familyResponse('family.menu.save', requestId, { ok: true, weekStart: result.weekStart, menuId: result.menuId,
+      ...('version' in result ? { version: result.version, snapshot: result.snapshot } : {}),
+    }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.save', requestId, { error: apiErr }, apiErr.code === 'UNAUTH' ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.save', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
   }
 };
+
+export const onRequestGet: PagesFunction<Env> = async context =>
+  withSessionGuard(await handleGet(context), context.request, 'Family');
+
+export const onRequestPost: PagesFunction<Env> = async context =>
+  withSessionGuard(await handlePost(context), context.request, 'Family');

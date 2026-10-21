@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/weekly_menu/items';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type WeeklyMenuItemsContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -71,10 +72,13 @@ function makeDb() {
 
 async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: WeeklyMenuItemsContext = {
     request: new Request('https://fitfocus.test/api/weekly_menu/items', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', ...(requestId ? { 'X-Request-ID': requestId } : {}) },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json',
+        'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof,
+        ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -87,10 +91,11 @@ async function postItems(db: ReturnType<typeof makeDb>, body: Record<string, unk
 }
 
 describe('/api/weekly_menu/items', () => {
-  it('replaces items through a single batch write', async () => {
+  it('replaces family items through a single batch write', async () => {
     const db = makeDb();
     const response = await postItems(db, {
       week_start: '2026-06-22',
+      family_id: 'family-1',
       items: [
         { name: 'Овсянка', grams: 120 },
         { name: 'Банан', grams: 200 },
@@ -106,6 +111,15 @@ describe('/api/weekly_menu/items', () => {
     expect(db.batches[0].filter((stmt) => stmt.sql.includes('INSERT INTO weekly_menu_items'))).toHaveLength(2);
   });
 
+  it('rejects an old personal POST without replacing a profile-derived list', async () => {
+    const db = makeDb();
+    const response = await postItems(db, { week_start: '2026-06-22', items: [{ name: 'Old menu', grams: 10 }] }, 'retired-personal-writer');
+    expect(response.status).toBe(409);
+    expect(response.headers.get('X-Request-ID')).toBe('retired-personal-writer');
+    expect(await response.json()).toMatchObject({ error: 'PERSONAL_MENU_PROFILE_REQUIRED' });
+    expect(db.batches).toEqual([]);
+  });
+
   it('rejects malformed week_start', async () => {
     const db = makeDb();
     const response = await postItems(db, {
@@ -117,5 +131,78 @@ describe('/api/weekly_menu/items', () => {
     expect(response.headers.get('X-Request-ID')).toBe('weekly-menu-items-request-2');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_WEEK' });
     expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([
+    ['missing', { week_start: '2026-06-22', family_id: 'family-1' }],
+    ['not an array', { week_start: '2026-06-22', family_id: 'family-1', items: { name: 'Овсянка', grams: 120 } }],
+  ])('rejects a %s items field without deleting stored rows', async (_label, body) => {
+    const db = makeDb();
+    const response = await postItems(db, body);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEMS' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects a malformed item instead of replacing the list with valid neighbors only', async () => {
+    const db = makeDb();
+    const response = await postItems(db, {
+      week_start: '2026-06-22',
+      family_id: 'family-1',
+      items: [
+        { name: 'Овсянка', grams: 120 },
+        null,
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it.each([
+    { name: 'Овсянка', grams: '120' },
+    { name: '', grams: 120 },
+    { name: 'Овсянка', grams: 0 },
+  ])('rejects invalid weekly menu item fields before deleting stored rows', async item => {
+    const db = makeDb();
+    const response = await postItems(db, {
+      week_start: '2026-06-22',
+      family_id: 'family-1',
+      items: [item],
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('rejects over-limit weekly menu input without silently dropping the tail', async () => {
+    const db = makeDb();
+    const response = await postItems(db, {
+      week_start: '2026-06-22',
+      family_id: 'family-1',
+      items: Array.from({ length: 501 }, (_, index) => ({ name: `Item ${index}`, grams: 100 })),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'TOO_MANY_ITEMS' });
+    expect(db.batches).toHaveLength(0);
+  });
+
+  it('keeps an explicit empty array as the request to clear stored family items', async () => {
+    const db = makeDb();
+    const response = await postItems(db, {
+      week_start: '2026-06-22',
+      family_id: 'family-1',
+      items: [],
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, stored: 0, week_start: '2026-06-22' });
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0]).toHaveLength(1);
+    expect(db.batches[0][0].sql).toContain('DELETE FROM weekly_menu_items');
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet } from '../functions/api/shopping/list';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 
 type ShoppingListContext = Parameters<typeof onRequestGet>[0];
 
@@ -47,9 +48,10 @@ function makeDb() {
 
 async function getShoppingList(week: string, requestId: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: ShoppingListContext = {
     request: new Request(`https://fitfocus.test/api/shopping/list?week=${week}`, {
-      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId },
+      headers: { Cookie: `ff_session=${token}`, 'X-Request-ID': requestId, 'X-FitFocus-State-Account': 'user-1', 'X-FitFocus-State-Session': sessionProof },
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: makeDb() as unknown as D1Database },
     params: {},

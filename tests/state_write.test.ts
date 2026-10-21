@@ -16,6 +16,24 @@ describe('state write use case', () => {
     const items = Array.from({ length: 33 }, (_, index) => ({ key: `fitfocus_data_user-1_${index}`, value: '' }));
     expect(normalizeStateWrite({ items }, 'user-1')).toEqual({ ok: false, error: 'TOO_MANY_ITEMS' });
   });
+
+  it.each([null, undefined, 'not-an-item', 1, {}, { key: null }, { key: 1 }])(
+    'rejects malformed batch entries instead of silently omitting them: %j', (invalidItem) => {
+      expect(normalizeStateWrite({ items: [
+        { key: 'fitfocus_data_user-1_diary', value: '[]' },
+        invalidItem,
+      ] }, 'user-1')).toEqual({ ok: false, error: 'BAD_ITEM' });
+    },
+  );
+
+  it('preserves the explicit empty-key skip behavior while validating the other batch entries', () => {
+    expect(normalizeStateWrite({ items: [
+      { key: '', value: { ignored: true } },
+      { key: 'fitfocus_data_user-1_diary', value: '[]' },
+    ] }, 'user-1')).toEqual({ ok: true, items: [
+      { key: 'fitfocus_data_user-1_diary', value: '[]', baseVersion: 0 },
+    ] });
+  });
   it('normalizes a user-scoped state write and its version', () => {
     expect(normalizeStateWrite({
       key: 'fitfocus_data_user-1_diary',

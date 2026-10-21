@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp } from './support/appHarness';
 
 test('preserves keyboard focus in Windows forced-colors mode', async ({ page }, testInfo) => {

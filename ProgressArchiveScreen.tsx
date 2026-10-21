@@ -11,11 +11,14 @@ import {
   YAxis,
 } from 'recharts';
 import { toLocalDayKey } from './dateUtils';
+import { initialChartDimension } from './chartDimensions';
 import type { ProgressPhoto, UserProfile, WearableProvider } from './types';
 import { isRecord, parseJson } from './safeJson';
 
 type ProgressArchiveScreenProps = {
   currentUser: UserProfile | null;
+  allowCachedUiStateRestore?: boolean;
+  isCurrentSession: () => boolean | Promise<boolean>;
   weightHistory: UserProfile['weightHistory'];
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
@@ -60,6 +63,8 @@ const toDateKey = (iso?: string | null) => toLocalDayKey(iso);
 
 export default function ProgressArchiveScreen({
   currentUser,
+  allowCachedUiStateRestore = true,
+  isCurrentSession,
   weightHistory,
   measurementsHistory,
   progressPhotos,
@@ -78,8 +83,23 @@ export default function ProgressArchiveScreen({
   );
   const archiveSkipSaveRef = React.useRef(false);
   const [openSections, setOpenSections] = useState<Record<ArchiveSectionKey, boolean>>(defaultOpenSections);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() => typeof window !== 'undefined'
+    && window.matchMedia('(min-width: 768px)').matches);
 
   useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktopViewport(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!allowCachedUiStateRestore) {
+      archiveSkipSaveRef.current = true;
+      setOpenSections(defaultOpenSections());
+      return;
+    }
     try {
       archiveSkipSaveRef.current = true;
       const raw = window.localStorage.getItem(storageKey);
@@ -99,13 +119,15 @@ export default function ProgressArchiveScreen({
       archiveSkipSaveRef.current = true;
       setOpenSections(defaultOpenSections());
     }
-  }, [storageKey]);
+  }, [allowCachedUiStateRestore, storageKey]);
 
   const toggleSection = (section: ArchiveSectionKey) => {
+    if (!allowCachedUiStateRestore) return;
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
   };
 
   useEffect(() => {
+    if (!allowCachedUiStateRestore) return;
     if (archiveSkipSaveRef.current) {
       archiveSkipSaveRef.current = false;
       return;
@@ -115,7 +137,7 @@ export default function ProgressArchiveScreen({
     } catch {
       // Ignore storage failures and keep the archive usable.
     }
-  }, [openSections, storageKey]);
+  }, [allowCachedUiStateRestore, openSections, storageKey]);
 
   const measurementsSorted = useMemo(
     () =>
@@ -188,8 +210,9 @@ export default function ProgressArchiveScreen({
   }, [waistDiff, weightDiff]);
 
   const exportArchivePdf = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !allowCachedUiStateRestore || !await isCurrentSession()) return;
     const { downloadProgressArchivePdf } = await import('./pdf');
+    if (!await isCurrentSession()) return;
     await downloadProgressArchivePdf({
       userName: currentUser.name || 'Пользователь',
       generatedAt: new Date().toLocaleString('ru-RU'),
@@ -216,7 +239,7 @@ export default function ProgressArchiveScreen({
       wearableMetricsUpdatedAt,
       summary: progressSummary,
       timelineItems: archiveTimeline.slice(0, 8),
-    });
+    }, { isCurrentSession });
   };
 
   const providerLabel = (provider: WearableProvider) => {
@@ -584,18 +607,20 @@ export default function ProgressArchiveScreen({
 
         <div className={clsx('mt-5 h-[280px]', !openSections.trend && 'hidden md:block')}>
           {weightTrendData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weightTrendData}>
-                <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 4" />
-                <XAxis dataKey="date" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} domain={['auto', 'auto']} />
-                <Tooltip
-                  contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '16px', color: '#e2e8f0' }}
-                  labelStyle={{ color: '#cbd5e1' }}
-                />
-                <Line type="monotone" dataKey="weight" stroke="#818CF8" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            isDesktopViewport || openSections.trend ? (
+              <ResponsiveContainer width="100%" height="100%" initialDimension={initialChartDimension(280)}>
+                <LineChart data={weightTrendData}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 4" />
+                  <XAxis dataKey="date" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                  <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} domain={['auto', 'auto']} />
+                  <Tooltip
+                    contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '16px', color: '#e2e8f0' }}
+                    labelStyle={{ color: '#cbd5e1' }}
+                  />
+                  <Line type="monotone" dataKey="weight" stroke="#818CF8" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : null
           ) : (
             <div className="h-full rounded-[1.5rem] border border-dashed border-slate-800 bg-slate-950/30 px-4 py-8 text-slate-500 text-sm flex items-center justify-center">
               Пока нет данных по весу для графика.

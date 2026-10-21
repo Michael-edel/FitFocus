@@ -4,6 +4,9 @@ import {
   WEEKLY_MENU_GENERATION_ERROR,
 } from '../features/ai/useWeeklyMenuGeneration';
 import type { UserProfile } from '../types';
+import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
+import type { AiSession } from '../services/aiSession';
+import { SessionReadError } from '../storage/sessionRead';
 
 const user = {
   id: 'user-1',
@@ -11,14 +14,25 @@ const user = {
   aiPlan: { title: 'План' },
 } as UserProfile;
 
+function scope() {
+  const controller = new AbortController();
+  const session: AiSession = { guard: { accountId: user.id, sessionEpoch: 'scope', serverSessionId: 'a'.repeat(64), authFence: 1 },
+    controller, isCurrentSession: () => true, outbox: new DurableOutbox() };
+  return { controller, isCurrentSession: () => true, canCommitProfile: () => true,
+    prepareSession: async () => session };
+}
+
 describe('weekly menu generation feature', () => {
   it('persists a generated menu and records the achievement signal', async () => {
     const calls: string[] = [];
     const menu = { days: [] } as Awaited<ReturnType<typeof import('../geminiService').generateWeeklyMenu>>;
     const result = await generatePersonalWeeklyMenu({
+      ...scope(),
       currentUser: user,
-      persistUser: (updated) => {
+      persistUser: async (action) => {
+        const updated = typeof action === 'function' ? action(user) : action;
         calls.push(`persist:${updated.aiPlan?.weeklyMenu === menu}`);
+        return { status: 'pending' } as OutboxOperation;
       },
       checkAchievements: (trigger, context) => {
         calls.push(`achievement:${trigger}:${context.hasWeeklyMenu}`);
@@ -41,8 +55,9 @@ describe('weekly menu generation feature', () => {
   it('keeps the existing profile and exposes a useful error when generation fails', async () => {
     const calls: string[] = [];
     await expect(generatePersonalWeeklyMenu({
+      ...scope(),
       currentUser: user,
-      persistUser: () => calls.push('persist'),
+      persistUser: async () => { calls.push('persist'); return null; },
       checkAchievements: () => calls.push('achievement'),
       setLoading: (value) => calls.push(`loading:${value}`),
       setError: (value) => calls.push(`error:${value}`),
@@ -57,11 +72,27 @@ describe('weekly menu generation feature', () => {
     ]);
   });
 
+  it('does not show a generation error when a stale login session rejects the AI response', async () => {
+    const calls: string[] = [];
+    await expect(generatePersonalWeeklyMenu({
+      ...scope(),
+      currentUser: user,
+      persistUser: async () => { calls.push('persist'); return { status: 'pending' } as OutboxOperation; },
+      checkAchievements: () => calls.push('achievement'),
+      setLoading: (value) => calls.push(`loading:${value}`),
+      setError: (value) => calls.push(`error:${value}`),
+      requestMenu: async () => { throw new SessionReadError('session'); },
+    })).resolves.toBeNull();
+
+    expect(calls).toEqual(['error:null', 'loading:true', 'loading:false']);
+  });
+
   it('does nothing until the user has an AI plan', async () => {
     const calls: string[] = [];
     await expect(generatePersonalWeeklyMenu({
+      ...scope(),
       currentUser: { ...user, aiPlan: undefined },
-      persistUser: () => calls.push('persist'),
+      persistUser: async () => { calls.push('persist'); return null; },
       checkAchievements: () => calls.push('achievement'),
       setLoading: () => calls.push('loading'),
       setError: () => calls.push('error'),

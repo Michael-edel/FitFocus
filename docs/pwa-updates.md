@@ -1,0 +1,357 @@
+# Обновление PWA без фоновой перезагрузки формы
+
+Обновлено: 16.10.2026. База изменения — `60c54219c98069099d7125225c4332a7a00f1b05`,
+ветка `fix/durable-outbox`. Это следующий компонент после семейного CAS
+`405238b`, а не подтверждение выпуска. Опубликованный SHA, CI и оставшаяся
+работа фиксируются [в статусе проекта](project-status.md).
+
+## Durable outbox после offline холодного открытия — 16.10.2026
+
+Коммит [`252bd08`](https://github.com/Michael-edel/FitFocus/commit/252bd082946ea86dbd51f4c862f6aad08a9d3f8a)
+добавляет E2E [`pwa-offline-durability.spec.ts`](../e2e/pwa-offline-durability.spec.ts),
+который проверяет production bundle с настоящим Service Worker: после записи settings
+браузер отключается от сети, исходная вкладка закрывается, а новая открывается
+offline под тем же worker. IndexedDB сохраняет исходные opId, payload и
+baseVersion; после восстановления сети сервер принимает ту же операцию, а
+outbox очищается. Локально прошло 4/4 профиля Chromium, Firefox и Android
+Chrome/PWA. Три WebKit профиля пропущены из-за внутренней ошибки Playwright при
+offline reload/cold navigation. Это browser offline emulation с локальным HTTP
+fixture, не проверка физического устройства или staging. Коммит опубликован
+в `fix/durable-outbox`; full CI для точного PR SHA остаётся обязательной проверкой.
+
+Код опубликован в `8d32f12279039e5d549c6e3534f741b601084812`.
+[CI](https://github.com/Michael-edel/FitFocus/actions/runs/38224847501)
+завершился success: 1043 unit / 192 файла, 341 browser passed / 9 skips,
+16,6 мин browser; проверены статус и логи job 114730233874.
+
+## WebKit offline cold-reopen после upstream fix — 16.10.2026
+
+Playwright исправил offline Service Worker navigation в
+[`#42894`](https://github.com/microsoft/playwright/pull/42894), включив fix в
+ветку v1.64. FitFocus обновляет `@playwright/test` с 1.61.1 на 1.64.1; на этой
+версии `e2e/pwa-offline-durability.spec.ts` проверяет настоящий browser offline
+через `context.setOffline(true)` и контролируемый Service Worker. Все семь
+desktop/mobile/PWA профилей прошли без retries: `navigator.onLine` false,
+навигация отдается Service Worker cache, тот же `opId`/payload/baseVersion
+сохраняются в IndexedDB, а после возврата сети операция подтверждается.
+`e2e/pwa-update.spec.ts` тоже прошёл 7/7 без retries. Typecheck и `npm audit`
+(0 уязвимостей) прошли; `npm ci --dry-run --ignore-scripts` подтвердил lockfile.
+
+Обновление Playwright и тестов ещё локальное; CI #1459 проверяет предшествующий
+PR head `754b793` на Playwright 1.61.1. Новый runner требует точного CI после
+push. Browser emulation и synthetic API не заменяют физическое устройство,
+OAuth или staging.
+
+## Проблема
+
+Проект использует `injectManifest` и собственный `sw.ts`. Прежний блок
+`workbox.skipWaiting` относился к генерации worker и не добавлял обработчик
+активации в этот исходник. `registerType: autoUpdate` также не вызывал
+клиентский prompt-путь `onNeedRefresh`. Новая версия могла оставаться в
+`waiting`, пока открыты вкладки. Простая автоматическая активация создавала
+бы риск перезагрузки формы с несохранённым вводом.
+
+## Поведение
+
+1. После установки нового worker приложение предлагает обновление.
+2. До нажатия «Обновить приложение» worker остаётся в `waiting`.
+   Фоновая проверка доступности новой версии не активирует его.
+3. Уведомление просит сохранить изменения во всех открытых вкладках.
+   «Позже» скрывает уведомление; при следующей загрузке страницы ожидающее
+   обновление предлагается снова.
+4. Кнопка отправляет `SKIP_WAITING`. Обработчик в `sw.ts` вызывает
+   `skipWaiting`, а `clientsClaim` заменяет controller. Текущий клиент
+   перезагружает вкладку при замене controller, включая вкладку,
+   впервые установившую SW. Первое управление вкладкой не вызывает reload.
+5. Повторное нажатие во время активации не запускает вторую попытку.
+   Ошибка или отсутствие `controllerchange` за 10 секунд разрешают повтор.
+   Поздняя ошибка завершённой попытки не меняет состояние новой попытки
+   и не отменяет уже произошедшую активацию.
+
+Активация действует на origin, поэтому другие открытые вкладки тоже могут
+перезагрузиться. Прежний клиент с `autoUpdate` делает это при активации
+нового worker. Уведомление не сохраняет формы автоматически: пользователь
+должен сохранить нужные изменения перед нажатием. Локально сохранённая
+операция и несохранённый черновик формы — разные состояния.
+
+Уведомление имеет непрозрачный фон текущей темы, чтобы текст предупреждения
+о синхронизации под ним не смешивался с текстом обновления. Оно закреплено
+поверх страницы и не сдвигает кнопку сохранения при появлении.
+
+## Реализация
+
+| Часть | Исходник |
+|---|---|
+| Режим prompt и custom worker | [vite.config.ts](../vite.config.ts), [sw.ts](../sw.ts) |
+| Регистрация, предложение и смена controller | [pwa.ts](../pwa.ts), [pwaRegistration](../services/pwaRegistration.ts), [unit](../tests/pwa_registration.test.ts) |
+| Состояние попытки, deadline и поздний ответ | [services/pwaUpdate.ts](../services/pwaUpdate.ts) |
+| Уведомление | [ui/PwaUpdateNotice.tsx](../ui/PwaUpdateNotice.tsx), [index.tsx](../index.tsx) |
+| Регрессии попыток активации | [unit-тесты](../tests/pwa_update.test.ts) |
+| Настоящий old/new SW и сохранность данных | [браузерный сценарий](../e2e/pwa-update.spec.ts) |
+| Предыдущая сборка и native HTTP | [preparePwaFixture](../e2e/support/preparePwaFixture.ts), [pwaReleaseServer](../e2e/support/pwaReleaseServer.ts), [API-фикстура](../e2e/support/pwaApiFixture.ts) |
+
+Первое изменение `8d32f12` не добавляло очередь, IDB-store, миграцию или dependency.
+Следующий компонент [артефакта отката](release-artifacts.md) добавляет закреплённый
+dev-tool Wrangler и native регистрацию SW вместо виртуального клиента Workbox.
+`injectRegister: false` предотвращает вторую регистрацию из HTML.
+Семейное намерение продолжает использовать существующую outbox и IDB v3.
+Само обновление worker не доказывает остановку старого Map writer. Текущий
+runtime отдельно опрашивает все same-origin окна по build id перед открытием
+legacy send gate; этот протокол описан в [контракте миграции](legacy-migration.md).
+Он не заменяет SQL-барьер старых семейных writers.
+
+## Проверки и границы
+
+Четыре unit-сценария проверяют явную активацию, двойное нажатие, повтор после
+отказа, timeout и поздние ошибки. До исправления две проверки позднего ответа
+падали; после исправления все четыре прошли.
+
+Браузерный сценарий собирает реальный опубликованный v2-клиент
+`3baac01c98bd82ab7a87c0e9c2999914db194590` из Git и текущий v3-клиент.
+Сборки используют один origin, browser context, scope SW и IndexedDB.
+Статика и синтетический API обслуживаются локальным HTTP-сервером.
+`navigator.serviceWorker` не подменяется; запросы не перехватываются
+через `page.route`, которое не покрывало SW-запросы WebKit.
+
+Сценарий проверяет ожидание явного действия, «Позже» и повторное предложение,
+сохранение ввода до активации, локальный commit профиля, перезагрузку обеих
+вкладок, профиль после обновления, IDB v3 и прежний `opId` семейной операции.
+Ожидающий снимок с 700 г сохраняется при недоступности API (введённый 503);
+API-ответов в CacheStorage нет. Проверяются title, содержимое, отсутствие
+framework overlay, ошибки консоли и desktop/mobile screenshots.
+
+Прогон семи конфигураций и связанных семейных сценариев прошёл: 63/63,
+workers=1, retries=0, 12,2 мин. Из них семь используют настоящий old/new SW
+и native HTTP; остальные 56 — существующие семейные проверки с mock API.
+Дополнительно сценарий усилен потерей одного `SKIP_WAITING`: настоящий SW
+и сеть сохранены, подменено только отправление первого сообщения. Проверяются
+отсутствие reload, сохранность черновика/операции при deadline и успешный
+повтор. Усиленный прогон прошёл 7/7, workers=1/retries=0, 5,1 мин;
+ошибок приложения и неожиданного API не было, введённые 503 сохранены в диагностике.
+Полный unit-прогон прошёл: 1043 теста / 192 файла, maxWorkers=2; три typecheck,
+обязательные guards/schema/privacy и audit (0) прошли. CI точного
+опубликованного кандидата проверяется отдельно.
+Промежуточный native
+прогон: 6 passed / 1 failed из-за Firefox layout-warning при раннем обращении
+к новой странице. После ожидания load Firefox и iPhone Safari прошли 2/2;
+предупреждение не фильтровалось. Первый прогон с route-моками
+(3 passed / 4 failed) сохранён
+как диагностика и не считается приёмкой реального HTTP-сценария.
+
+Standalone моделируется через display mode; это не установка на устройстве.
+Синтетический HTTP API не подтверждает OAuth, Worker/D1 или staging.
+Реальный BFCache, миграция legacy intent через настоящую пару old/new bundles,
+совместимый rollback artifact, protected-main интеграция и выпуск остаются открытыми.
+Подробные условия — в [TASKS](../TASKS.md) и [чек-листе](../RELEASE_CHECKLIST.md).
+
+## Последующая проверка первого SW-клиента — 12.10.2026
+
+На базе `15b29c8` rollback-сценарий воспроизвёл ошибку `8d32f12`: controller
+заменялся, но вкладка, которая установила первый SW, не перезагружалась.
+Workbox `isUpdate` относился к первоначальной регистрации, не к текущей
+замене controller. Native регистрация теперь отслеживает идентичность
+реального controller; фоновая установка по-прежнему не активирует worker.
+Исправление опубликовано в `574de761e8ecf8017f7b111e9a48da66f59aa6c1`.
+Четыре unit-проверки регистрации прошли. Первый совместный browser-прогон:
+19 passed / 2 failed; оба Firefox rollback-сценария получили layout-warning
+из-за DOM-проверки до завершения reload. После ожидания framenavigated/load
+до DOM диагностика Firefox/iPhone Safari с двумя вкладками прошла 4/4,
+workers=1, retries=0. Предупреждение не фильтровалось.
+[Контракт и проверки артефакта](release-artifacts.md).
+
+Опубликованный `574de76` прошёл
+[CI 38234201581](https://github.com/Michael-edel/FitFocus/actions/runs/38234201581):
+1047 unit / 193 файла, 341 browser passed / 9 skips, 15,9 мин browser.
+Проверены статус и логи job 114761279116; два preview `ECONNREFUSED`
+сохранены как открытая проблема teardown. Новые rollback-сценарии рабочего
+дерева в этот CI не входили; их текущий результат — в
+[статусе компонента](project-status.md#артефакт-отката--приёмка).
+
+## Неиспользуемый Google SDK — 12.10.2026
+
+Из `index.html` удалён безусловный `accounts.google.com/gsi/client`.
+Текущий клиент не вызывает GIS: [кнопка входа](../OAuthSignInButton.tsx)
+переходит на [серверный OAuth start](../functions/api/auth/google/start.ts).
+Неавторизованный shell и авторизованная PWA не загружают лишний SDK.
+Auth-shell использует native HTTP с настоящим SW, проверяет переход кнопки,
+invite/redirect и pending-oauth. Реальный Google OAuth остаётся staging gate.
+Первый uncontrolled-клиент исторической v2-сборки получает синтетический
+ответ только для её внешнего GIS-loader; текущий клиент SDK не запрашивает.
+App/SW bytes остаются исходными. Обе вкладки после обновления проверяются
+по JS кандидата, а DOM читается после reload/load.
+Результаты RED/GREEN, ошибки фикстуры и новая база отката описаны
+[в журнале](stabilization-progress.md#удаление-лишней-сетевой-зависимости-pwa--12102026).
+
+## Повторное исследование Firefox IndexedDB timeout — 12.10.2026
+
+Исторический Firefox timeout на `saved(page)` перед активацией SW остаётся
+открытым: старый CI `98d4910` прошёл сценарий лишь с retry, а его начальный
+trace не сохранён. На опубликованном `076f4ac` точечный локальный запуск
+`pwa-update.spec.ts` в desktop Firefox с `workers=1/retries=0` прошёл 1/1.
+Три повтора дали 2 passed / 1 timeout на третьем `saved(page)` (строка 56);
+trace, видео, два снимка и DOM error context сохранены во внешнем каталоге.
+
+Failure snapshot показывает живой экран семьи; fixture получила ожидаемые
+503 от удерживаемого API. Ошибка произошла внутри `page.evaluate` вокруг
+`indexedDB.open('fitfocus-user-state-v1')`; старый trace не различает pending
+open и запросы последующей readonly-транзакции. Он не доказывает блокировку
+versionchange. После этого добавлена тестовая диагностика `blocked`,
+`upgradeneeded`, `versionchange`, close и отдельных стадий чтения, не меняющая
+продуктовый storage или таймауты.
+
+После добавления логов open/versionchange следующие прогоны дали 3/3, 6/6,
+8/8 (17 проходов); со стадиями readonly-чтения дополнительно прошёл 1/1.
+Все без retries. Сбой с новыми событиями пока не воспроизведён,
+поэтому причина не установлена и критерий задачи остаётся открытым.
+Typecheck прошёл. Логи и trace — в `outputs/pwa-firefox-repeat3-076`,
+`outputs/pwa-firefox-idb-diagnostics`, `outputs/pwa-firefox-idb-trace6`,
+`outputs/pwa-firefox-idb-trace8` и `outputs/pwa-firefox-saved-diagnostics-final`
+внешнего каталога `C:\Users\User\Documents\Codex\2026-09-17\yf`.
+
+### Дополнение по сохранённому Firefox trace — 21.10.2026
+
+Trace из `outputs/pwa-firefox-repeat3-076` удалось разобрать позднее. Он
+показывает, что `saved(page)` завис примерно на **87,9 с** внутри отдельного
+`indexedDB.open('fitfocus-user-state-v1')`, вызванного E2E-помощником в
+`page.evaluate`. Снимок страницы в момент отказа показывает живой экран семьи.
+Значит, trace указывает на зависание дополнительного тестового чтения, а не
+подтверждает остановку UI приложения. Он не устанавливает, почему Firefox
+задержал этот независимый open; блокировка `versionchange` также не доказана.
+
+Локальный follow-up в diagnostic mode запрещает помощнику открывать отдельное
+соединение: он повторно использует connection приложения и быстро сообщает
+`APP_DATABASE_CONNECTION_NOT_CAPTURED`, если приложение не успело его
+зарегистрировать. PWA-тест теперь проверяет захват connection у обеих вкладок до
+чтения состояния; failure diagnostic helper использует то же правило. Целевые
+Firefox-повторы прошли **3/3**, вся `pwa-update.spec.ts` — **10 passed / 4
+skipped**, без retries; `npm run typecheck` и `git diff --check` прошли.
+Production-код не менялся. Точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для `58f4d30` завершился success: 1469 unit tests / 216 файлов, 1627 browser
+passed / 74 skipped, native Chrome BFCache 1/1 и rollback/CAS HTTP 23/23; audit,
+guards, три typecheck и build также прошли. Историческая причина прежней задержки
+Firefox не доказана, поэтому P0.9 остаётся открытым.
+
+На рабочей ветке `47da77c` desktop Firefox сценарий дополнительно прошёл
+3/3 и 8/8 с IDB-логами (`workers=1/retries=0`). Для сравнения без влияния
+диагностических listeners временно восстановили `pwa-update.spec.ts` и
+`familyHarness.ts` из `076f4ac`; этот uninstrumented вариант на том же
+клиентском bundle прошёл 3/3 и 8/8, также без retries. Исторический сбой
+не воспроизвёлся ни в одной из 22 попыток на этой базе; это не доказывает
+исправление, поскольку первичная причина по-прежнему неизвестна.
+
+## Повторная проверка WebKit pageerror при PWA update — 12.10.2026
+
+Исторический desktop WebKit pageerror `/api/family/menu/state` возник
+в CI `5b90249` после ожидаемого ответа 503 и во время нажатия явного обновления.
+На локальном trace этого CI виден один 503 PUT перед pageerror. Последующий CI
+`7109dcf` прошёл полностью без flaky, но сам по себе не доказывает исправление.
+
+На рабочем дереве поверх `7109dcf` E2E fixture удерживает native HTTP PUT
+на 5 секунд. Тест дожидается `status: sending`, предлагает обновление настоящего
+Service Worker, затем проверяет reload, сохранённые `opId` и payload, ошибки
+страницы и неожиданную сетевую активность. Fixture считает разорванный native
+ответ; каждый повтор требует увидеть такой разрыв. Desktop WebKit прошёл 3/3,
+`workers=1/retries=0`, за 1,5 мин. В итоговом рабочем прогоне pageerror не было.
+Рабочий каталог старого release artifact —
+`C:\Users\User\Documents\Codex\2026-09-17\yf\outputs\rollback-98d4910-v1`.
+
+Проверка подтверждает только сценарий обновления при отправляемой семейной
+операции. Исторический pageerror не воспроизведён, его первопричина не
+установлена; P0.9 остаётся открытым. E2E fixture и diagnostics опубликованы
+в `47da77c`; [CI](https://github.com/Michael-edel/FitFocus/actions/runs/38280645353)
+завершился success: 383 browser passed / 9 skips, без flaky и proxy errors.
+
+## Runtime legacy writer fence — 13.10.2026
+
+В новой сборке StateSync запускает legacy-импорт после свежего `/api/me` proof.
+Service Worker опрашивает каждое same-origin окно; пока хотя бы одна вкладка
+не подтверждает текущий build id, runtime сохраняет операцию локально и не
+отправляет её. Sender ждёт окончания миграции и повторно проверяет read guard,
+чтобы две стартующие вкладки не создавали друг другу ложную auth-паузу.
+
+Локальный `pwa-update.spec.ts` проверяет настоящие старую/новую PWA-сборки на
+одном origin. До обновления старая вкладка закрывает отправку; после reload
+обе вкладки подтверждают текущий build id, durable family intent и профиль
+сохранены. Chromium, Firefox и WebKit прошли по одному запуску. API-фикстура
+оставлена в offline-состоянии, поэтому очередь остаётся pending. Сценарий пока
+не помещает настоящую запись в `fitfocus.remote-kv-outbox.v1`; полный legacy
+record migration smoke остаётся открытым.
+
+В Firefox во время навигации возникает сообщение об IndexedDB-транзакции,
+прерванной переходом страницы; тест принимает только этот точный browser warning
+после проверки сохранённых `opId` и profile. В WebKit встречается сообщение
+access-control для `/api/me`, но Playwright не фиксирует failed request, а
+same-origin ответ имеет статус 200; тест оставляет узкий фильтр, остальные
+ошибки консоли продолжают валить сценарий. Результат последующего полного CI
+runtime-изменений описан в разделе ниже.
+
+## Повтор после CI `d28b3e4` — 13.10.2026
+
+Полный CI [завершился failure](https://github.com/Michael-edel/FitFocus/actions/runs/38295991884):
+в E2E были ошибки в новых PWA-проверках на iPhone/WebKit и Firefox. Для iPhone
+конфигураций Playwright не предоставлял ожидаемый `browserName`, поэтому тест
+не распознавал WebKit-предупреждения. Проверки теперь определяют WebKit по
+именам проектов. Rollback-тест отдельно фиксирует отменённые навигацией запросы
+`/api/me`, проверяет успешный ответ после rollback в обеих вкладках и сохраняет
+ошибки других запросов как failures. Для Firefox учитывается только точный
+`NS_BINDING_ABORTED` для `/api/me` и известное сообщение IDB о навигации;
+сохранность операции и профиля проверяется отдельно. Чтение IDB-фикстуры weekly
+menu теперь ждёт завершения readonly-транзакции.
+
+Локальные повторные прогоны без retries: PWA update — 7/7 проектов, PWA rollback —
+14/14 запусков по семи проектам. Также combined owned-state и weekly-menu прошли
+77/77. Эти результаты проверяют исправленные E2E-сценарии локально; полный CI
+коммита `a048289` завершился success: 382 browser passed / 9 skips за 17,6 мин,
+но summary отметил один flaky в WebKit conflicted rollback: первая попытка ждала
+перехода pending → conflicted и истекла, retry прошёл. В тестовой фикстуре это
+устранено прямым ответом 409 на первую family-запись, минуя случайную гонку с
+повтором после offline 503. Изменение прошло focused WebKit 3/3 локально; его
+полный CI следует за новым коммитом. Тест update по-прежнему не помещает реальную
+legacy-запись в `fitfocus.remote-kv-outbox.v1`, поэтому миграционный smoke остаётся
+открытым.
+
+## CI `649056d` и sender follow-up — 13.10.2026
+
+Полный [CI run 38309057601](https://github.com/Michael-edel/FitFocus/actions/runs/38309057601)
+на `649056db8ebbcfc3b9a62b7864c74d0d118dde79` завершился success: 382 browser
+passed / 9 skipped за 14,9 мин. Summary отметил один flaky в Firefox weekly-menu;
+retry прошёл. WebKit rollback flaky из предыдущего CI после детерминированного
+ответа 409 в фикстуре здесь не повторился.
+
+После CI локально установлен источник Firefox сбоя sender: `TransactionInactiveError`
+возникал, когда независимый IDB-запрос ставился после `await` предыдущего запроса.
+В `storage/durableOutbox.ts` независимые чтения `sessionState`, принятия сессии,
+claim и finish теперь ставятся заранее. Commit `8fae1008d2a9b220cc0052499271b07441ac29ac`
+прошёл 56 сценариев weekly-menu на семи браузерных проектах (`retries=0`),
+193 относящихся unit-теста и typecheck. Полный [CI run 38316655963](https://github.com/Michael-edel/FitFocus/actions/runs/38316655963)
+на опубликованной ревизии `ca8ecb1`, содержащей этот код, завершился success:
+1068 unit / 196 файлов и 383 browser passed / 9 skipped за 13,9 мин.
+В описанном прогоне на `ca8ecb1` настоящая legacy-запись старого bundle ещё не
+проверялась; следующий smoke добавлен ниже.
+
+## Old/new legacy intent migration — 13.10.2026
+
+Последующий [smoke](legacy-migration.md#browser-acceptance--13102026) создаёт
+pending intent действием старого bundle и проверяет реальный импорт в новой
+сборке на одном origin. Он прошёл 7/7 Playwright-проектов, включая desktop,
+Android/iPhone и PWA-конфигурации (`workers=1/retries=0`). Подтверждены owner,
+quarantine, неизменность legacy snapshot, закрытый send gate до обновления всех
+same-origin вкладок и ack новой операции после update. Новый CI ещё ожидается;
+этот API fixture не подтверждает OAuth/D1 или staging.
+
+## Offline retry и ошибки lifecycle при обновлении — 15.10.2026
+
+В rollback acceptance сервер возвращает первый `503`, удерживает retry, а новый
+кандидат активируется при `sending`. После update проверяется тот же `opId` и
+payload, прерывание старого запроса, отсутствие Playwright `pageerror`,
+`unhandledrejection` и `window.error`. `ad89020` прошёл локально 6/6 без retries
+на desktop WebKit, Chromium и Firefox.
+
+В точном CI parent SHA `96937ea` (`38729850933`) этот сценарий прошёл, но полный
+run отметил две flaky-проверки в других specs. В `aa4073c` фикстура delayed
+family-state GET перестала добавлять отдельный route поверх общего mock API;
+owned-state тест теперь сохраняет операцию в `pending` или пока действующем
+`sending` lease. После этого локально прошли полный family-menu spec 39/39 на
+трёх desktop engines, Firefox owned-state 4/4 и задержанный WebKit GET 8/8.
+Точный CI нового HEAD ещё ожидается. Реальное устройство, staging и причина
+исторического WebKit trace этим локальным acceptance не подтверждены.

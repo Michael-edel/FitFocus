@@ -8,7 +8,7 @@ export type HttpRetryOptions = {
 export class HttpRequestError extends Error {
   constructor(
     message: string,
-    readonly kind: 'network' | 'timeout',
+    readonly kind: 'network' | 'timeout' | 'aborted',
     readonly cause?: unknown,
   ) {
     super(message);
@@ -53,26 +53,51 @@ export async function fetchWithResilience(
   const retryDelayMs = Math.max(0, options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
   const { headers } = requestIdFor(init.headers);
 
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetchImpl(input, { ...init, headers, signal: controller.signal });
-      if (response.status < 500 || attempt === retries) return response;
-    } catch (error: unknown) {
-      const timedOut = controller.signal.aborted;
-      if (attempt === retries) {
-        throw new HttpRequestError(
-          timedOut ? 'HTTP request timed out' : 'HTTP request failed',
-          timedOut ? 'timeout' : 'network',
-          error,
-        );
-      }
-    } finally {
-      globalThis.clearTimeout(timeout);
-    }
+  const callerSignal = init.signal;
+  let activeController: AbortController | null = null;
+  const abortActiveRequest = () => activeController?.abort();
+  const throwAborted = (cause?: unknown): never => {
+    throw new HttpRequestError('HTTP request aborted', 'aborted', cause);
+  };
 
-    await wait(retryDelayMs);
+  if (callerSignal?.aborted) throwAborted(callerSignal.reason);
+  callerSignal?.addEventListener('abort', abortActiveRequest, { once: true });
+
+  try {
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      if (callerSignal?.aborted) throwAborted(callerSignal.reason);
+
+      const controller = new AbortController();
+      activeController = controller;
+      let timedOut = false;
+      const timeout = globalThis.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      try {
+        const response = await fetchImpl(input, { ...init, headers, signal: controller.signal });
+        if (callerSignal?.aborted) throwAborted(callerSignal.reason);
+        if (response.status < 500 || attempt === retries) return response;
+      } catch (error: unknown) {
+        if (callerSignal?.aborted) throwAborted(error);
+        if (controller.signal.aborted && !timedOut) throwAborted(error);
+        if (attempt === retries) {
+          throw new HttpRequestError(
+            timedOut ? 'HTTP request timed out' : 'HTTP request failed',
+            timedOut ? 'timeout' : 'network',
+            error,
+          );
+        }
+      } finally {
+        globalThis.clearTimeout(timeout);
+        if (activeController === controller) activeController = null;
+      }
+
+      await wait(retryDelayMs);
+      if (callerSignal?.aborted) throwAborted(callerSignal.reason);
+    }
+  } finally {
+    callerSignal?.removeEventListener('abort', abortActiveRequest);
   }
 
   throw new HttpRequestError('HTTP request failed', 'network');

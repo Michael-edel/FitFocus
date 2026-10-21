@@ -300,6 +300,16 @@ assertIncludes(
   "if (!input.isAdmin && ticket.user_id !== input.userId) return { kind: 'forbidden' };",
   'support attachment route must enforce owner/admin access',
 );
+assertIncludes(
+  supportAttachmentRoute,
+  "withSessionGuard(response, context.request, 'Support-Attachment')",
+  'support attachment responses must expose verifiable session scope markers',
+);
+assertIncludes(
+  supportAttachmentRoute,
+  'requireScopedStateUser(request, env)',
+  'support attachment reads must require the captured account/session proof',
+);
 
 const userSupport = [
   read('functions/api/support/feedback/my.ts'),
@@ -316,6 +326,11 @@ assertIncludes(
   userSupport,
   'attachmentResponseUrl(scope.ticketId, index, scope.messageId)',
   'user support thread must expose URLs for R2 message attachments',
+);
+assertIncludes(
+  userSupport,
+  'requireScopedStateUser',
+  'user support endpoints must require an explicit account/session proof',
 );
 assertIncludes(
   userSupport,
@@ -823,6 +838,11 @@ assertIncludes(
 );
 assertIncludes(
   supportFeedback,
+  'requireScopedStateUser',
+  'support feedback endpoints must require an explicit account/session proof',
+);
+assertIncludes(
+  supportFeedback,
   'BAD_PRIORITY',
   'admin support patch must reject invalid ticket priorities',
 );
@@ -985,6 +1005,9 @@ const billingCheckout = [
   read('functions/api/billing/checkout.ts'),
   read('functions/api/_lib/billing_checkout.ts'),
 ].join('\n');
+const billingAdminSubscription = read('functions/api/admin/subscription.ts');
+const mobileTokenRoute = read('functions/api/mobile/token.ts');
+const meRoute = read('functions/api/me.ts');
 assertIncludes(
   billingCheckout,
   'resolveCheckoutPlanPrice',
@@ -994,6 +1017,36 @@ assertIncludes(
   billingCheckout,
   'PRICE_PRO_YEARLY',
   'billing checkout must support yearly pro pricing',
+);
+assertIncludes(
+  billingCheckout,
+  'requireScopedStateUser(request, env)',
+  'billing checkout must require proof for the initiating account and session',
+);
+assertIncludes(
+  billingCheckout,
+  "withSessionGuard(response, context.request, 'Billing')",
+  'billing mutations must return verifiable account/session response markers',
+);
+assertIncludes(
+  billingAdminSubscription,
+  'requireScopedStateUser(request, env)',
+  'admin subscription mutation must require proof for the initiating account and session',
+);
+assertIncludes(
+  billingAdminSubscription,
+  "withSessionGuard(response, context.request, 'Billing')",
+  'admin subscription response must expose verifiable account/session markers',
+);
+assertIncludes(
+  mobileTokenRoute,
+  'requireScopedStateUser(request, env)',
+  'mobile bearer token issuance must require proof for the initiating account and session',
+);
+assertIncludes(
+  meRoute,
+  'billingSync: { protocol: 1, guard: 1 }',
+  'the session endpoint must advertise guarded billing support',
 );
 
 const familyMenu = [
@@ -1121,6 +1174,56 @@ if (shoppingBulkRoute.includes('INSERT INTO shopping_checked') && shoppingBulkRo
 }
 
 const stateRoute = read('functions/api/state.ts');
+const bootstrapRoute = read('functions/api/bootstrap.ts');
+assertIncludes(
+  bootstrapRoute,
+  'requireScopedStateUser(request, env)',
+  'bootstrap must require an explicit account/session proof',
+);
+assertNotIncludes(
+  bootstrapRoute,
+  'requireStateUser(request, env)',
+  'bootstrap must not preserve unscoped legacy authentication',
+);
+assertIncludes(
+  stateRoute,
+  'requireScopedStateUser(request, env)',
+  'state GET/PUT/DELETE must require an explicit account/session proof',
+);
+assertNotIncludes(
+  stateRoute,
+  'requireStateUser(request, env)',
+  'state endpoints must not preserve unscoped legacy authentication',
+);
+const logoutAllRoute = read('functions/api/logout_all.ts');
+assertIncludes(
+  logoutAllRoute,
+  'requireScopedStateUser(request, env)',
+  'logout-all must require explicit account/session proof before revoking sessions',
+);
+assertNotIncludes(
+  logoutAllRoute,
+  'requireStateUser(request, env)',
+  'logout-all must not preserve unscoped legacy authentication',
+);
+for (const route of [
+  'functions/api/wearable/huawei/start.ts',
+  'functions/api/wearable/huawei/status.ts',
+  'functions/api/wearable/huawei/sync.ts',
+  'functions/api/wearable/huawei/disconnect.ts',
+]) {
+  const source = read(route);
+  assertIncludes(
+    source,
+    'requireScopedStateUser(request, env)',
+    `${route} must require an explicit account/session proof`,
+  );
+  assertNotIncludes(
+    source,
+    'requireStateUser(request, env)',
+    `${route} must not preserve unscoped legacy authentication`,
+  );
+}
 const stateWrite = read('functions/api/_lib/state_write.ts');
 const stateStore = read('functions/api/_lib/state_store.ts');
 assertIncludes(
@@ -1175,6 +1278,16 @@ if (stateRoute.includes('INSERT INTO user_kv') && stateRoute.includes('bind(user
 
 const profileRoute = read('functions/api/profile.ts');
 const profileWrite = read('functions/api/_lib/profile_write.ts');
+assertIncludes(
+  profileRoute,
+  'requireScopedStateUser(request, env)',
+  'profile GET/PUT/PATCH must require an explicit account/session proof',
+);
+assertNotIncludes(
+  profileRoute,
+  'requireStateUser(request, env)',
+  'profile endpoints must not preserve unscoped legacy authentication',
+);
 assertIncludes(
   profileWrite,
   'Number.isInteger(parsedBaseVersion)',
@@ -1264,8 +1377,8 @@ assertIncludes(
 );
 assertIncludes(
   settingsScreen,
-  "fetchWithResilience('/api/push/status'",
-  'settings screen must load push runtime config from the server',
+  "requestPushJson(session, '/api/push/status'",
+  'settings screen must load push runtime config through its guarded session transport',
 );
 assertIncludes(
   settingsScreen,
@@ -1417,6 +1530,22 @@ assertIncludes(pushTransport, "import { fetchWithTimeout } from './external_fetc
 assertIncludes(pushTransport, 'fetchWithTimeout(subscription.endpoint', 'Web Push must deliver through the bounded transport');
 assertIncludes(pushTransport, 'timeoutMs: normalizePushDeliveryTimeoutMs(env.PUSH_DELIVERY_TIMEOUT_MS)', 'Web Push must pass its delivery deadline to the transport');
 assertIncludes(pushTransport, 'timeoutError: "PUSH_REQUEST_TIMEOUT"', 'Web Push must preserve its timeout error code');
+
+const adminGuard = read('functions/api/_lib/admin_guard.ts');
+assertIncludes(adminGuard, 'requireScopedStateUser(request, env)', 'admin request guard must require account/session proof before the role lookup');
+assertIncludes(adminGuard, 'assertScopedStateRequestScope(user, request)', 'admin request guard must require proof when the caller already resolved the session');
+const adminMiddleware = read('functions/api/admin/_middleware.ts');
+assertIncludes(adminMiddleware, "'STATE_SESSION_REQUIRED'", 'admin middleware must convert missing scope proof to a guarded 401');
+
+const logoutRoute = read('functions/api/logout.ts');
+assertIncludes(logoutRoute, 'if (!account || !session) return unauth()', 'ordinary logout must require both account and session proof headers');
+assertOrder(logoutRoute, 'if (!account || !session)', 'const token = readCookie', 'ordinary logout must reject missing proof before reading the cookie');
+assertOrder(logoutRoute, 'if (!account || !session)', 'revokeSession(env.DB, sid, sub)', 'ordinary logout must reject missing proof before revoking a session');
+assertNotIncludes(logoutRoute, 'Set-Cookie', 'ordinary logout must not clear a newer login cookie in a late response');
+
+const userDataExport = read('functions/api/export.ts');
+assertIncludes(userDataExport, 'requireScopedStateUser(request, env)', 'GDPR user data export must require the initiating account/session proof');
+assertIncludes(userDataExport, "withSessionGuard(response, context.request, 'Export')", 'GDPR user data export responses must carry verifiable scope markers');
 
 if (process.exitCode) process.exit();
 console.log('API invariants check passed.');
