@@ -8460,3 +8460,27 @@ iPhone Safari/PWA (`workers=1,retries=0`); `ai_action_scope` unit — **4/4**,
 root/domain/storage typecheck и `git diff --check` прошли. Этот результат локальный;
 точный CI новой ревизии ещё не подтверждён. PR #93 и защищённая `main` остаются
 открытыми; staging отсутствует.
+## P0.8 — backup не возвращает данные удалённого аккаунта, 21.10.2026
+
+Регрессия показала, что старый version-three backup мог вернуть account-scoped
+localStorage ключ после IDB tombstone. Отдельный воспроизводящий тест обнаружил
+второй путь: volume-only v3 backup с IndexedDB `values` без `accountId` тоже
+восстанавливал удалённый дневник, поскольку owner lookup раньше использовал
+только outbox и metadata. Version-two volume import нуждался в той же проверке.
+
+В коммите [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9)
+restore выводит владельца старой volume value из account-scoped ключа и сверяет
+tombstone в той же транзакции, где записывает строку. localStorage импорт фильтрует
+по текущим и переносимым tombstones до записи, повторно проверяет после IDB restore
+и возвращает прежнее значение, если tombstone пришёл во время импорта. Очистка
+аккаунта повторно сканирует его локальные ключи после IDB-транзакции, устраняя
+гонку с backup restore. Проверки также подтверждают, что близкий по имени аккаунт
+сохраняется, а связанные dynamic keys корректно определяют владельца.
+
+На чистой установке `npm ci` использован Vite 6.4.4 из lock-файла; `npm audit`
+сообщил 0 уязвимостей. Полный unit suite прошёл **1477/1477** в 217 файлах;
+root, domain-strict и storage-strict typecheck, API/auth/schema/privacy/admin
+guards и production build прошли. Локальный `git diff --check` также прошёл после
+документационных правок. Точный GitHub CI `671196e` ожидает публикации; run #1845
+для предшествующего `b896c2c` ещё выполняет browser matrix. PR #90 всё ещё
+требует одобряющее ревью для защищённой `main`; выделенного staging у проекта нет.

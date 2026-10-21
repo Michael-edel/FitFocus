@@ -4,6 +4,12 @@
 контракты и доказательства. Он не вводит новый план и не закрывает P0
 по наличию тестового файла.
 
+Локальный кодовый SHA [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9)
+прошёл 1477 unit-тестов / 217 файлов, root/domain/storage typecheck, audit,
+schema/privacy/auth/API guards и production build после `npm ci`. Точный CI
+этой ревизии ожидает push. Текущий запущенный CI #1845 относится к предыдущему
+SHA `b896c2c` и не подтверждает этот follow-up.
+
 Проверяемая ревизия тестового follow-up PR #93 —
 `58f4d309f7a8359c4233905cacdb49d6adb6f430`;
 его точный [CI #1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)

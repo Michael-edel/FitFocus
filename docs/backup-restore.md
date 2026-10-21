@@ -56,6 +56,15 @@ commit, включая изменения в других stores. Пустой �
 уже существующей legacy operation при наличии tombstone. Это не удаляет payload
 из общего legacy source/snapshot.
 
+Для строк `values` старого формата, где нет явного `accountId`, v3 restore выводит
+владельца из распознанного account-scoped volume key. Поэтому tombstone проверяется
+и для volume-only backup без outbox или owner metadata. Совместимые v1/v2 файлы
+проверяют тот же tombstone при атомарной записи volume values. Локальные ключи
+проверяются до импорта и ещё раз после него; если tombstone появился во время
+восстановления, импортированное значение удаляется или возвращается прежнее.
+Очистка аккаунта делает завершающий повторный проход по его localStorage ключам
+после IDB-транзакции, чтобы убрать запись, успевшую появиться во время удаления.
+
 localStorage не поддерживает транзакцию вместе с IndexedDB. Импорт сохраняет
 его предыдущие значения и восстанавливает их, если запись localStorage или
 IDB-восстановление завершились ошибкой. Атомарная граница новых очереди,
@@ -66,9 +75,18 @@ ledger, карантина, значений и meta — единая IndexedDB-
 
 `tests/backup.test.ts` покрывает экспорт/восстановление пяти stores, pending и
 unknown legacy-записи, недействительность старого writer proof, повторный
-импорт, фильтрацию backup после удаления аккаунта, rollback всех IDB stores
-при конфликте, возврат localStorage к прежнему значению, старый формат и
-пригодный для чтения скачиваемый JSON.
+импорт, запрет восстановления старых localStorage и IndexedDB данных удалённого
+аккаунта в v2/v3, сохранение соседнего аккаунта, rollback всех IDB stores при
+конфликте, возврат localStorage к прежнему значению, старый формат и пригодный
+для чтения скачиваемый JSON. `tests/local_privacy.test.ts` проверяет гонку записи
+backup во время tombstone удаления.
+
+Кодовый follow-up [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9)
+добавляет эти проверки и закрывает обнаруженный путь возврата volume-only v3
+данных без `accountId`. Локально на установленном из lock-файла Vite 6.4.4
+прошли 1477 unit-тестов / 217 файлов, три typecheck, dependency audit без
+уязвимостей, schema/privacy/auth/API guards и production build. Точный CI этого
+коммита ожидает публикации.
 
 На кодовом SHA [`38d169c`](https://github.com/Michael-edel/FitFocus/commit/38d169c)
 добавлен [браузерный сценарий](../e2e/durable-backup-restore.spec.ts) импорта

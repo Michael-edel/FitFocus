@@ -11,6 +11,16 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
+Локальный кодовый follow-up [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9)
+закрывает возврат удалённого аккаунта из старых localStorage и IndexedDB backup,
+включая volume-only v3 записи без явного владельца и гонку с account deletion.
+На чисто установленных зафиксированных зависимостях прошли 1477 unit-тестов,
+три typecheck, dependency audit, schema/privacy/auth/API guards и production
+build. Это локальная проверка; точный CI `671196e` ожидает push. Run #1845
+проверяет предыдущий SHA `b896c2c`; browser matrix ещё выполняется. PR #90
+остаётся без одобряющего ревью, требуемого защитой `main`; отдельного staging
+нет. Поэтому `main` не обновлён.
+
 Кодовый follow-up `7f534868584936067f12b0070adc874e5755be74` прошёл полный точный
 [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883),
 а docs HEAD `ed7100bbd50b15c2d2ede895ec59a1a99309ade8` прошёл

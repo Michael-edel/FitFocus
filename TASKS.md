@@ -2380,6 +2380,17 @@ all-client Service Worker fence, атомарные migration items и quarantin
     build прошли. Точный [CI #1665](https://github.com/Michael-edel/FitFocus/actions/runs/39171936916)
     для `856e3f5` выполняется; дополнительный negative unit в него не входит.
     Родительский P0.8 остаётся открытым до общей приёмки.
+  - [x] Не допускать возврата локальных данных после удаления аккаунта через
+    старый backup. В v1/v2/v3-импорте tombstone проверяется для localStorage и
+    IndexedDB; v3 определяет владельца volume-value по account-scoped ключу,
+    даже если строка старого формата не содержит `accountId`. Очистка повторно
+    сканирует localStorage после записи tombstone, закрывая гонку с импортом.
+    Регрессии воспроизведены до фикса и проверяют localStorage, IDB, версии v2/v3,
+    соседний аккаунт и гонку удаления. Коммит
+    [`671196e`](https://github.com/Michael-edel/FitFocus/commit/671196e5d80dd85929028a2378484f8781377ca9):
+    1477 unit / 217 файлов, три typecheck, audit, schema/privacy/auth/API guards
+    и build прошли локально. Точный CI ожидает публикации; общий P0.8 остаётся
+    открыт.
   [Граница текущего runtime](docs/runtime-state.md).
 
 Готово, когда IDB — единственный источник очереди, в том числе без Web Locks;
