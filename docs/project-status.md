@@ -11,25 +11,34 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
-Последняя проверенная ревизия тестового follow-up draft PR #93 —
-`58f4d309f7a8359c4233905cacdb49d6adb6f430`; последний production-code commit
-`16305bedbee49fdeb611fa69e9c0ad9625bf7b91` добавляет отдельную проверку
-реального Chrome BFCache: браузер должен восстановить сохранённый документ с
-`pageshow.persisted=true`, после чего FitFocus повторно запрашивает `/api/env`.
-Проверка прошла 1/1 локально в Chrome; обычные lifecycle E2E — 2/2, root
-typecheck и `git diff --check` прошли. CI #1829 для production-code commit
-завершился success. Точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
-для ревизии `58f4d30` завершился success: 1469 unit tests / 216 файлов,
-1627 browser passed / 74 skipped, native Chrome BFCache — 1/1, rollback/CAS
-HTTP — 23/23; audit, guards, три typecheck и build прошли. Сохранены
-[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12298829550)
-и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059/artifacts/12300230192).
+Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
+для `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился отказом только в двух
+browser acceptance: desktop Firefox не создал durable delete для очищенной истории
+Council, а Android Chrome обновил профиль из облака, но не показал sync notice.
+Целевой WebKit weekly-menu reload test прошёл после предыдущего test-only fix;
+остальные 1625 browser tests прошли, 74 были пропущены. Audit (0 уязвимостей),
+schema/privacy/auth/API guards, 1469 unit tests, три typecheck и build прошли.
+Артефакт диагностики сохранён в
+[CI #1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731/artifacts/12315576395).
 
-Последнее изменение проекта — dependency fix `4ed1d27` с Vite `6.4.4`.
-Точный [CI #1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880)
-прошёл полностью: npm audit — 0 уязвимостей, 1469 unit tests / 216 файлов,
-1627 browser passed / 74 skipped, native Chrome BFCache — 1/1 и rollback/CAS HTTP —
-23/23. Сохранены [browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
+В рабочей копии проверяется исправление двух границ: очистка Council опирается на
+транзакционный account/session guard outbox, а не на временный AI action scope;
+profile sync notice привязывается к подтверждённой сессии, а не к флагу готовности
+UI-кэша. Эти изменения ещё не опубликованы и не проверены CI. Локальные build/E2E
+не запускались согласно установленной границе security review; `git diff --check`
+проверяется перед коммитом.
+
+Ранее точный CI [#1832](https://github.com/Michael-edel/FitFocus/actions/runs/39489956059)
+для `58f4d30` завершился success: 1469 unit tests / 216 файлов, 1627 browser
+passed / 74 skipped, native Chrome BFCache — 1/1, rollback/CAS HTTP — 23/23;
+audit, guards, три typecheck и build прошли. Эти результаты относятся к SHA
+`58f4d30`, а не к текущей ревизии.
+
+Историческая проверка dependency fix `4ed1d27` с Vite `6.4.4` прошла в точном
+[CI #1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880):
+npm audit — 0 уязвимостей, 1469 unit tests / 216 файлов, 1627 browser passed /
+74 skipped, native Chrome BFCache — 1/1 и rollback/CAS HTTP — 23/23. Сохранены
+[browser diagnostics](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12305346172)
 и [rollback archive](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880/artifacts/12304419091).
 
 Документационный follow-up `be3ebe8` записывает результат #1834. Точный

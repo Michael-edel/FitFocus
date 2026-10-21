@@ -325,8 +325,13 @@ const App: React.FC = () => {
   const rootAccountSessionScope = allowCachedUiStateRestore && currentUser?.id
     ? accountSessionRenderKey(loginReadGuard, currentUser.id)
     : null;
+  // Sync feedback belongs to the authenticated session, even while the
+  // workspace is briefly withholding cached UI during session reconciliation.
+  const profileSyncNoteScope = currentUser?.id && loginReadGuard?.accountId === currentUser.id
+    ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+    : null;
   const { value: profileSyncNote, setValue: setProfileSyncNote } = useAccountScopedUiState<string | null>(
-    rootAccountSessionScope,
+    profileSyncNoteScope,
     null,
   );
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);

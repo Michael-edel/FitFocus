@@ -1,5 +1,28 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — два browser отказа точного CI #1839, 21.10.2026
+
+Точный workflow [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
+для SHA `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился с **1625 browser
+passed / 74 skipped / 2 failed**. Целевой WebKit weekly-menu reload recovery
+сценарий прошёл. Остальные gates также прошли: npm audit — 0 уязвимостей,
+schema/privacy/auth/API guards, 1469 unit tests, три typecheck и build.
+
+В desktop Firefox `owned-state.spec.ts` экран Council сохранил старую историю,
+а outbox после клика очистки оставался пустым. Trace подтвердил отсутствие
+durable delete и сохранённую active session; он не устанавливает точную причину,
+почему callback не поставил операцию. В candidate local clear отделён от AI
+action lifecycle и остаётся защищённым exact account/server-session/sessionEpoch
+проверками в транзакции outbox.
+
+В Android Chrome UI загрузил облачный профиль A, но не показал ожидаемый notice.
+Candidate привязывает это краткое сообщение к подтверждённой account/session
+scope, независимо от временного gate восстановления UI-кэша; account B и новая
+сессия по-прежнему не должны видеть старое сообщение. Изменения candidate ещё не
+опубликованы и не проверены. Локальные build/E2E не запускались в рамках границы
+security review; результат следующего точного CI будет записан отдельно.
+Сохранён [browser diagnostics artifact](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731/artifacts/12315576395).
+
 ## P0.9 — WebKit weekly-menu warning в CI #1838, 21.10.2026
 
 Точный workflow [#1838](https://github.com/Michael-edel/FitFocus/actions/runs/39518409932)

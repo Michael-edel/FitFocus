@@ -64,6 +64,7 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
   const canClearCouncilHistory = Boolean(sessionScopeKey && currentUser && loginGuard
     && loginGuard.accountId === currentUser.id);
   const requestGeneration = useRef(0);
+  const clearHistoryGeneration = useRef(0);
   const scope = useMemo(() => new AiActionScope(() => Boolean(sessionScopeKey && loginGuard
     && loginGuard.accountId === currentUser?.id && isCurrentSession())),
   [currentUser?.id, isCurrentSession, loginGuard, sessionScopeKey]);
@@ -105,10 +106,8 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
 
   const clearCouncilHistory = useCallback(() => {
     if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
-    const attempt = scope.begin();
-    if (!attempt) return;
-    const generation = ++requestGeneration.current;
-    const isCurrent = () => generation === requestGeneration.current && attempt.isCurrent();
+    const generation = ++clearHistoryGeneration.current;
+    const isCurrent = () => generation === clearHistoryGeneration.current;
     const showErrorIfActionCurrent = (message: string) => {
       if (isCurrent()) setCouncilError(message);
     };
@@ -119,8 +118,8 @@ export function useCouncilChat({ currentUser, foodDiary, habits, loginGuard, isC
       else showErrorIfActionCurrent('Не удалось очистить историю совета. Проверьте состояние хранилища.');
     }).catch((error: unknown) => {
       showErrorIfActionCurrent(errorMessage(error, 'Не удалось очистить историю совета.'));
-    }).finally(() => attempt.finish());
-  }, [currentUser, history.remove, loginGuard, scope, sessionScopeKey]);
+    });
+  }, [currentUser, history.remove, loginGuard, sessionScopeKey]);
 
   const handleCouncilSubmit = useCallback(async () => {
     if (!sessionScopeKey || !currentUser || !loginGuard || loginGuard.accountId !== currentUser.id) return;
