@@ -82,11 +82,14 @@ probe, но не объясняет задержку Firefox и не доказ�
 3/3, полный `pwa-update.spec.ts` — 10 passed / 4 skipped без retries, typecheck
 прошёл. Точный CI #1832 для `58f4d30` завершился success: полная browser matrix
 прошла 1627/1627 без отказов (74 явных skip); native BFCache — 1/1. Он
-подтверждает основной `saved(page)` путь на этой ревизии. Новый тестовый
-follow-up также удаляет независимый IDB open из failure-only `stateDebug`;
-его точный CI ожидает завершения run #1838. Причина внутренней задержки Firefox
-остаётся неизвестной. P0.9 открыт до завершения lifecycle, staging и release
-критериев.
+подтверждает основной `saved(page)` путь на этой ревизии. Следующий follow-up
+удаляет независимый IDB open из failure-only `stateDebug`; точный CI #1838 для
+него завершился отказом только в WebKit weekly-menu recovery. В trace warning
+`/api/me` возникает во время reload, но Playwright не присылает `requestfailed`.
+Текущая тестовая доработка фиксирует API-запросы, остававшиеся без response/finish
+в момент начала reload, и связывает warning с точным GET URL. Её точный CI ещё
+не завершён. Причина внутренней задержки Firefox остаётся неизвестной. P0.9 открыт
+до завершения lifecycle, staging и release критериев.
 
 Предыдущий follow-up `a560c6c` связывает точное WebKit reload warning с тем же
 GET `/api/me`, который начался до reload и завершился abort/cancel; прочие

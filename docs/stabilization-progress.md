@@ -1,5 +1,24 @@
 # Стабилизация: проверяемые изменения
 
+## P0.9 — WebKit weekly-menu warning в CI #1838, 21.10.2026
+
+Точный workflow [#1838](https://github.com/Michael-edel/FitFocus/actions/runs/39518409932)
+для прежней ревизии завершился одним browser failure: `weekly-menu-durability.spec.ts`
+в desktop WebKit восстановил сохранённое меню и прежний `opId`, но проверка warning
+не нашла `requestfailed` для `/api/me?t=…`. Остальные проверки workflow, включая
+1469 unit tests, typechecks и build, прошли; browser matrix сообщила 1626 passed /
+74 skipped.
+
+Сохранённый trace показывает `pageError` с WebKit `access control checks` во время
+reload и до завершения навигации. HAR не содержит response для точного URL, а
+Playwright не сообщил `requestfailed`; поэтому эта запись не доказывает, что запрос
+начался до reload. Тестовый follow-up отслеживает API request/response/finish и
+сохраняет точные GET-запросы, которые уже были в полёте при старте reload. Warning
+принимается только при совпадении URL с таким запросом либо с явным abort/cancel.
+Production-код не менялся. `git diff --check` прошёл; локальные build и E2E не
+запускались в рамках ранее установленной границы security review. Точный CI для
+follow-up ожидается после push.
+
 ## P0.9 — повтор Firefox PWA update timeout, 21.10.2026
 
 Сценарий `real service worker waits for an explicit update and preserves durable
