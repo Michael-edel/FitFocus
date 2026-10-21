@@ -1,5 +1,20 @@
 # Стабилизация и развитие FitFocus
 
+## Интеграционная ветка PR #96, 21.10.2026
+
+Текущая подготовленная ревизия — `25e8266f4c824fdf14a91ccc4befc94c1f61fcb3`
+в `fix/main-integration-20261019`; опубликованный P1 family fix —
+`1d96d17`. Собраны исправления backup/delete races, worker fence, stale
+delete feedback, Council readiness/profile feedback, preview build identity
+и Vite 6.4.4. Синхронизация offline-recovery теста исправлена без ослабления
+проверок. На подготовленной ревизии прошли 1506 unit / 219 файлов; независимые
+Sol-review завершены. Подробности и границы —
+[статус](docs/project-status.md) и [журнал](docs/stabilization-progress.md).
+Полный CI точного опубликованного SHA ещё требуется. Эти изменения не закрывают
+P0, staging/OAuth/D1, обязательный review, merge или release.
+
+Ниже сохранены прежний план и исторические результаты upstream.
+
 Обновлено: 20.10.2026. Текущий этап — **P0: стабилизация сохранности данных и
 приёмка полного lifecycle**. Последняя опубликованная ветка — `durable-outbox`,
 Draft PR [`#93`](https://github.com/Michael-edel/FitFocus/pull/93) →

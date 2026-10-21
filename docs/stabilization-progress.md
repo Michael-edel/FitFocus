@@ -1,5 +1,54 @@
 # Стабилизация: проверяемые изменения
 
+## PR #96 — исправления интеграции, 21.10.2026
+
+Ветка `fix/main-integration-20261019`, кодовая ревизия
+`25e8266f4c824fdf14a91ccc4befc94c1f61fcb3`. Основной исходный checkout
+с двумя прежними незакоммиченными E2E-файлами не изменялся; работа шла
+в отдельной копии. Новые локальные коммиты поверх опубликованного `1d96d17`:
+
+- `babdc84`: WebKit offline-recovery сбой воспроизведён; перед reload
+  ожидается pending retry той же операции после HTTP 503. Проверки recovered,
+  opId, доставки, очистки и warnings, retries и timeouts сохранены.
+  После исправления сценарий прошёл 7/7 проектов, workers=1, retries=0.
+- `2670d86`: controlling worker может ответить на challenge при activating;
+  redundant worker отвергается. Полный all-client/build proof сохранён.
+  Две регрессии падали до исправления; 94 связанных unit прошли.
+- `d23c532`: HTTP/protocol/network ошибки удаления не показываются в
+  новой сессии. Три регрессии падали до исправления; 10/10 unit прошли,
+  включая сообщения текущей сессии. Production delete не запускался.
+- `b70f17b`: Vite 6.4.4 по официальному npm tarball/integrity; изменение
+  ограничено package/lockfile. npm ci --ignore-scripts и audit: 0 vulnerabilities.
+  Причина — [CI 39600863961](https://github.com/Michael-edel/FitFocus/actions/runs/39600863961)
+  для `1d96d17` упал на новых Vite advisories до проверок кода.
+- `8d1cdaa`: Council Clear ждёт готовую сессию/cache scope; уведомление
+  профиля сохраняет account/server-session/epoch scope независимо от
+  временного cache gate. 24 targeted unit прошли.
+- `64cdcc7` и `f6409c8`: backup не воскрешает удалённый аккаунт из
+  localStorage, legacy/V3 или portable данных. Rollback выполняется внутри
+  meta transaction перед завершением, сериализуясь с deletion marker;
+  очистка повторяет sweep после async IDB и повторно проверяет legacy evidence.
+  Пройдены 235 связанных unit в 9 файлах после red regressions.
+- `25e8266`: preview показывает свою ветку/SHA и историю, не читает main
+  cache и не запрашивает main history. Три unit и Chromium E2E падали до
+  исправления; после исправления 13 version/auth unit и Chromium E2E прошли
+  на отдельной production сборке Vite 6.4.4.
+
+Все изменения проверены независимыми Sol-review; оставшихся findings нет.
+На объединённом `f6409c8` прошли schema (23 migrations/32 tables), privacy
+(29 tables), admin/auth/API guards, root/domain/storage typecheck и build.
+На `25e8266` полный unit-набор: **1506 passed, 219 files**; root typecheck, production build и preview identity E2E **7/7 проектов** (workers=1, retries=0) прошли. Это локальные
+результаты, не замена полного CI точного опубликованного SHA.
+Исходный upstream `c8f95a5` / CI 39583939734 остаётся отдельным failed прогоном.
+Merge/deploy не выполнялись; обязательное одобряющее GitHub review остаётся gate.
+
+Запуски: `npm run test:unit`, `npm run typecheck`,
+`npm run typecheck:domain-strict`, `npm run typecheck:storage-strict`,
+`npm run check:schema`, `npm run check:privacy`, `npm run check:auth-scope`,
+`npm run check:api-invariants`, `npm run build`, `git diff --check`.
+Browser regressions выполнялись локально с mock API; это не проверка
+на реальных Safari/PWA устройствах, staging OAuth/D1 или production.
+
 ## P1 — default participants после family hydration, 21.10.2026
 
 Ветка `fix/main-integration-20261019`, рабочая копия поверх
