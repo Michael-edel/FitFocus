@@ -4,6 +4,22 @@
 `fix/state-generations`; актуальные HEAD и CI фиксируются в
 [статусе проекта](project-status.md).
 
+### Read-only branch-preview smoke: `ed7100b`, 21.10.2026
+
+На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен
+`npm run test:e2e:staging`: **8/8 GET-only** проверок. Корень, `/api/env` и
+анонимный `/api/me` ответили 200; закрытые `/api/bootstrap`, `/api/profile`,
+`/api/state` и `/api/push/status` — 401 без redirect и `Set-Cookie`. Same-origin
+Service Worker активировался и контролировал страницу после reload. HTML указывал
+на `/assets/index-zJV9V2Nq.js`; bundle metadata содержала ветку
+`fix/durable-outbox`, SHA `ed7100bb` и build `1646`.
+
+Визуальная проверка этого preview нашла неверную подпись: branch build показывался
+как `main`. Исправление проверено только на локальном production preview; точная
+revision исправления и результат smoke после её публикации ещё не подтверждены.
+Этот smoke подтверждает только выбранные анонимные GET-маршруты, но не staging,
+OAuth, D1 или авторизованные операции.
+
 ### Read-only branch-preview smoke: `58f4d30`, 21.10.2026
 
 На `https://fix-durable-outbox.fitfocus.pages.dev/` выполнен

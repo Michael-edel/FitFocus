@@ -1,5 +1,23 @@
 # Стабилизация: проверяемые изменения
 
+## UI подписи preview-сборки, `ed7100b`, 21.10.2026
+
+Read-only smoke публичного branch preview для `ed7100bbd50b15c2d2ede895ec59a1a99309ade8`
+прошёл 8/8 GET-only проверок. Проверка окна версии обнаружила ошибку: preview
+ветки `fix/durable-outbox` показывал номер `main` и текст о сборке main. Исправление
+различает main и preview по имени ветки, убирает номер main из branch build и
+согласует описание в карточках, release notes и окне версии. Добавлен unit-тест,
+проверяющий формат main, preview и текущую метку сборки.
+
+Для локального diff целевые unit-тесты прошли 3/3, root typecheck и production
+build с admin guards прошли. Локальный production preview в Playwright показал
+`Текущая сборка ветки durable-outbox • ed7100bb`, корректное описание preview,
+не показал подпись main и не сообщил page errors. Скриншот сохранён вне репозитория
+в `%LOCALAPPDATA%\Temp\fitfocus-local-version-label-20261021.png`. Точный полный
+CI и повторный smoke на опубликованном SHA исправления ещё не подтверждены.
+Предыдущая версия branch preview не является staging и не проверяет
+авторизованные сценарии.
+
 ## P0.9 — follow-up двух browser отказов CI #1839, `7f53486`, 21.10.2026
 
 Точный workflow [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)

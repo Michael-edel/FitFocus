@@ -11,6 +11,18 @@ lifecycle**. Основные компоненты durable outbox, account/sessi
 серверные поколения, семейный CAS, legacy migration и явное обновление PWA уже
 реализованы в PR #93. P0 не закрыт, и выпуск пока не готов.
 
+Последняя опубликованная кодовая ревизия `7f534868584936067f12b0070adc874e5755be74`
+прошла полный точный [CI #1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883),
+а следующий docs HEAD `ed7100bbd50b15c2d2ede895ec59a1a99309ade8` прошёл
+[CI #1841](https://github.com/Michael-edel/FitFocus/actions/runs/39537965299).
+На branch preview для `ed7100b` read-only smoke прошёл 8/8 GET-only проверок;
+проверка интерфейса обнаружила, что версия preview ошибочно называлась сборкой
+main. Исправление показывает имя ветки и SHA во всех подписях версии. Целевые
+unit-тесты (3/3), root typecheck, production build с admin guards и локальная
+Playwright-проверка окна версии прошли; точный полный CI и повторный smoke на
+опубликованном SHA исправления ещё не подтверждены.
+Изолированного staging у проекта нет.
+
 Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
 для `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился отказом только в двух
 browser acceptance: desktop Firefox не создал durable delete для очищенной истории

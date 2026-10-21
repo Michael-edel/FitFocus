@@ -7,7 +7,15 @@
 [#94](https://github.com/Michael-edel/FitFocus/pull/94) и
 [#90](https://github.com/Michael-edel/FitFocus/pull/90).
 
-Последняя проверенная ревизия Draft PR #93 —
+Точный CI [#1840](https://github.com/Michael-edel/FitFocus/actions/runs/39533012883)
+для последнего code-bearing SHA `7f534868584936067f12b0070adc874e5755be74`
+завершился success; docs HEAD `ed7100bbd50b15c2d2ede895ec59a1a99309ade8` также
+прошёл точный [CI #1841](https://github.com/Michael-edel/FitFocus/actions/runs/39537965299).
+Branch-preview smoke выявил ошибочную подпись preview как `main`. Локальное
+исправление маркировки и регрессионный тест прошли целевые unit/typecheck/build и
+Playwright; точный полный CI и preview smoke для SHA исправления ещё не подтверждены.
+
+Более ранняя проверенная ревизия Draft PR #93 —
 `4ed1d27a495f1eb7934864eb5808dae538dce520`; точный
 [CI #1834](https://github.com/Michael-edel/FitFocus/actions/runs/39500775880)
 завершился success: npm audit — 0 уязвимостей, 1469 unit tests / 216 файлов,
