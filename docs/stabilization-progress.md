@@ -8433,8 +8433,10 @@ tests / 216 файлов, 1627 browser passed / 74 skipped, native Chrome BFCach
 Chrome/PWA и iPhone Safari/PWA (`workers=1,retries=0`). `npm run typecheck` и
 `git diff --check` прошли; production-код не менялся.
 
-Это локальная проверка. CI [#1843](https://github.com/Michael-edel/FitFocus/actions/runs/39553819188)
-выполняется для родительского SHA `40642ae`, поэтому не подтверждает `7989e88`.
-Коммит ещё не опубликован: workflow отменяет предыдущий run при push той же
-ветки. Изолированного staging нет; общий P0.5 и интеграция в `main` остаются
-открыты.
+Серия коммитов опубликована в `fix/durable-outbox` PR #93; текущий точный HEAD —
+`74d3121`. Предыдущий CI [#1843](https://github.com/Michael-edel/FitFocus/actions/runs/39553819188)
+для родительского SHA `40642ae` был отменён concurrency во время browser matrix;
+все завершённые audit, guards, unit, typechecks и build прошли. Точный CI
+[#1844](https://github.com/Michael-edel/FitFocus/actions/runs/39558441889)
+для `74d3121` создан и ожидает запуска. Изолированного staging нет; общий P0.5
+и интеграция в `main` остаются открыты.

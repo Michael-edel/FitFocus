@@ -30,14 +30,13 @@ audit, guards, unit, typechecks и build завершились успешно; 
 выполняется.
 Изолированного staging у проекта нет.
 
-Локальный HEAD продолжен коммитом `7989e88`: он добавляет browser acceptance
-AI Council при навигации и фиксирует результат в TASKS/контрактном журнале.
-Сценарий прошёл 7/7 desktop, Android, iPhone и PWA профилей без retries;
-root typecheck и diff check прошли. Это локальная проверка; она не включена в
-CI #1843, который проверяет родительский SHA `40642ae` и пока выполняет browser
-matrix. В workflow включён `cancel-in-progress`, поэтому публикация ветки до
-окончания #1843 прервёт этот run. После его завершения commit будет отправлен
-в PR #93 для точного CI нового HEAD. P0 и интеграция в `main` остаются открыты.
+Коммиты `7989e88` и `74d3121` отправлены в ветку `fix/durable-outbox` PR #93.
+Добавленная browser acceptance AI Council при навигации прошла 7/7 desktop,
+Android, iPhone и PWA профилей без retries; root typecheck и diff check прошли.
+Предыдущий CI #1843 на родительском SHA `40642ae` отменён concurrency в ходе
+browser matrix после успешных audit, guards, unit, typechecks и build. Новый
+точный [CI #1844](https://github.com/Michael-edel/FitFocus/actions/runs/39558441889)
+на SHA `74d3121` создан и ожидает запуска. P0 и интеграция в `main` остаются открыты.
 
 Точный CI [#1839](https://github.com/Michael-edel/FitFocus/actions/runs/39525106731)
 для `e6b3ec6b9ca37c565e887443427be2048e18bb1c` завершился отказом только в двух
