@@ -560,7 +560,8 @@ test('a failed profile commit keeps the form dirty and never reports a cloud sav
   }, key);
   await name.fill('Не потерять черновик');
   const save = page.getByRole('button', { name: 'Сохранить профиль', exact: true }); await save.click();
-  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить изменения на устройстве.' })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Не удалось сохранить профиль. Изменения не подтверждены' })).toBeVisible();
   await expect(save).toBeEnabled(); await expect(name).toHaveValue('Не потерять черновик');
   expect((await saved(page)).operations).toEqual([]); expect(JSON.parse((await saved(page)).value!).name).toBe(profile.name);
   expect(mutations).toEqual([]);

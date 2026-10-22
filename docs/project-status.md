@@ -1,3 +1,13 @@
+## PR98 full CI follow-up, 22 October 2026 08:09 UTC
+
+Head9c3a200 CI39738443471 failed:1608unit passed, audit0, guards/3types/build
+success; browser1652passed/71skipped/6failed. All6 are one quota-failure Save
+assertion matching2alerts. Test-only correction requires both specific alerts;
+all negative persistence assertions remain. Independent review no findings.
+Local35-case matrix:35/35 passed across7profiles, retries0; all3 types passed.
+New exact-head full CI is pending after the follow-up push. Rollback/CAS in
+this failed run was skipped. Runtime code remains7716774; no release yet.
+
 ## Final second-pass local verification, 22 October 2026
 
 `qa/first-users-20261022`: 1608/1608 unit tests in226files, all3 TypeScript
