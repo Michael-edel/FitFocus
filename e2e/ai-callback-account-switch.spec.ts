@@ -3046,7 +3046,8 @@ test('an open paywall from a retired session is hidden after same-account reauth
   await reauthenticatedPage.screenshot({ path: info.outputPath('same-account-paywall-hidden-after-reauthentication.png') });
 });
 
-test('a profile sync notice from account A is hidden after another tab activates account B', async ({ page, context }, info) => {
+for (const renewReadSession of [false, true]) {
+  test(`a profile sync notice from account A is hidden after another tab activates account B${renewReadSession ? ' after read-session renewal' : ''}`, async ({ page, context }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -3059,7 +3060,54 @@ test('a profile sync notice from account A is hidden after another tab activates
   await waitForAccountOutboxIdle(page, accountA);
 
   state.profile = { ...profileFor(accountA.id), name: 'Облачный профиль A', version: 5 };
-  await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+  const refreshedProfileResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/profile'
+    && response.request().method() === 'GET');
+  if (renewReadSession) {
+    const before = await readDurableSnapshot(page);
+    const originalProfileInput = await profileName.elementHandle();
+    const profileRead = deferred();
+    const profileStarted = deferred();
+    state.holdProfileRead = { active: true, started: profileStarted.release, wait: profileRead.promise, profile: state.profile };
+    try {
+      // A manual refresh can recover an auth pause with a new epoch. Dispatch
+      // from the transaction's completion so the action captures the old scope.
+      await page.evaluate(async () => {
+        const opening = indexedDB.open('fitfocus-user-state-v1');
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          opening.onsuccess = () => resolve(opening.result); opening.onerror = () => reject(opening.error);
+        });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(['outbox_meta'], 'readwrite');
+            const store = tx.objectStore('outbox_meta');
+            const active = store.get('active-session');
+            const fence = store.get('auth-fence');
+            active.onsuccess = () => store.put({ ...active.result, pause: 'auth' });
+            fence.onsuccess = () => store.put({ ...fence.result, revision: fence.result.revision + 1 });
+            tx.onabort = () => reject(tx.error);
+            tx.oncomplete = () => {
+              const reload = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Перезагрузить из облака'));
+              if (!reload) { reject(new Error('PROFILE_RELOAD_BUTTON_MISSING')); return; }
+              reload.click();
+              resolve();
+            };
+          });
+        } finally { db.close(); }
+      });
+      await profileStarted.promise;
+      const renewed = await readDurableSnapshot(page);
+      expect(renewed.activeSession?.accountId).toBe(accountA.id);
+      expect(renewed.activeSession?.serverSessionId).toBe(accountA.sid);
+      expect(renewed.activeSession?.sessionEpoch).not.toBe(before.activeSession?.sessionEpoch);
+      await expect.poll(() => originalProfileInput!.evaluate(input => input.isConnected)).toBe(false);
+      await expect(profileName).toHaveValue('Профиль A');
+    } finally { profileRead.release(); }
+  } else {
+    await page.getByRole('button', { name: /Перезагрузить из облака/ }).click();
+  }
+  const response = await refreshedProfileResponse;
+  expect(response.status()).toBe(200);
+  expect((await response.json()).profile.name).toBe('Облачный профиль A');
   await expect(profileName).toHaveValue('Облачный профиль A');
   await expect(page.getByText('Профиль обновлён из облака.', { exact: true })).toBeVisible();
 
@@ -3072,7 +3120,8 @@ test('a profile sync notice from account A is hidden after another tab activates
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await expect(switched.page.locator('vite-error-overlay')).toHaveCount(0);
   await switched.page.screenshot({ path: info.outputPath('profile-sync-notice-hidden-after-account-switch.png') });
-});
+  });
+}
 
 test('a profile sync notice from a retired session is hidden after same-account reauthentication', async ({ page, context }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
@@ -4594,6 +4643,14 @@ test('a late profile refresh from a retired same-account session cannot replace 
   const profileBefore = rawValue(beforeReauthentication, profileKey(accountA.id));
   expect(beforeReauthentication.activeSession?.serverSessionId).toBe(accountA.sid);
 
+  // Prepare the blank tab before holding a request with the 12-second transport deadline.
+  const reauthenticatedPage = await context.newPage();
+  reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
+  reauthenticatedPage.on('console', message => {
+    if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
+  });
+  await installAccountApi(reauthenticatedPage, state);
+
   let started!: () => void;
   const refreshStarted = new Promise<void>(resolve => { started = resolve; });
   const releaseRefresh = deferred();
@@ -4611,12 +4668,6 @@ test('a late profile refresh from a retired same-account session cannot replace 
     const reauthenticated = { id: accountA.id, sid: '8'.repeat(64) };
     const currentProfileName = 'Профиль новой сессии A';
     state.current = reauthenticated;
-    const reauthenticatedPage = await context.newPage();
-    reauthenticatedPage.on('pageerror', error => reauthenticatedErrors.push(error.message));
-    reauthenticatedPage.on('console', message => {
-      if (['error', 'warning'].includes(message.type())) reauthenticatedErrors.push(`${message.type()}: ${message.text()}`);
-    });
-    await installAccountApi(reauthenticatedPage, state);
     await openApp(reauthenticatedPage, '/#settings');
     await expect(reauthenticatedPage).toHaveTitle(/FitFocus/);
     await expect.poll(async () => (await readDurableSnapshot(reauthenticatedPage)).activeSession?.serverSessionId)

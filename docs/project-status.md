@@ -1,3 +1,18 @@
+## PR98 profile refresh notice follow-up, 22 October 2026
+
+Head8964f134 CI39746942675 completed/failure:1608unit passed, audit0,
+guards/3types/build success; browser1657passed/71skipped/1failed desktop
+Chromium notice after a successful profile GET. Rollback/CAS skipped.
+Local trace proves a renewed session epoch rejected the success callback's
+old scoped setter. The fix publishes against the freshly validated guard
+after the UI scope commits, consumes mismatches once, and preserves stale
+callback rejection. Independent source/dependency/fixture review: no findings.
+Local1608unit/226files, all3types, guards, audit0; final35browser cases passed
+across7profiles without retries. Full exact-head CI is pending after push;
+evidence is recorded in the separate
+[regression report](../qa/first-users/profile-refresh-notice-regression-2026-10-22.md).
+Production DB postchecks and a green exact-head full CI remain release gates.
+
 ## PR98 full CI follow-up, 22 October 2026 08:09 UTC
 
 Head9c3a200 CI39738443471 failed:1608unit passed, audit0, guards/3types/build
