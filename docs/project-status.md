@@ -1,5 +1,35 @@
 # Текущее состояние FitFocus
 
+## Main после PR #96, 22.10.2026
+
+Пользователь слил PR #96 в 03:29:37 UTC. Merge/main SHA:
+`5ee93b0ea05faa5a3cf827ee80e6d51cdc017946`. Production
+`https://fitfocus.pages.dev` возвращает JS-артефакт
+`/assets/index-Dwjd8kTg.js` с этим SHA; Cloudflare check сообщает success.
+Это не подтверждает работоспособность входа: пользователь наблюдает
+`GET /api/bootstrap` HTTP 500.
+
+[CI нового main](https://github.com/Michael-edel/FitFocus/actions/runs/39717155497)
+завершился failure на npm audit: две moderate advisory Vitest/mocker.
+Unit, typecheck, build, browser и rollback в этом прогоне skipped.
+Предыдущий успешный CI 39605805770 проверял head PR `801ab3d9`, не новый main.
+
+В рабочей ветке `fix/vitest-audit-20261022` коммит `7686836` обновляет
+только Vitest и семь связанных пакетов до 4.1.12. npm ci, audit (0 findings),
+1506 unit / 219 файлов, три typecheck и production build прошли; независимый Sol-review без
+замечаний. Публикация этой рабочей ветки и её точный CI фиксируются в PR.
+
+Для bootstrap 500 локально воспроизведены ошибки схемы до migrations
+`0011_sync_versions.sql` и `0019_state_tombstones.sql`; после них тестовый
+bootstrap возвращает 200. Production-схема не прочитана: Wrangler не
+аутентифицирован, Browser/CUA инструменты в подзадаче не экспонированы.
+Это гипотеза, а не установленная production-причина. Нужен
+[read-only осмотр D1](bootstrap-hydration.md#диагностика-bootstrap-500-без-записи).
+Production migrations, данные, настройки, credentials и auth restrictions
+в ходе диагностики не изменялись.
+
+Ниже сохранён исторический статус интеграционной ветки.
+
 Сверено: 21.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
 [`TASKS.md`](../TASKS.md), подробные ревизии и проверки — в
 [журнале стабилизации](stabilization-progress.md).

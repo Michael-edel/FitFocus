@@ -1,5 +1,33 @@
 # Загрузка сессии и облачных данных FitFocus
 
+## Диагностика bootstrap 500 без записи
+
+На main `5ee93b0` после auth/access handler читает `user_profiles.version`, затем
+`user_kv.version` и `user_kv.deleted_at`. Отсутствие version до
+`0011_sync_versions.sql` или deleted_at до `0019_state_tombstones.sql`
+вызывает SQL exception вне auth/access catch. Это проверяемая причина 500,
+но наличие такого exception в production требует отдельного подтверждения.
+Нельзя обходить tombstones, подтверждать отсутствие профиля по 500 или
+очищать локальный профиль ради успешного входа.
+
+В репозитории `wrangler.toml` объявлены Pages project `fitfocus`,
+D1 database `fitfocus`, binding `DB`, database ID
+`061ae786-9341-4bd7-8efe-025dd1bac6d5`. Это декларация исходников,
+не проверка фактического production binding. В Cloudflare сначала сверяют
+binding проекта с нужной D1, затем в Console этой базы выполняют только:
+
+```sql
+PRAGMA table_info(user_kv);
+PRAGMA table_info(user_profiles);
+```
+
+Результат содержит имена/типы столбцов, без пользовательских строк.
+Для ошибки достаточно сопоставить наличие `version` в обеих таблицах и
+`deleted_at` в user_kv с обезличенным Worker exception/request ID.
+Два GET500 могут быть штатными двумя попытками одного client bootstrap.
+Предупреждения расширений браузера сами по себе не доказывают причину.
+Этот осмотр не применяет migrations и не меняет данные, bindings или auth.
+
 Сверено: 12.10.2026. Код компонента:
 [`dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`](https://github.com/Michael-edel/FitFocus/commit/dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf),
 ветка `fix/durable-outbox`. Unit/типы/guards и целевые E2E прошли;
