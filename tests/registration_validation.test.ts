@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import RegistrationScreen, { type RegistrationData } from '../RegistrationScreen';
-import { registrationError, registrationRisk } from '../registrationValidation';
+import { registrationError, registrationRisk, resolveTargetWeight, targetWeightError } from '../registrationValidation';
 import { ActivityLevel, Gender, Goal } from '../types';
 
 const data: RegistrationData = { name: 'Synthetic', gender: Gender.MALE, weight: 70, height: 170, age: 30,
@@ -15,6 +15,34 @@ const screen = (regData: RegistrationData) => renderToStaticMarkup(React.createE
   activationSteps: [], activationTotalMs: 3200, handleActivateWithTransition: vi.fn(), onOpenVersionInfo: vi.fn(),
 }));
 describe('registration validation', () => {
+  it.each([999, 24, 351, -1, NaN, Infinity])('rejects invalid target weight %s before risk calculation', targetWeight => {
+    expect(registrationError({ ...data, targetWeight })).toContain('целевой вес');
+    expect(registrationRisk({ ...data, targetWeight })).toBeNull();
+  });
+  it.each([
+    [Goal.LOSS, 70], [Goal.LOSS, 75], [Goal.GAIN, 70], [Goal.GAIN, 65],
+  ])('rejects target inconsistent with %s: %s', (goal, targetWeight) => {
+    expect(registrationError({ ...data, goal, targetWeight })).toContain('целевой вес');
+  });
+  it.each([25, 70, 350])('keeps an explicit bounded maintain target %s', targetWeight => {
+    expect(targetWeightError({ weight: 70, goal: Goal.MAINTAIN, targetWeight })).toBeNull();
+    expect(resolveTargetWeight({ weight: 70, goal: Goal.MAINTAIN, targetWeight })).toBe(targetWeight);
+  });
+  it.each([[Goal.LOSS, 72], [Goal.GAIN, 84], [Goal.MAINTAIN, 80]])('preserves the existing empty-target suggestion for %s', (goal, expected) => {
+    for (const targetWeight of [0, undefined]) {
+      const input = { weight: 80, goal: goal as Goal, targetWeight };
+      expect(targetWeightError(input)).toBeNull();
+      expect(resolveTargetWeight(input)).toBe(expected);
+    }
+  });
+  it('rejects impossible fallback targets and a direction lost by storage rounding instead of clamping', () => {
+    expect(targetWeightError({ weight: 25, goal: Goal.LOSS, targetWeight: 0 })).not.toBeNull();
+    expect(targetWeightError({ weight: 350, goal: Goal.GAIN })).not.toBeNull();
+    expect(targetWeightError({ weight: 70, goal: Goal.LOSS, targetWeight: 69.99 })).not.toBeNull();
+    expect(targetWeightError({ weight: 70, goal: Goal.GAIN, targetWeight: 70.01 })).not.toBeNull();
+    expect(targetWeightError({ weight: 70, goal: Goal.LOSS, targetWeight: 25 })).toBeNull();
+    expect(targetWeightError({ weight: 70, goal: Goal.GAIN, targetWeight: 350 })).toBeNull();
+  });
   it.each([1, 30, 130])('accepts supported integer age %s without silently changing it', age => {
     expect(registrationError({ ...data, age })).toBeNull();
   });
@@ -31,7 +59,7 @@ describe('registration validation', () => {
   it('requires acknowledgement for the selected goal only', () => {
     expect(registrationRisk({ ...data, lossDeficit: 1000, riskAckGain: true })?.acknowledged).toBe(false);
     expect(registrationRisk({ ...data, lossDeficit: 1000, riskAckLoss: true })?.acknowledged).toBe(true);
-    expect(registrationRisk({ ...data, goal: Goal.GAIN, gainSurplus: 600, riskAckLoss: true })?.acknowledged).toBe(false);
+    expect(registrationRisk({ ...data, goal: Goal.GAIN, targetWeight: 75, gainSurplus: 600, riskAckLoss: true })?.acknowledged).toBe(false);
   });
   it('renders age bounds, an inline explanation and a disabled create button for age999', () => {
     const html = screen({ ...data, age: 999 });

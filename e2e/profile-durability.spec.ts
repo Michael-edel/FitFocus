@@ -126,6 +126,44 @@ async function setup(page: Page, mode: 'auth' | 'conflict' | 'refresh' | 'normal
     setSession: (sessionId: string) => { currentSid = sessionId; },
     resolveConflict: () => { conflict = false; expectedProfileBaseVersion = 8; } };
 }
+for (const cachedDraft of [false, true]) {
+test(`double profile Save queues one operation and retains a successful edit after reload${cachedDraft ? ' from a restored dirty draft' : ''}`, async ({ page }, info) => {
+  let release!: () => void; let started!: () => void;
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  const sending = new Promise<void>(resolve => { started = resolve; });
+  const { errors, mutations, profileBases, routeErrors } = await setup(page, 'normal', undefined, [{ started, wait }]);
+  try {
+    if (cachedDraft) await page.addInitScript(account => {
+      if (sessionStorage.getItem('qa-dirty-draft-seeded')) return;
+      sessionStorage.setItem('qa-dirty-draft-seeded', '1');
+      localStorage.setItem(`fitfocus.settings.ui.v1:${account}`, JSON.stringify({ profileDirty: true, draftName: 'Restored draft' }));
+    }, account);
+    await openApp(page, '/#settings');
+    const name = page.getByPlaceholder('Как к вам обращаться');
+    await expect(name).toHaveValue(cachedDraft ? 'Restored draft' : profile.name);
+    expect((await saved(page)).operations).toEqual([]);
+    await name.fill('Один Save');
+    const save = page.getByRole('button', { name: 'Сохранить профиль', exact: true });
+    await save.click({ clickCount: 2 });
+    await sending;
+    const snapshot = await saved(page);
+    expect(snapshot.operations).toHaveLength(1);
+    expect(snapshot.operations[0].status).toBe('sending');
+    expect(snapshot.value).toContain('Один Save');
+    await expect.poll(() => page.evaluate(account => JSON.parse(localStorage.getItem(`fitfocus.settings.ui.v1:${account}`) || '{}').profileDirty, account)).toBe(false);
+    expect(mutations).toEqual(['PUT']); expect(profileBases).toEqual([2]);
+    release();
+    await expect.poll(async () => (await saved(page)).operations).toEqual([]);
+    await page.reload();
+    await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Один Save');
+    expect((await saved(page)).operations).toEqual([]);
+    expect(mutations).toEqual(['PUT']); expect(errors).toEqual([]); expect(routeErrors).toEqual([]);
+    await page.getByPlaceholder('Как к вам обращаться').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('pass2-profile-single-save.png') });
+  } finally { release(); }
+});
+}
+
 test('profile edits survive reload and a different bootstrap snapshot during an auth pause', async ({ page }, testInfo) => {
   const { errors, mutations } = await setup(page, 'auth');
   await openApp(page, '/#settings');

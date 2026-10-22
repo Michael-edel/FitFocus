@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
 import { Gender, Goal, ActivityLevel, type TariffPlan } from './types';
-import { registrationError, registrationErrors, registrationRisk, REGISTRATION_MIN_AGE, REGISTRATION_MAX_AGE } from './registrationValidation';
+import { registrationError, registrationErrors, registrationRisk, REGISTRATION_MIN_AGE, REGISTRATION_MAX_AGE, TARGET_WEIGHT_MIN, TARGET_WEIGHT_MAX } from './registrationValidation';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from './constants';
 
 type ActivationStep = {
@@ -336,20 +336,23 @@ export default function RegistrationScreen({
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Целевой вес (кг)</div>
+                    <label htmlFor="registration-target-weight" className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Целевой вес (кг)</label>
                     <input
+                      id="registration-target-weight"
                       type="number"
-                      min={25}
-                      max={350}
+                      min={TARGET_WEIGHT_MIN}
+                      max={TARGET_WEIGHT_MAX}
                       step="0.1"
                       inputMode="decimal"
-                      value={regData.targetWeight || ''}
-                      onChange={(e) => setInput((prev) => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
+                      aria-invalid={!!errors.targetWeight}
+                      aria-describedby="registration-target-weight-help"
+                      value={Number.isFinite(regData.targetWeight) ? regData.targetWeight || '' : ''}
+                      onChange={(e) => setInput((prev) => ({ ...prev, targetWeight: Number(e.target.value) }))}
                       className={numberInputClassName}
                     />
-                    <div className="text-[11px] font-semibold text-slate-500">
-                      Можно изменить вручную. Если не менять, FitFocus подставит рекомендованное значение.
-                    </div>
+                    <p id="registration-target-weight-help" role={errors.targetWeight ? 'alert' : undefined} className={errors.targetWeight ? 'text-xs text-amber-200' : 'text-[11px] font-semibold text-slate-500'}>
+                      {errors.targetWeight ?? 'Можно изменить вручную. Если не менять, FitFocus подставит рекомендованное значение.'}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -416,7 +419,7 @@ export default function RegistrationScreen({
                   </div>
                 )}
 
-                <div className="sticky bottom-0 z-20 bg-slate-900/95 py-3 md:static md:bg-transparent">
+                <div className="py-3">
                 {!regStep1Valid && <p className="mb-2 text-xs text-amber-200" aria-live="polite">{registrationError(regData) ? 'Проверьте выделенные поля перед созданием плана.' : 'Подтвердите риски или уменьшите интенсивность.'}</p>}
                 <button
                   type="button"

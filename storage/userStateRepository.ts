@@ -41,7 +41,7 @@ export class UserStateRepository {
   private readonly outbox: DurableOutbox;
   private readonly writerId: string;
   private readonly resumeOwnPendingWrites: boolean;
-  private readonly observations = new Map<string, { revision: number; confirmedVersion: number; parentOpId?: string }>();
+  private readonly observations = new Map<string, { revision: number; confirmedVersion: number; parentOpId?: string; value?: string | null }>();
   private readonly pending = new Map<string, Promise<unknown>>();
 
   constructor(readonly accountId: string, options: { outbox?: DurableOutbox; writerId?: string } = {}) {
@@ -95,7 +95,7 @@ export class UserStateRepository {
       }
       const previous = this.observations.get(key);
       this.observations.set(key, {
-        revision: snapshot.revision, confirmedVersion: snapshot.confirmedVersion,
+        revision: snapshot.revision, confirmedVersion: snapshot.confirmedVersion, value: snapshot.value,
         ...(previous?.revision === snapshot.revision && previous.parentOpId ? { parentOpId: previous.parentOpId } : {}),
       });
       return snapshot;
@@ -129,6 +129,7 @@ export class UserStateRepository {
         accountId: this.accountId, writerId: this.writerId, intent,
         ...(stateKey === 'profile' ? { resource: 'profile' as const } : {}),
         expectedRevision: observation.revision, baseVersion: observation.confirmedVersion,
+        ...(stateKey === 'profile' && typeof observation.value === 'string' ? { observedValue: observation.value } : {}),
         ...(retainAsConflict ? { conflictReason: 'editor-not-loaded' as const } : {}),
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
         ...capturedGuard,
@@ -203,6 +204,7 @@ export class UserStateRepository {
         intent: { type: 'put', key, value: serialized },
         expectedRevision: observation.revision,
         baseVersion: observation.confirmedVersion,
+        ...(stateKey === 'profile' && typeof snapshot.value === 'string' ? { observedValue: snapshot.value } : {}),
         ...(stateKey === 'profile' ? { resource: 'profile' as const } : {}),
         ...(observation.parentOpId ? { parentOpId: observation.parentOpId } : {}),
         ...capturedGuard,

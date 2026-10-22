@@ -1,4 +1,34 @@
+## Final second-pass local verification, 22 October 2026
+
+`qa/first-users-20261022`: 1608/1608 unit tests in226files, all3 TypeScript
+checks; schema/privacy/auth/API/admin guards; audit0. Targeted browser matrix:
+28/28 across7profiles, retries0. Firefox double-Save repeat10/10 before the
+additional clean-cache assertion; final matrix includes that assertion and a
+restored dirty-cache variant. Independent source/test review: no findings.
+Full exact-head remote CI and production DB postchecks remain prerequisites.
+
 # Текущее состояние FitFocus
+
+## Второй проход первых пользователей, 22.10.2026 — в рабочей ветке
+
+Локальная ветка `qa/first-users-20261022` основана на PR97
+`8ae1195b06a104c5b862bb03d93851d6851be517`; первый проход зафиксирован
+в `272e7ef335af37af8028728bd827cae6cb5437ea`. Исторические четыре baseline
+и четыре слепых retest сохранены. Пользователь отдельно разрешил второй
+проход и публикацию после успешных проверок, без обхода protections.
+
+Исправляются цель999кг при похудении, first-save ACK race и повторный Save,
+перекрытие формы sticky-кнопкой. Локальные1598unit/225файлов, три TypeScript,
+schema/privacy/auth/API/admin guards и audit0 прошли на изменениях до commit;
+независимый source review без замечаний. Browser regression, точный новый SHA,
+его полный CI и выпуск фиксируются отдельно; CI97 относится только к8ae1195.
+
+Production binding подтверждён отдельной браузерной задачей: DB`fitfocus-dev`,
+ID`061ae786-9341-4bd7-8efe-025dd1bac6d5`. Колонка0019 уже добавлена;
+повторный ALTER/общий runner запрещён. Журнал0019 и migrations0020/0021
+отдельно согласованы, выполняются единственным браузерным исполнителем
+после нового bookmark/preflight. До его postchecks не объявлять схему готовой.
+Сведения старого диагностического снимка ниже являются историческими.
 
 ## Main после PR #96, 22.10.2026
 

@@ -288,7 +288,7 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
 type StoredValue = { key: string; value: string };
 type StoredOperation = {
   opId: string; accountId: string; key: string; status: string; resource?: string; value?: string;
-  retryCount: number; nextAttemptAtMs: number; reason?: string;
+  revision: number; retryCount: number; nextAttemptAtMs: number; reason?: string;
   attempt?: { attemptId: string; owner: string; sessionEpoch: string; startedAtMs: number };
 };
 type DurableSnapshot = {
@@ -329,7 +329,7 @@ async function readDurableSnapshot(page: Page, retry = 0): Promise<DurableSnapsh
               values: values.map((item: { key: string; value: string }) => ({ key: item.key, value: item.value })),
               operations: operations.map((item: StoredOperation) => ({
                 opId: item.opId, accountId: item.accountId, key: item.key, status: item.status,
-                resource: item.resource, value: item.value, retryCount: item.retryCount,
+                resource: item.resource, value: item.value, revision: item.revision, retryCount: item.retryCount,
                 nextAttemptAtMs: item.nextAttemptAtMs, reason: item.reason,
                 ...(item.attempt ? { attempt: {
                   attemptId: item.attempt.attemptId, owner: item.attempt.owner,
@@ -4728,7 +4728,6 @@ test('pending account A outbox pauses on logout and resumes after login with a f
     current: accountA,
     profile: profileFor(accountA.id),
     stateWriteLog: stateWrites,
-    holdStateWriteFailures: { key: planKeyA, active: true },
   };
   let authenticated = true;
   let logoutRequests = 0;
@@ -4739,6 +4738,36 @@ test('pending account A outbox pauses on logout and resumes after login with a f
     if (message.type() === 'error' && !/503/.test(message.text())) errors.push(message.text());
   });
   await installAccountApi(page, state);
+  const oldResponse = deferred(), freshResponse = deferred();
+  let oldResponsesReleased = 0, freshResponsesReleased = 0;
+  const freshAccountA = { id: accountA.id, sid: 'e'.repeat(64) };
+  // Control only this operation's HTTP responses; unrelated state uses the
+  // normal fixture. Keep a claimed retry alive across logout deterministically.
+  await page.route('**/api/state', async route => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const items = (request.postDataJSON()?.items ?? []) as Array<{ key: string; baseVersion: number }>;
+    if (!items.some(item => item.key === planKeyA)) return route.fallback();
+    const requestedAccount = request.headers()['x-fitfocus-state-account'];
+    const requestedSession = request.headers()['x-fitfocus-state-session'];
+    const attempt = { account: requestedAccount, session: requestedSession, keys: items.map(item => item.key) };
+    stateWrites.push(attempt);
+    expect(attempt.account).toBe(accountA.id);
+    expect(attempt.keys).toEqual([planKeyA]);
+    const planAttempts = stateWrites.filter(write => write.keys.includes(planKeyA));
+    if (planAttempts.length === 1) {
+      return route.fulfill({ status: 503, contentType: 'application/json',
+        headers: { ...scopedHeaders(accountA), 'Retry-After': '1' },
+        body: JSON.stringify({ error: 'SERVICE_UNAVAILABLE' }) });
+    }
+    const oldSession = requestedSession === accountA.sid;
+    expect(requestedSession).toBe(oldSession ? accountA.sid : freshAccountA.sid);
+    await (oldSession ? oldResponse.promise : freshResponse.promise);
+    await route.fulfill({ contentType: 'application/json', headers: scopedHeaders(oldSession ? accountA : freshAccountA),
+      body: JSON.stringify({ ok: true, items: items.map(item => ({ key: item.key, version: item.baseVersion + 1, exists: true })) }) });
+    if (oldSession) oldResponsesReleased += 1;
+    else freshResponsesReleased += 1;
+  });
   await page.route('**/api/me*', async route => {
     if (authenticated) return route.fallback();
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ user: null, hasAccess: true }) });
@@ -4748,7 +4777,6 @@ test('pending account A outbox pauses on logout and resumes after login with a f
     authenticated = false;
     await route.fallback();
   });
-  const freshAccountA = { id: accountA.id, sid: 'e'.repeat(64) };
   await page.route('**/api/auth/google/start*', async route => {
     loginRequests += 1;
     state.current = freshAccountA;
@@ -4758,47 +4786,65 @@ test('pending account A outbox pauses on logout and resumes after login with a f
       body: '<!doctype html><html><body><script>location.replace("/#plan")</script></body></html>' });
   });
 
-  await openApp(page, '/#plan');
-  const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
-  await expect(task).toBeVisible();
-  await task.click();
-  await expect.poll(() => stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(1);
-  await expect.poll(async () => (await readDurableSnapshot(page)).operations
-    .find(operation => operation.key === planKeyA)?.status).toBe('pending');
-  const beforeLogout = await readDurableSnapshot(page);
-  const pendingA = beforeLogout.operations.find(operation => operation.key === planKeyA)!;
-  expect(pendingA).toMatchObject({ accountId: accountA.id, status: 'pending', retryCount: 1, reason: 'http-503' });
+  try {
+    await openApp(page, '/#plan');
+    const task = page.getByRole('button', { name: 'Записать первый завтрак', exact: true });
+    await expect(task).toBeVisible();
+    await task.click();
+    await expect.poll(() => stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(2);
+    const beforeLogout = await readDurableSnapshot(page);
+    const pendingA = beforeLogout.operations.find(operation => operation.key === planKeyA)!;
+    expect(beforeLogout.operations.filter(operation => operation.key === planKeyA)).toHaveLength(1);
+    // Pending intent may legitimately have a sending claim. Logout stops the
+    // sender, but must preserve that exact claim rather than settling a stale ACK.
+    expect(pendingA).toMatchObject({ accountId: accountA.id, status: 'sending', revision: expect.any(Number), retryCount: 1, reason: 'http-503' });
+    expect(pendingA.attempt).toMatchObject({ attemptId: expect.any(String), sessionEpoch: beforeLogout.activeSession!.sessionEpoch });
+    expect(stateWrites.filter(write => write.keys.includes(planKeyA))).toEqual([
+      { account: accountA.id, session: accountA.sid, keys: [planKeyA] },
+      { account: accountA.id, session: accountA.sid, keys: [planKeyA] },
+    ]);
 
-  await openApp(page, '/#settings');
-  await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
-  const googleLogin = page.getByRole('link', { name: /Google профиль/ });
-  await expect(googleLogin).toBeVisible();
-  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession).toBeNull();
-  expect(logoutRequests).toBe(1);
-  const writesWhileLoggedOut = stateWrites.filter(write => write.keys.includes(planKeyA)).length;
-  await page.waitForTimeout(Math.max(0, pendingA.nextAttemptAtMs - Date.now()) + 1_100);
-  expect(stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(writesWhileLoggedOut);
-  const loggedOut = await readDurableSnapshot(page);
-  expect(loggedOut.operations.find(operation => operation.key === planKeyA))
-    .toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
+    await openApp(page, '/#settings');
+    await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
+    const googleLogin = page.getByRole('link', { name: /Google профиль/ });
+    await expect(googleLogin).toBeVisible();
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession).toBeNull();
+    expect(logoutRequests).toBe(1);
+    const writesWhileLoggedOut = stateWrites.filter(write => write.keys.includes(planKeyA)).length;
+    oldResponse.release();
+    await expect.poll(() => oldResponsesReleased).toBe(1);
+    await page.waitForTimeout(Math.max(0, pendingA.nextAttemptAtMs - Date.now()) + 1_100);
+    expect(stateWrites.filter(write => write.keys.includes(planKeyA))).toHaveLength(writesWhileLoggedOut);
+    const loggedOut = await readDurableSnapshot(page);
+    expect(loggedOut.operations.filter(operation => operation.key === planKeyA)).toEqual([pendingA]);
+    expect(loggedOut.activeSession).toBeNull();
 
-  await googleLogin.click();
-  await expect(page).toHaveURL(/#plan$/);
-  await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(freshAccountA.sid);
-  await expect.poll(() => stateWrites.some(write => write.keys.includes(planKeyA) && write.session === freshAccountA.sid)).toBe(true);
-  const resumed = (await readDurableSnapshot(page)).operations.find(operation => operation.key === planKeyA);
-  expect(resumed).toMatchObject({ opId: pendingA.opId, accountId: accountA.id, status: 'pending', value: pendingA.value });
-  expect(loginRequests).toBe(1);
-  state.holdStateWriteFailures!.active = false;
-  await expect.poll(async () => (await readDurableSnapshot(page)).operations
-    .filter(operation => operation.key === planKeyA)).toEqual([]);
+    await googleLogin.click();
+    await expect(page).toHaveURL(/#plan$/);
+    await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.serverSessionId).toBe(freshAccountA.sid);
+    await expect.poll(() => stateWrites.some(write => write.keys.includes(planKeyA) && write.session === freshAccountA.sid)).toBe(true);
+    const resumed = (await readDurableSnapshot(page)).operations.find(operation => operation.key === planKeyA);
+    const resumedSession = (await readDurableSnapshot(page)).activeSession!;
+    expect(resumed).toMatchObject({ opId: pendingA.opId, revision: pendingA.revision,
+      accountId: accountA.id, status: 'sending', value: pendingA.value });
+    expect(resumedSession.sessionEpoch).not.toBe(beforeLogout.activeSession!.sessionEpoch);
+    expect(resumed?.attempt?.sessionEpoch).toBe(resumedSession.sessionEpoch);
+    expect(resumed?.attempt?.attemptId).not.toBe(pendingA.attempt!.attemptId);
+    expect((await readDurableSnapshot(page)).operations.filter(operation => operation.key === planKeyA)).toHaveLength(1);
+    expect(loginRequests).toBe(1);
+    freshResponse.release();
+    await expect.poll(() => freshResponsesReleased).toBe(1);
+    await expect.poll(async () => (await readDurableSnapshot(page)).operations
+      .filter(operation => operation.key === planKeyA)).toEqual([]);
 
-  const resumedWrites = stateWrites.filter(write => write.keys.includes(planKeyA));
-  expect(resumedWrites.at(-1)).toMatchObject({ account: accountA.id, session: freshAccountA.sid, keys: [planKeyA] });
-  await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
-  expect(errors).toEqual([]);
-  await expect(page.locator('vite-error-overlay')).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath('state-outbox-account-a-after-login.png') });
+    const resumedWrites = stateWrites.filter(write => write.keys.includes(planKeyA));
+    expect(resumedWrites).toHaveLength(3);
+    expect(resumedWrites.at(-1)).toMatchObject({ account: accountA.id, session: freshAccountA.sid, keys: [planKeyA] });
+    await expect(page.getByText('1/3 выполнено', { exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('state-outbox-account-a-after-login.png') });
+  } finally { oldResponse.release(); freshResponse.release(); }
 });
 
 test('late Huawei sync after another tab signs in as account B cannot commit account A profile', async ({ page, context }) => {

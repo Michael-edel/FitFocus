@@ -17,6 +17,8 @@ CI каждой ревизии сверяется отдельно.
 
 | Область | Основные исходники | Контракт и проверки |
 |---|---|---|
+| Регистрация: диапазоны, целевой вес, риск и черновик | [registrationValidation.ts](../registrationValidation.ts), [useRegistrationDraft.ts](../features/auth/useRegistrationDraft.ts), [RegistrationScreen.tsx](../RegistrationScreen.tsx) | [Контракт](registration-persistence.md), [validation](../tests/registration_validation.test.ts), [draft](../tests/registration_draft.test.ts), [target field](../tests/registration_target_field.test.ts) |
+| Ручное сохранение профиля и ACK показанной ревизии | [profileDraftSave.ts](../features/settings/profileDraftSave.ts), [userStateRepository.ts](../storage/userStateRepository.ts), [durableOutbox.ts](../storage/durableOutbox.ts) | [Контракт](profile-persistence.md), [save gate](../tests/settings_profile_draft_save.test.ts), [ACK matrix](../tests/profile_ack_observation.test.ts) |
 | Сессии семейных запросов | [useFamilyCloud.ts](../useFamilyCloud.ts), [familySession.ts](../services/familySession.ts), [familyApi.ts](../features/family/familyApi.ts), [actionScope.ts](../features/family/actionScope.ts) | [Контракт и открытые writers](family-session.md), [server guard](../tests/family_session_guard.test.ts), [transport](../tests/family_session_transport.test.ts), [session E2E](../e2e/family-session.spec.ts), [late-callback E2E](../e2e/family-callback-account-switch.spec.ts) |
 | Личная корзина недельного меню | [ShoppingListCard.tsx](../ShoppingListCard.tsx), [PlanScreen](../PlanScreen.tsx), [session transport](../services/familySession.ts) | [Account/session guard и state isolation](family-session.md#личная-корзина-недельного-меню), [account-switch E2E](../e2e/family-callback-account-switch.spec.ts) |
 | Семейное меню: CAS и доставка | [useFamilyMenu.ts](../useFamilyMenu.ts), [repository](../storage/familyMenuRepository.ts), [server CAS](../functions/api/_lib/family_menu_state.ts), [shared ingredients](../shoppingIngredients.ts) | [Контракт](family-menu-state.md), [ADR-008](adr/ADR-008-family-menu-generation.md), [SQL tests](../tests/family_menu_state.test.ts), [outbox/AI](../tests/family_menu_durable.test.ts), [E2E](../e2e/family-menu-durable.spec.ts) |
@@ -96,3 +98,5 @@ Mock-наборы используют [mockTest](../e2e/support/mockTest.ts) д
 Карта обновляется при добавлении, переименовании или переносе модулей.
 Новые функции и приоритеты описываются в PRODUCT/TASKS; их не нужно
 дублировать здесь отдельным планом.
+
+- `features/settings/profileDraftHydration.ts`: one cached draft hydration per account/session; `tests/settings_profile_draft_hydration.test.ts` covers lifecycle eligibility.

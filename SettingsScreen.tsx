@@ -17,6 +17,9 @@ import { assertMobileTokenSession, prepareMobileTokenSession, type MobileTokenSe
 import { prepareHuaweiSession, type HuaweiSession } from './services/huaweiSession';
 import { disconnectHuaweiHealth, requestHuaweiHealthStatus, startHuaweiHealthOAuth, syncHuaweiHealth as requestHuaweiHealthSync, type HuaweiHealthStatus } from './features/settings/huaweiHealthApi';
 import { SessionReadError } from './storage/sessionRead';
+import { ProfileDraftSave } from './features/settings/profileDraftSave';
+import { ProfileDraftHydration } from './features/settings/profileDraftHydration';
+import { targetWeightError, REGISTRATION_MIN_AGE, REGISTRATION_MAX_AGE } from './registrationValidation';
 import { assertPushSession, preparePushSession, requestPushJson, type PushSession } from './services/pushSession';
 
 const MIN_HEIGHT_CM = 120;
@@ -408,6 +411,8 @@ export default function SettingsScreen({
   const [profileCommitError, setProfileCommitError] = useState<string | null>(null);
   const [profileCommitBusy, setProfileCommitBusy] = useState(false);
   const profileCommitBusyRef = useRef(false);
+  const profileDraftSaveRef = useRef(new ProfileDraftSave());
+  const [profileDraftSaving, setProfileDraftSaving] = useState(false);
 
   const commitProfileChange = useCallback(async (
     next: UserProfile,
@@ -453,7 +458,14 @@ export default function SettingsScreen({
   const [progressPhotoBusy, setProgressPhotoBusy] = useState(false);
   const [progressPhotoError, setProgressPhotoError] = useState<string | null>(null);
   const [profileDirty, setProfileDirtyState] = useState(false);
+  const profileDraftEditRevisionRef = useRef(0);
+  const profileDraftHydrationRef = useRef(new ProfileDraftHydration());
+  const profileDraftScopeRef = useRef<string | null>(null);
   const setProfileDirty = useCallback((dirty: boolean) => {
+    if (dirty) {
+      profileDraftHydrationRef.current.consume(profileDraftScopeRef.current);
+      profileDraftEditRevisionRef.current += 1;
+    }
     onProfileDraftChange?.(dirty);
     setProfileDirtyState(dirty);
   }, [onProfileDraftChange]);
@@ -1396,11 +1408,27 @@ export default function SettingsScreen({
     }
   };
 
+  const profileSaveScope = JSON.stringify([user?.id, loginGuard?.sessionEpoch, loginGuard?.serverSessionId]);
+  profileDraftScopeRef.current = profileSaveScope;
+  const profileDraftKey = JSON.stringify([draftName, draftGoal, draftTargetWeight, draftAge, draftHeight,
+    draftAllergensText, draftIntolerancesText, draftExcludedFoodsText, draftDietarySeverity,
+    draftMedicalRestrictions, draftBloodPressureSystolic, draftBloodPressureDiastolic,
+    draftRestingPulse, draftBloodGlucoseMmolL, draftWaistCm, draftChestCm, draftHipsCm]);
+  const latestProfileDraftRef = useRef({ scope: profileSaveScope, key: profileDraftKey });
+  latestProfileDraftRef.current = { scope: profileSaveScope, key: profileDraftKey };
+  const loadedProfileDraftScopeRef = useRef<string | null>(null);
   useEffect(() => {
     if (!user) return;
-    settingsUiSkipSaveRef.current = true;
+    // A durable save can publish the profile while the user is typing a newer draft.
+    const sameScope = loadedProfileDraftScopeRef.current === profileSaveScope;
+    const restoreCache = profileDraftHydrationRef.current.take(profileSaveScope, allowCachedProfileDraftRestore, profileDirty && sameScope);
+    if (profileDirty && sameScope) return;
+    loadedProfileDraftScopeRef.current = profileSaveScope;
+    // Hydration changes the fields on the next render. A same-scope clean
+    // publication must still persist dirty=false instead of retaining the old intent.
+    settingsUiSkipSaveRef.current = !sameScope || restoreCache;
     try {
-      const raw = allowCachedProfileDraftRestore ? localStorage.getItem(settingsUiStorageKey) : null;
+      const raw = restoreCache ? localStorage.getItem(settingsUiStorageKey) : null;
       if (raw) {
         const parsed = parseJsonRecord(raw);
         if (!parsed) throw new Error('Invalid settings UI state');
@@ -1517,7 +1545,7 @@ export default function SettingsScreen({
     setAckLoss(!!user.riskAcknowledgedLoss);
     setAckGain(!!user.riskAcknowledgedGain);
     setProfileDirty(false);
-  }, [allowCachedProfileDraftRestore, settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
+  }, [profileSaveScope, allowCachedProfileDraftRestore, settingsUiStorageKey, user?.id, user?.name, user?.goal, user?.targetWeight, user?.age, user?.height, user?.bloodPressureSystolic, user?.bloodPressureDiastolic, user?.restingPulse, user?.bloodGlucoseMmolL, user?.waistCm, user?.chestCm, user?.hipsCm, user?.riskAcknowledgedLoss, user?.riskAcknowledgedGain]);
 
   const onPickImport = () => fileInputRef.current?.click();
 
@@ -1666,7 +1694,7 @@ export default function SettingsScreen({
   };
 
   const saveProfileDraft = async () => {
-    if (!user) return;
+    if (!user || profileDraftSaveRef.current.busy || profileCommitBusyRef.current) return;
     const safeName = draftName.trim() || user.name || 'Пользователь';
     const parsedTargetWeight = Number(draftTargetWeight || 0);
     const parsedAge = Number(draftAge || 0);
@@ -1689,6 +1717,13 @@ export default function SettingsScreen({
     const parsedChestCm = Number(draftChestCm || 0);
     const parsedHipsCm = Number(draftHipsCm || 0);
     const measurementTimestamp = new Date().toISOString();
+    const targetError = targetWeightError({ weight: user.weight, goal: draftGoal,
+      targetWeight: draftTargetWeight.trim() && parsedTargetWeight !== 0 ? parsedTargetWeight : user.targetWeight });
+    if (targetError) { setProfileValidationError(targetError); return; }
+    if (draftAge.trim() && (!Number.isInteger(parsedAge) || parsedAge < REGISTRATION_MIN_AGE || parsedAge > REGISTRATION_MAX_AGE)) {
+      setProfileValidationError('Укажите возраст целым числом от 1 до 130 лет.');
+      return;
+    }
     if (Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 && (parsedTargetWeight < MIN_WEIGHT_KG || parsedTargetWeight > MAX_WEIGHT_KG)) {
       setProfileValidationError(`Желаемый вес должен быть в диапазоне ${MIN_WEIGHT_KG}–${MAX_WEIGHT_KG} кг.`);
       return;
@@ -1752,15 +1787,26 @@ export default function SettingsScreen({
       patch.measurementsHistory = [entry, ...history].slice(0, 30);
     }
 
-    if (serverSession && onPatchUser) {
-      if (await onPatchUser(patch) === false) return;
-    } else if (onChangeUser) {
-      if (!await commitProfileChange({ ...user, ...patch })) return;
-    } else {
-      return;
-    }
-    setProfileValidationError(null);
-    setProfileDirty(false);
+    const scope = profileSaveScope, draft = profileDraftKey;
+    const editRevision = profileDraftEditRevisionRef.current;
+    profileDraftHydrationRef.current.consume(scope);
+    setProfileCommitError(null);
+    await profileDraftSaveRef.current.run({
+      submissionKey: JSON.stringify([scope, draft, editRevision]),
+      isCurrent: () => latestProfileDraftRef.current.scope === scope && isCurrentSession?.() !== false,
+      setBusy: setProfileDraftSaving,
+      save: async () => {
+        if (serverSession && onPatchUser) return await onPatchUser(patch) !== false;
+        if (onChangeUser) return commitProfileChange({ ...user, ...patch });
+        return false;
+      },
+      saved: () => {
+        if (latestProfileDraftRef.current.key !== draft || profileDraftEditRevisionRef.current !== editRevision) return;
+        setProfileValidationError(null);
+        setProfileDirty(false);
+      },
+      failed: () => setProfileCommitError('Не удалось сохранить профиль. Изменения не подтверждены — попробуйте ещё раз.'),
+    });
   };
 
   const saveProgressPhotos = async (
@@ -2009,7 +2055,7 @@ export default function SettingsScreen({
                     draftChestCm={draftChestCm}
                     draftHipsCm={draftHipsCm}
                     profileDirty={profileDirty}
-                    profileSaving={profileCommitBusy}
+                    profileSaving={profileCommitBusy || profileDraftSaving}
                     profileValidationError={profileValidationError}
                     profileSummary={profileSummary}
                     onProfileSave={saveProfileDraft}

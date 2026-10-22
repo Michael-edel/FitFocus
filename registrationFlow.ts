@@ -1,11 +1,11 @@
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
-import { registrationError, registrationRisk } from './registrationValidation';
+import { registrationError, registrationRisk, resolveTargetWeight } from './registrationValidation';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
 import { UserStateRepository } from './storage/userStateRepository';
 import { createProfileIntent } from './storage/profileState';
-import { Goal, type UserProfile } from './types';
+import { type UserProfile } from './types';
 import { isRecord } from './safeJson';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
 import { isOutboxWriteSessionChanged, type OutboxLocalCommitGuard, type OutboxReadGuard } from './storage/durableOutbox';
@@ -37,14 +37,6 @@ type RegDataLike = {
   riskAckLoss?: boolean;
   riskAckGain?: boolean;
 };
-
-function deriveTargetWeight(weight: number, goal: UserProfile['goal']): number {
-  const baseWeight = Number.isFinite(weight) && weight > 0 ? weight : 0;
-  if (!baseWeight) return 0;
-  if (goal === Goal.LOSS) return Number(Math.max(40, baseWeight * 0.9).toFixed(1));
-  if (goal === Goal.GAIN) return Number(Math.max(baseWeight + 1, baseWeight * 1.05).toFixed(1));
-  return Number(baseWeight.toFixed(1));
-}
 
 type RegisterFlowDeps = {
   regData: RegDataLike;
@@ -108,9 +100,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     age: Math.max(0, Math.floor(deps.regData.age || 0)),
     activityLevel: deps.regData.activityLevel,
     goal: deps.regData.goal,
-    targetWeight: Number(deps.regData.targetWeight) > 0
-      ? Number(Number(deps.regData.targetWeight).toFixed(1))
-      : deriveTargetWeight(deps.regData.weight, deps.regData.goal),
+    targetWeight: resolveTargetWeight(deps.regData),
     adaptationMultiplier: 1.0,
     familyMembers: [],
     exclusions: '',

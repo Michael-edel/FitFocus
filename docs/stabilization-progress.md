@@ -1,4 +1,30 @@
+## Second-pass cache race regression, 22 October 2026
+
+A Firefox diagnostic series reproduced duplicate Save twice in ten attempts.
+Trace proves successful save -> same-scope profile publication -> stale dirty
+cache restoration -> artificial edit revision -> second Save operation. Cache
+hydration is now consumed once per account/session, and explicit edits/saves
+consume it before asynchronous publication. Independent source review: no findings.
+Final-source local checks: 1608/1608 unit tests, 226 files; all three TypeScript
+configurations; schema/privacy/auth/API/admin guards; audit zero vulnerabilities.
+Strict Firefox duplicate-Save repeat: 10/10, retries zero. Seven-profile matrix: 28/28 passed, retries zero, including dirty-cache
+restoration, clean-cache persistence, reload, 375 px layout and logout/relogin.
+No publication yet; full exact-head CI remains required.
+
 # Стабилизация: проверяемые изменения
+
+## Первые пользователи, второй проход, 22.10.2026
+
+Ветка`qa/first-users-20261022`, parent272e7ef; рабочие изменения до commit.
+Устранены target validation, перекрытие CTA и profile ACK race. Диагностика
+реальным StateEditor/outbox показала first-save conflict без doubleclick.
+Desired regression на прежнем storage:exit1; после узкого atomic ACK fix
+focused78/78. Общий target validator:66/66, target field SSR7/7.
+Полный unit1608/1608 в226файлах; три typecheck, schema23migrations/32tables,
+privacy29tables, auth/API/admin guards и audit0 прошли. Независимый review:
+no material findings. Browser/regression SHA и CI кандидата фиксируются
+после подготовки; результаты старых CI не переносятся на новый код.
+Исторические persona-отчёты не изменены; второй regression report отдельный.
 
 ## Vitest audit и диагностика bootstrap после merge, 22.10.2026
 
