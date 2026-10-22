@@ -29,7 +29,8 @@ async function saved(page: Page) {
       await transactionComplete;
       return { profile: value ? JSON.parse(value.value) as { name: string; aiPlan?: { weeklyMenu?: { days: Array<{ breakfast: string }> } } } : null,
         operations: operations.filter(op => op.key === key && op.type === 'put' && op.value.includes('"weeklyMenu"'))
-          .map(op => ({ opId: op.opId as string, status: op.status as string, retryCount: op.retryCount as number })),
+          .map(op => ({ opId: op.opId as string, status: op.status as string, retryCount: op.retryCount as number,
+            attemptStartedAtMs: op.attempt?.startedAtMs as number | undefined })),
         generated: operations.filter(op => op.key === key && op.type === 'put' && op.value.includes('"weeklyMenu"')).length };
     } finally { db.close(); }
   }, key);
@@ -44,7 +45,7 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   const isExpectedWebKitReloadWarning = (text: string) => mode === 'profile-offline' && isWebKit && pageReloadInProgress
     && (/^\/127\.0\.0\.1:\d+\/api\/me\?t=\d+ due to access control checks\.$/.test(text)
       || /^\/127\.0\.0\.1:\d+\/api\/achievements\/check due to access control checks\.$/.test(text));
-  const held = gate(), recoveredProfile = gate(); let active = true, cloudAvailable = mode !== 'profile-offline';
+  const held = gate(), recoveredProfile = gate(), retryAcrossReload = gate(); let active = true, cloudAvailable = mode !== 'profile-offline';
   let profile: ReturnType<typeof buildMockProfile> & { version: number; aiPlan: { weeklyMenu?: WeeklyMenu } } = { ...buildMockProfile(), version: 2 };
   page.on('pageerror', error => {
     if (isExpectedWebKitReloadWarning(error.message)) expectedWebKitReloadWarnings.push(error.message);
@@ -89,12 +90,18 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
     if (path === '/api/logout') { active = false; return json({ ok: true }); }
     if (path === '/api/profile') {
       if (request.method() === 'PUT') {
-        counts.profileAttempts += 1;
         expect(request.headers()['x-fitfocus-state-account']).toBe(account);
         expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
         const body = request.postDataJSON();
         if (body.aiPlan?.weeklyMenu) {
           expect((await saved(page)).profile?.aiPlan?.weeklyMenu?.days[0].breakfast).toBe('Проверенная овсянка 200 г');
+        }
+        counts.profileAttempts += 1;
+        // Keep exactly the first retry claimed while its document is reloaded.
+        if (mode === 'profile-offline' && counts.profileAttempts === 2) {
+          await retryAcrossReload.wait;
+          counts.profileFailures += 1;
+          return json({ error: 'INJECTED_PROFILE_UNAVAILABLE' }, 503);
         }
         if (!cloudAvailable) { counts.profileFailures += 1; return json({ error: 'INJECTED_PROFILE_UNAVAILABLE' }, 503); }
         if (mode === 'profile-offline') { counts.recovered += 1; await recoveredProfile.wait; }
@@ -137,7 +144,8 @@ async function setup(page: Page, mode: 'normal' | 'held' | 'quota' | 'profile-of
   await expect(page.getByRole('button', { name: 'Обновить план', exact: true })).toBeEnabled();
   return { errors, expectedWebKitReloadWarnings, setPageReloadInProgress: (value: boolean) => { pageReloadInProgress = value; },
     counts, release: held.release, close: () => { active = false; },
-    restoreCloud: () => { cloudAvailable = true; }, releaseProfile: recoveredProfile.release, cloudProfile: () => profile };
+    restoreCloud: () => { cloudAvailable = true; }, releaseProfile: recoveredProfile.release,
+    releaseReloadRetry: retryAcrossReload.release, cloudProfile: () => profile };
 }
 async function generate(page: Page) {
   page.once('dialog', dialog => dialog.accept());
@@ -208,7 +216,10 @@ test('weekly menu preserves an independent profile edit made while AI is pending
   } finally { release(); }
 });
 test('weekly menu resumes the same durable profile operation after a cloud failure and reload', async ({ page }, info) => {
-  const { errors, expectedWebKitReloadWarnings, setPageReloadInProgress, counts, restoreCloud, releaseProfile, cloudProfile } = await setup(page, 'profile-offline');
+  // Exercise the real 30-second sender lease, with time for setup and recovery.
+  test.setTimeout(60_000);
+  const senderLeaseMs = 30_000;
+  const { errors, expectedWebKitReloadWarnings, setPageReloadInProgress, counts, restoreCloud, releaseProfile, releaseReloadRetry, cloudProfile } = await setup(page, 'profile-offline');
   const failedProfileResponse = page.waitForResponse(response => {
     const request = response.request();
     return new URL(response.url()).pathname === '/api/profile'
@@ -222,17 +233,30 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     expect(cloudProfile().aiPlan?.weeklyMenu).toBeUndefined();
     const response = await failedProfileResponse;
     await response.finished();
-    // A completed HTTP response does not mean the sender has durably finished
-    // its claim. Reload only after this failure is recorded as a retry.
-    await expect.poll(async () => (await saved(page)).operations.map(operation => ({
-      opId: operation.opId, status: operation.status, retried: operation.retryCount >= 1,
-    }))).toEqual([{ opId, status: 'pending', retried: true }]);
+    // The first retry's persisted count proves the failure was recorded. Its
+    // pending state may already have been claimed again before we observe it.
+    await expect.poll(() => counts.profileAttempts).toBe(2);
+    const claimed = (await saved(page)).operations;
+    expect(claimed).toEqual([{ opId, status: 'sending', retryCount: 1, attemptStartedAtMs: expect.any(Number) }]);
     setPageReloadInProgress(true);
     try { await page.reload(); } finally { setPageReloadInProgress(false); }
     await expect.poll(async () => (await saved(page)).profile?.aiPlan?.weeklyMenu?.days.length).toBe(7);
-    expect((await saved(page)).operations.map(op => op.opId)).toEqual([opId]);
+    expect((await saved(page)).operations).toEqual(claimed);
+    // Finish only the cancelled old-document request while cloud is still down.
+    releaseReloadRetry();
     restoreCloud(); await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect.poll(() => counts.recovered, { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+    expect(counts.recovered).toBe(0);
+    // An orphaned sending claim is deliberately unavailable until its lease
+    // expires. Keep that phase separate from the bounded recovery assertion.
+    const leaseExpiresAtMs = claimed[0].attemptStartedAtMs! + senderLeaseMs;
+    await expect.poll(async () => {
+      const current = (await saved(page)).operations;
+      expect(current.map(operation => operation.opId)).toEqual([opId]);
+      const expired = await page.evaluate(expiresAt => Date.now() >= expiresAt, leaseExpiresAtMs);
+      if (!expired) expect(current).toEqual(claimed);
+      return expired;
+    }, { timeout: senderLeaseMs + 5_000 }).toBe(true);
+    await expect.poll(() => counts.recovered, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
     expect((await saved(page)).operations.map(op => op.opId)).toEqual([opId]); releaseProfile();
     await expect.poll(() => counts.profileSuccesses).toBe(1);
     await expect.poll(async () => (await saved(page)).generated).toBe(0);
@@ -240,7 +264,7 @@ test('weekly menu resumes the same durable profile operation after a cloud failu
     const breakfast = page.getByText(/Проверенная овсянка/).first();
     await breakfast.scrollIntoViewIfNeeded(); await expect(breakfast).toBeInViewport(); await healthy(page, errors, expectedWebKitReloadWarnings);
     await page.screenshot({ path: info.outputPath('weekly-menu-recovered.png') });
-  } finally { releaseProfile(); }
+  } finally { releaseReloadRetry(); releaseProfile(); }
 });
 
 test('weekly menu refuses generation before AI when the profile projection capability is missing', async ({ page }, info) => {
