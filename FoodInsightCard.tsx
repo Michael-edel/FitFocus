@@ -1,17 +1,23 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FoodInsight, FoodIngredient, FavoriteRecipe } from './types';
-import { getRecipeFromPhoto } from './geminiService';
-import { bumpRecipeUsage, canGenerateRecipe } from './usage';
+import { canGenerateRecipe } from './usage';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import type { PhotoRecipeCommit } from './features/ai/usePhotoRecipeGeneration';
+import { usePhotoRecipeGeneration } from './features/ai/usePhotoRecipeGeneration';
 import { Heart } from 'lucide-react';
 
 type Props = {
+  sourceId: string;
+  currentUserId: string | null | undefined;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
   photo: string;
   name: string;
   insight: FoodInsight;
   onClose?: () => void;
   isPro?: boolean;
-  onUpdateInsight?: (nextInsight: FoodInsight) => void;
-  onSaveRecipe?: (fav: FavoriteRecipe) => void;
+  onUpdateInsight: PhotoRecipeCommit;
+  onSaveRecipe?: (fav: FavoriteRecipe) => Promise<boolean>;
   onEdit?: () => void;
   nonFood?: boolean;
 };
@@ -36,16 +42,23 @@ const isTotalSelection = (value: ActiveSelection | null): value is TotalSelectio
 const isIngredientSelection = (value: ActiveSelection | null): value is FoodIngredient =>
   Boolean(value) && !isTotalSelection(value);
 
-export default function FoodInsightCard({ photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
+export default function FoodInsightCard({ sourceId, currentUserId, loginGuard, isCurrentSession, photo, name, insight, onClose, isPro, onUpdateInsight, onSaveRecipe, onEdit, nonFood = false }: Props) {
   const [active, setActive] = useState<ActiveSelection | null>(null);
   const [haloTheme, setHaloTheme] = useState<'light' | 'dark'>('light');
   const [focusMode, setFocusMode] = useState<boolean>(true);
-  const [recipeLoading, setRecipeLoading] = useState(false);
-  const [recipeErr, setRecipeErr] = useState<string | null>(null);
+  const { loading: recipeLoading, error: recipeErr, setError: setRecipeErr, generateRecipe } = usePhotoRecipeGeneration({
+    userId: currentUserId,
+    loginGuard,
+    sourceId,
+    isCurrentSession,
+  });
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const calloutRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [calloutFix, setCalloutFix] = useState<Record<number, CalloutFix>>({});
+  const [favoriteSaveBusy, setFavoriteSaveBusy] = useState(false);
+  const [favoriteSaveError, setFavoriteSaveError] = useState<string | null>(null);
+  const [favoriteSaved, setFavoriteSaved] = useState(false);
 
   const plan: 'free' | 'pro' | 'family' = isPro ? 'pro' : 'free';
 
@@ -272,6 +285,31 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
     '--ff-vector-len': Math.min(42, Math.max(18, Math.hypot(activePos.cx - activePos.ax, activePos.cy - activePos.ay))) + '%',
   } : undefined;
 
+  const saveFavoriteRecipe = async () => {
+    if (!insight.recipe || !onSaveRecipe || favoriteSaveBusy || favoriteSaved) return;
+    setFavoriteSaveBusy(true);
+    setFavoriteSaveError(null);
+    try {
+      const saved = await onSaveRecipe({
+        id: `fav_${Date.now()}`,
+        title: insight.recipe.title || name,
+        createdAt: new Date().toISOString(),
+        photo,
+        recipe: insight.recipe,
+        sourceFoodName: name,
+      });
+      if (!saved) {
+        setFavoriteSaveError('Не удалось сохранить рецепт. Проверьте соединение и повторите попытку.');
+        return;
+      }
+      setFavoriteSaved(true);
+    } catch {
+      setFavoriteSaveError('Не удалось сохранить рецепт. Проверьте соединение и повторите попытку.');
+    } finally {
+      setFavoriteSaveBusy(false);
+    }
+  };
+
   return (
     <div className="ff-infocard">
       <div className="ff-infocard__header">
@@ -409,26 +447,23 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         {hasRecipe && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!insight.recipe) return;
-              onSaveRecipe?.({
-                id: `fav_${Date.now()}`,
-                title: insight.recipe.title || name,
-                createdAt: new Date().toISOString(),
-                photo,
-                recipe: insight.recipe,
-                sourceFoodName: name,
-              });
-              alert('Рецепт сохранён в избранное!');
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 border border-rose-500/20 transition-all font-bold text-xs"
-            title="Сохранить в рецепты"
-          >
-            <Heart className="w-4 h-4" />
-            Сохранить рецепт
-          </button>
+          <div className="flex flex-col items-start gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void saveFavoriteRecipe();
+              }}
+              disabled={favoriteSaveBusy || favoriteSaved || !onSaveRecipe}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 border border-rose-500/20 transition-all font-bold text-xs disabled:opacity-60"
+              title="Сохранить в рецепты"
+            >
+              <Heart className="w-4 h-4" />
+              {favoriteSaveBusy ? 'Сохраняем…' : favoriteSaved ? 'Сохранено' : 'Сохранить рецепт'}
+            </button>
+            {favoriteSaveError && <div role="alert" className="text-xs font-semibold text-rose-200">{favoriteSaveError}</div>}
+            {favoriteSaved && <div role="status" className="text-xs font-semibold text-emerald-200">Рецепт сохранён в избранное.</div>}
+          </div>
         )}
         {onEdit ? (
           <button
@@ -603,7 +638,7 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                       <>
                         {recipeErr ? <div className="ff-infocard__disclaimer text-rose-500">Ошибка: {recipeErr}</div> : null}
                         {(() => {
-                          const gate = canGenerateRecipe(plan);
+                          const gate = canGenerateRecipe(plan, currentUserId);
                           return (
                             <div className="ff-infocard__usageRow">
                               Лимит: {gate.used}/{gate.limit} на этой неделе
@@ -615,27 +650,12 @@ export default function FoodInsightCard({ photo, name, insight, onClose, isPro, 
                           className="ff-infocard__recipeBtn"
                           disabled={recipeLoading}
                           onClick={async () => {
-                            try {
-                              setRecipeErr(null);
-                              setRecipeLoading(true);
-                              const gate = canGenerateRecipe(plan);
-                              if (!gate.allowed) {
-                                setRecipeErr(`Лимит исчерпан: ${gate.used}/${gate.limit} на этой неделе.`);
-                                return;
-                              }
-                              const r = await getRecipeFromPhoto(photo);
-                              if (r && onUpdateInsight) {
-                                const next = { ...insight, recipe: r };
-                                onUpdateInsight(next);
-                                bumpRecipeUsage();
-                              } else if (!r) {
-                                throw new Error("Не удалось распознать рецепт");
-                              }
-                            } catch {
-                              setRecipeErr('Не удалось получить рецепт');
-                            } finally {
-                              setRecipeLoading(false);
+                            const gate = canGenerateRecipe(plan, currentUserId);
+                            if (!gate.allowed) {
+                              setRecipeErr(`Лимит исчерпан: ${gate.used}/${gate.limit} на этой неделе.`);
+                              return;
                             }
+                            await generateRecipe(photo, insight, onUpdateInsight);
                           }}
                         >
                           {recipeLoading ? 'Генерирую рецепт…' : 'Получить пошаговый рецепт'}

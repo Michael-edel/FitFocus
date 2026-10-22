@@ -16,16 +16,14 @@ export function getTodayKey() {
 export function toggleHabit(profile: UserProfile, habit: keyof typeof defaultHabits): UserProfile {
   const today = getTodayKey();
   const dailyHabits = profile.dailyHabits || {};
-  
-  if (!dailyHabits[today]) {
-    dailyHabits[today] = { ...defaultHabits };
-  }
-  
-  dailyHabits[today][habit] = !dailyHabits[today][habit];
+  const todayHabits = dailyHabits[today] || defaultHabits;
   
   return {
     ...profile,
-    dailyHabits: { ...dailyHabits }
+    dailyHabits: {
+      ...dailyHabits,
+      [today]: { ...todayHabits, [habit]: !todayHabits[habit] },
+    },
   };
 }
 

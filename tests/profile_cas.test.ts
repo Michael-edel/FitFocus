@@ -1,43 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { writeProfileCas } from '../functions/api/profile';
 
+import { afterEach } from 'vitest';
+import { sqliteD1 } from './_helpers/sqliteD1';
+const fixtures: ReturnType<typeof sqliteD1>[] = [];
+afterEach(() => { for (const fixture of fixtures.splice(0)) fixture.sqlite.close(); });
 type StoredProfile = { userId: string; profileJson: string; version: number };
-
 function makeDb(initial: StoredProfile | null = null) {
-  let stored = initial;
-  return {
-    get stored() {
-      return stored;
-    },
-    prepare(sql: string) {
-      let binds: unknown[] = [];
-      return {
-        bind(...values: unknown[]) {
-          binds = values;
-          return this;
-        },
-        async run() {
-          if (sql.startsWith('UPDATE user_profiles')) {
-            const [profileJson, , version, userId, expectedVersion] = binds;
-            if (stored?.userId !== userId || stored.version !== expectedVersion) {
-              return { success: true, meta: { changes: 0 } };
-            }
-            stored = { userId: String(userId), profileJson: String(profileJson), version: Number(version) };
-            return { success: true, meta: { changes: 1 } };
-          }
-
-          if (sql.startsWith('INSERT INTO user_profiles')) {
-            const [userId, profileJson, , version] = binds;
-            if (stored) return { success: true, meta: { changes: 0 } };
-            stored = { userId: String(userId), profileJson: String(profileJson), version: Number(version) };
-            return { success: true, meta: { changes: 1 } };
-          }
-
-          throw new Error(`Unexpected SQL: ${sql}`);
-        },
-      };
-    },
-  } as unknown as D1Database & { readonly stored: StoredProfile | null };
+  const fixture = sqliteD1(); fixtures.push(fixture);
+  if (initial) fixture.sqlite.prepare('INSERT INTO user_profiles (user_id, profile_json, updated_at, version) VALUES (?, ?, ?, ?)')
+    .run(initial.userId, initial.profileJson, 1, initial.version);
+  Object.defineProperty(fixture.db, 'stored', { get() {
+    const row = fixture.sqlite.prepare('SELECT user_id, profile_json, version FROM user_profiles').get();
+    return row ? { userId: row.user_id, profileJson: row.profile_json, version: row.version } : null;
+  } });
+  return fixture.db as D1Database & { readonly stored: StoredProfile | null };
 }
 
 describe('profile CAS writes', () => {

@@ -28,6 +28,9 @@ type RefeedSuggestion =
   | { type: 'adjust'; stepsExtra: number }
   | { type: 'none' };
 
+type DashboardWeightSaveResult = 'saved' | 'invalid' | 'failed';
+type DashboardHabitSaveResult = 'saved' | 'failed';
+
 type AdaptationStatus = {
   label: string;
   color: string;
@@ -57,14 +60,14 @@ type DashboardScreenProps = {
   foodDiary: FoodItem[];
   weightTrend: number;
   currentWeight?: number;
-  handleToggleHabit: (habitKey: string) => void;
+  handleToggleHabit: (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => Promise<DashboardHabitSaveResult>;
   exportShortPdf: () => void;
   exportDetailedPdf: () => void;
   pdfIncludeMealLog: boolean;
   setPdfIncludeMealLog: React.Dispatch<React.SetStateAction<boolean>>;
   newWeight: string;
   setNewWeight: React.Dispatch<React.SetStateAction<string>>;
-  logWeight: () => void;
+  logWeight: () => Promise<DashboardWeightSaveResult>;
   plateau: boolean;
   adaptationIndex: number;
   adaptationStatus: AdaptationStatus;
@@ -76,8 +79,6 @@ type DashboardScreenProps = {
   scheduleRefeedTomorrow: () => void;
   expectedN: number;
   adaptLoading: boolean;
-  setAdaptLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  setLastAiAction: (value: { feature: string; type: 'plateau'; userId: string }) => void;
   generatePlateauExplanation: (input: {
     name: string;
     goal: Goal;
@@ -86,9 +87,8 @@ type DashboardScreenProps = {
     expectedN: number;
     adaptationIndex: number;
     suggestion: RefeedSuggestion;
-  }) => Promise<string>;
+  }) => Promise<string | null>;
   adaptNote: string;
-  setAdaptNote: React.Dispatch<React.SetStateAction<string>>;
   adaptExpanded: boolean;
   setAdaptExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   adaptRead: boolean;
@@ -149,11 +149,8 @@ export default function DashboardScreen({
   scheduleRefeedTomorrow,
   expectedN,
   adaptLoading,
-  setAdaptLoading,
-  setLastAiAction,
   generatePlateauExplanation,
   adaptNote,
-  setAdaptNote,
   adaptExpanded,
   setAdaptExpanded,
   adaptRead,
@@ -180,6 +177,42 @@ export default function DashboardScreen({
       : refeedSuggestion.type === 'adjust'
         ? `Мягкая адаптация: +${refeedSuggestion.stepsExtra} шагов`
         : 'Динамика в норме';
+  const [weightSaveError, setWeightSaveError] = React.useState<string | null>(null);
+  const [weightSaving, setWeightSaving] = React.useState(false);
+  const weightSavingRef = React.useRef(false);
+  const [habitSaveError, setHabitSaveError] = React.useState<string | null>(null);
+  const [habitSaving, setHabitSaving] = React.useState(false);
+  const habitSavingRef = React.useRef(false);
+  const saveHabit = async (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
+    if (habitSavingRef.current) return;
+    habitSavingRef.current = true;
+    setHabitSaving(true);
+    setHabitSaveError(null);
+    try {
+      const result = await handleToggleHabit(habitKey);
+      if (result !== 'saved') setHabitSaveError('Не удалось сохранить привычку. Состояние не изменено — попробуйте ещё раз.');
+    } catch {
+      setHabitSaveError('Не удалось сохранить привычку. Состояние не изменено — попробуйте ещё раз.');
+    } finally {
+      habitSavingRef.current = false;
+      setHabitSaving(false);
+    }
+  };
+  const saveWeight = async () => {
+    if (weightSavingRef.current) return;
+    weightSavingRef.current = true;
+    setWeightSaving(true);
+    setWeightSaveError(null);
+    try {
+      const result = await logWeight();
+      if (result === 'failed') setWeightSaveError('Не удалось сохранить вес. Значение осталось в поле — попробуйте ещё раз.');
+    } catch {
+      setWeightSaveError('Не удалось сохранить вес. Значение осталось в поле — попробуйте ещё раз.');
+    } finally {
+      weightSavingRef.current = false;
+      setWeightSaving(false);
+    }
+  };
   const currentWeightLabel = typeof currentUser?.weight === 'number' ? `${currentUser.weight.toFixed(1)} кг` : '—';
   const measurementsCount = currentUser?.measurementsHistory?.length ?? 0;
   const progressPhotosCount = currentUser?.progressPhotos?.length ?? 0;
@@ -233,11 +266,12 @@ export default function DashboardScreen({
             </div>
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full">
               <div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20">
-                <input type="number" aria-label="Вес сегодня" placeholder="90.0" className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') logWeight(); }} />
+                <input type="number" aria-label="Вес сегодня" placeholder="90.0" disabled={weightSaving} className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0 disabled:opacity-60" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveWeight(); }} />
                 <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">кг</span>
               </div>
-              <button onClick={logWeight} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
+              <button type="button" onClick={() => void saveWeight()} disabled={weightSaving} aria-busy={weightSaving} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-wait shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
             </div>
+            {weightSaveError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-300">{weightSaveError}</p>}
           </div>
         </div>
       </header>
@@ -308,7 +342,7 @@ export default function DashboardScreen({
               </div>
             </div>
           </div>
-          <FoodStreakCard userId={currentUser?.id} foodDiary={foodDiary || []} />
+          <FoodStreakCard foodDiary={foodDiary || []} />
         </div>
       </section>
 
@@ -356,9 +390,11 @@ export default function DashboardScreen({
           weightTrend={weightTrend}
           currentWeight={currentWeight}
           targetWeight={currentUser?.targetWeight ?? null}
-          onToggleHabit={(habitKey) => handleToggleHabit(habitKey)}
+          savingHabit={habitSaving}
+          onToggleHabit={(habitKey) => { void saveHabit(habitKey); }}
         />
       </React.Suspense>
+      {habitSaveError && <p role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{habitSaveError}</p>}
 
       {achievementsEnabled && (
         <AchievementsPanel
@@ -419,11 +455,9 @@ export default function DashboardScreen({
               <button
                 type="button"
                 disabled={adaptLoading}
-                onClick={async () => {
+                onClick={() => {
                   if (!currentUser) return;
-                  setLastAiAction({ feature: 'plateau', type: 'plateau', userId: currentUser.id });
-                  setAdaptLoading(true);
-                  const txt = await generatePlateauExplanation({
+                  void generatePlateauExplanation({
                     name: currentUser.name,
                     goal: currentUser.goal,
                     compliancePct,
@@ -432,8 +466,6 @@ export default function DashboardScreen({
                     adaptationIndex,
                     suggestion: refeedSuggestion,
                   });
-                  setAdaptNote(txt);
-                  setAdaptLoading(false);
                 }}
                 className={clsx('px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95', adaptLoading ? 'opacity-60 border-slate-800 bg-slate-900' : 'border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300')}
               >

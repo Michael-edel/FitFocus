@@ -4,6 +4,8 @@ import { Recipe, UserProfile, AIPlan, Goal, AIAgentRole, CouncilResponse, FoodIt
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from "./constants";
 import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
+import { postScopedAiJson, type AiSession } from './services/aiSession';
+import { SessionReadError } from './storage/sessionRead';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -26,6 +28,21 @@ type AiProxyConfig = JsonRecord;
 type AiProxyResponse = JsonRecord & {
   text: string;
 };
+export class AiProxyError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'AiProxyError';
+  }
+}
+
+export function isRecoverableAiGenerationError(error: unknown): boolean {
+  if (error instanceof SessionReadError) return false;
+  if (error instanceof AiProxyError) return error.status === 408 || error.status === 429 || error.status >= 500;
+  if (error instanceof TypeError) return true;
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message === 'state_request_aborted' || message.includes('network') || message.includes('fetch failed')
+    || message.includes('timed out') || message.includes('timeout');
+}
 type FoodPhotoIngredientResult = {
   name: string;
   percent: number;
@@ -64,6 +81,7 @@ export type CoachAdviceResult = {
   advice: string;
   bullets: string[];
 };
+export type AiActionRecord = { feature: string; type: string; userId: string; actionId?: string };
 type RuntimeGlobal = typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
   __ENV?: Record<string, string | undefined>;
@@ -345,8 +363,10 @@ async function callAiProxy(
   model: string,
   contents: unknown,
   feature: string,
-  config?: AiProxyConfig
+  config: AiProxyConfig | undefined,
+  session: AiSession,
 ): Promise<AiProxyResponse> {
+  if (!session) throw new SessionReadError('session');
   // Всегда используем серверный прокси с лимитами (ключ на сервере).
 
   // ✅ Глобальная языковая политика продукта
@@ -384,14 +404,8 @@ async function callAiProxy(
 
   const doReq = async (m: string) => {
     const payload = { ...basePayload, model: m };
-    const res = await fetch("/api/ai", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const data = asRecord(await res.json().catch(() => ({})));
-    return { res, data };
+    const result = await postScopedAiJson(session, '/api/ai', payload);
+    return { res: result.response, data: asRecord(result.body) };
   };
 
   // 1) пробуем основную модель
@@ -422,7 +436,7 @@ async function callAiProxy(
       } catch {}
     }
     const msg = stringValue(error.message) || stringValue(data.message) || `AI proxy error: ${res.status}`;
-    throw new Error(msg);
+    throw new AiProxyError(msg, res.status);
   }
 
   // Нормализуем ответ: UI ожидает поле `text`,
@@ -465,10 +479,12 @@ export async function callAiCouncil(
   query: string,
   user: UserProfile,
   diary: FoodItem[],
-  habits: UserHabit[]
+  habits: UserHabit[],
+  session: AiSession,
 ): Promise<CouncilResponse> {
+  if (session.guard.accountId !== user.id) throw new SessionReadError('session');
   const callModel = async (prompt: string, role: AIAgentRole) => {
-    const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, `council_${role}`);
+    const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, `council_${role}`, undefined, session);
     return res.text || '';
   };
 
@@ -482,12 +498,19 @@ export const setAiStorageScope = (userId: string | null) => {
   aiStorageScope = userId && String(userId).trim() ? String(userId) : null;
 };
 
-const scopedKey = (base: string) => (aiStorageScope ? `fitfocus_data_${aiStorageScope}_${base}` : base);
+const normalizedAiScope = (userId: string | null | undefined): string | null => {
+  const scope = userId === undefined ? aiStorageScope : userId;
+  return scope && String(scope).trim() ? String(scope) : null;
+};
+const scopedKey = (base: string, userId?: string | null) => {
+  const scope = normalizedAiScope(userId);
+  return scope ? `fitfocus_data_${scope}_${base}` : base;
+};
 const LS_COOLDOWN_KEY = () => scopedKey("ai_gemini_cooldown_until");
-const LS_STATUS_KEY = () => scopedKey("ai_last_status_v1");
+const LS_STATUS_KEY = (userId?: string | null) => scopedKey("ai_last_status_v1", userId);
 const LS_CACHE_PREFIX = () => scopedKey("ai_cache_v1:");
 const LS_FEATURE_LASTCALL_PREFIX = () => scopedKey("ai_feature_lastcall_v1:");
-const LS_LAST_ACTION_KEY = () => scopedKey("ai_last_action_v1");
+const LS_LAST_ACTION_KEY = (userId?: string | null) => scopedKey("ai_last_action_v1", userId);
 
 const FEATURE_MIN_INTERVAL_MS: Record<string, number> = {
   coach_advice: 10 * 60 * 1000,
@@ -531,9 +554,10 @@ const recordAiStatus = (s: AiLastStatus) => {
   } catch {}
 };
 
-export const readAiStatus = (): AiLastStatus | null => {
+export const readAiStatus = (userId?: string | null): AiLastStatus | null => {
+  if (userId === null || (userId !== undefined && !userId.trim())) return null;
   try {
-    const raw = localStorage.getItem(LS_STATUS_KEY());
+    const raw = localStorage.getItem(LS_STATUS_KEY(userId));
     if (!raw) return null;
     const parsed = safeJsonObject(raw);
     if (typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts) || typeof parsed.feature !== 'string' || !isAiStatusSource(parsed.source)) {
@@ -631,24 +655,41 @@ export const allowAiRetryNow = (feature?: string, opts?: { force?: boolean }) =>
 /**
  * Установить последнее действие AI для возможности повтора
  */
-export const setLastAiAction = (action: { feature: string; type: string; userId: string } | null) => {
+export const setLastAiAction = (action: AiActionRecord | null) => {
   try {
-    if (!action) localStorage.removeItem(LS_LAST_ACTION_KEY());
-    else localStorage.setItem(LS_LAST_ACTION_KEY(), JSON.stringify(action));
+    if (!action) {
+      localStorage.removeItem(LS_LAST_ACTION_KEY());
+      return;
+    }
+    if (!action.userId.trim()) return;
+    localStorage.setItem(LS_LAST_ACTION_KEY(action.userId), JSON.stringify(action));
+    // Retire an older unscoped copy only when its embedded owner matches this action.
+    const legacy = localStorage.getItem(LS_LAST_ACTION_KEY(null));
+    const legacyAction = legacy ? safeJsonObject(legacy) : null;
+    if (legacyAction?.userId === action.userId) localStorage.removeItem(LS_LAST_ACTION_KEY(null));
   } catch {}
 };
 
 /**
  * Получить последнее действие AI
  */
-export const getLastAiAction = (): { feature: string; type: string; userId: string } | null => {
+export const getLastAiAction = (userId?: string | null): AiActionRecord | null => {
+  if (userId === null || (userId !== undefined && !userId.trim())) return null;
   try {
-    const raw = localStorage.getItem(LS_LAST_ACTION_KEY());
+    const expectedOwner = normalizedAiScope(userId);
+    const scopedRaw = localStorage.getItem(LS_LAST_ACTION_KEY(userId));
+    const legacyRaw = expectedOwner && !scopedRaw ? localStorage.getItem(LS_LAST_ACTION_KEY(null)) : null;
+    const raw = scopedRaw ?? legacyRaw ?? (!expectedOwner ? localStorage.getItem(LS_LAST_ACTION_KEY(null)) : null);
     if (!raw) return null;
     const parsed = safeJsonObject(raw);
-    return typeof parsed.feature === 'string' && typeof parsed.type === 'string' && typeof parsed.userId === 'string'
-      ? { feature: parsed.feature, type: parsed.type, userId: parsed.userId }
-      : null;
+    if (typeof parsed.feature !== 'string' || typeof parsed.type !== 'string' || typeof parsed.userId !== 'string'
+      || (expectedOwner && parsed.userId !== expectedOwner)) return null;
+    return {
+        feature: parsed.feature,
+        type: parsed.type,
+        userId: parsed.userId,
+        ...(typeof parsed.actionId === 'string' ? { actionId: parsed.actionId } : {}),
+      };
   } catch { return null; }
 };
 
@@ -656,7 +697,8 @@ export const getLastAiAction = (): { feature: string; type: string; userId: stri
 /**
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
-export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promise<WeeklyMenu> {
+export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, session: AiSession): Promise<WeeklyMenu> {
+  if (session.guard.accountId !== user.id) throw new Error('LOGIN_SESSION_CHANGED');
   const schema = {
     type: "OBJECT",
     properties: {
@@ -716,7 +758,7 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "weekly_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   const obj = safeJsonObject(res.text);
 
@@ -751,16 +793,6 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
     return date.toISOString().slice(0, 10);
   })();
 
-  // Best-effort: store normalized items server-side for aggregated shopping list + CSV export
-  try {
-    await fetch("/api/weekly_menu/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ week_start: weekStart, items: shoppingListItems })
-    });
-  } catch {}
-
   // Legacy list fallback from items if shoppingList empty
   const legacyFromItems = shoppingListItems.map((it) => `${it.name} — ${it.grams} г`);
   const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
@@ -775,8 +807,10 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan): Promi
 export async function generateFamilyWeeklyMenu(
   owner: UserProfile,
   familyProfiles: UserProfile[],
-  prefs: FamilyMenuPrefs
+  prefs: FamilyMenuPrefs,
+  session: AiSession,
 ): Promise<FamilyWeeklyMenu> {
+  if (session.guard.accountId !== owner.id) throw new Error('LOGIN_SESSION_CHANGED');
   // Источник семьи: зарегистрированные профили (Family тариф)
   const uniqueById = new Map<string, UserProfile>();
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
@@ -909,7 +943,7 @@ const dietaryBlock = (() => {
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "family_menu", {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   const obj = safeJsonObject(res.text);
 
@@ -970,7 +1004,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
     const rep = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt, "family_menu_repair", {
       responseMimeType: "application/json",
       responseSchema: schema
-    });
+    }, session);
 
     const robj = safeJsonObject(rep.text);
     const rdaysRaw = Array.isArray(robj.days) ? robj.days : [];
@@ -1003,7 +1037,7 @@ ${JSON.stringify({ days: normDays, shoppingList }, null, 2)}
 /**
  * Анализ фото еды с использованием Gemini Flash
  */
-export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysisResult> {
+export async function analyzeFoodPhoto(base64: string, session: AiSession): Promise<FoodPhotoAnalysisResult> {
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       {
@@ -1041,12 +1075,12 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
       },
       required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
     }
-  });
+  }, session);
   return normalizeFoodPhotoAnalysis(safeJsonObject(response.text));
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
-    export async function analyzeFoodPhotoEnhanced(base64: string): Promise<EnhancedFoodPhotoAnalysisResult> {
+    export async function analyzeFoodPhotoEnhanced(base64: string, session: AiSession): Promise<EnhancedFoodPhotoAnalysisResult> {
       const schema = {
         type: "OBJECT",
         properties: {
@@ -1095,7 +1129,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
       }, "foodphoto_enhanced", {
         responseMimeType: "application/json",
         responseSchema: schema,
-      });
+      }, session);
 
       return normalizeEnhancedFoodPhotoAnalysis(safeJsonObject(response.text));
     }
@@ -1103,7 +1137,7 @@ export async function analyzeFoodPhoto(base64: string): Promise<FoodPhotoAnalysi
 /**
  * Получение персонального совета от AI коуча
  */
-export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> {
+export async function getCoachAdvice(data: unknown, session: AiSession): Promise<CoachAdviceResult> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Ты - персональный фитнес-коуч. Данные пользователя: ${JSON.stringify(data)}. Если в данных есть давление, пульс, сахар крови, обхваты, фото прогресса, историю замеров или медицинские ограничения, учитывай их при рекомендациях по нагрузке, питанию и восстановлению. Сахар крови трактуй так: низкий = не давать агрессивный дефицит и долгие голодные окна; норма = нейтральный контекст; повышен = меньше быстрых углеводов, больше белка/клетчатки и равномерное распределение углеводов; не меняй калорийную цель, меняй состав и ритм питания. Дай краткий совет на сегодня. Верни JSON с полями title, advice, bullets (массив строк).`,
     'coach_advice',
@@ -1118,7 +1152,8 @@ export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> 
         },
         required: ["title", "advice", "bullets"]
       }
-    }
+    },
+    session,
   );
   return normalizeCoachAdvice(safeJsonObject(response.text));
 }
@@ -1126,7 +1161,7 @@ export async function getCoachAdvice(data: unknown): Promise<CoachAdviceResult> 
 /**
  * Генерация персонального плана (используется Gemini Pro)
  */
-export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
+export async function generatePersonalPlan(user: UserProfile, session: AiSession): Promise<AIPlan> {
   const schema = {
     type: "OBJECT",
     properties: {
@@ -1265,7 +1300,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
   const r1 = await callAiProxy(AI_DEFAULT_MODEL, basePrompt, 'personal_plan', {
     responseMimeType: "application/json",
     responseSchema: schema
-  });
+  }, session);
 
   let plan = applyFallbackKpi(normalizePlan(safeJsonObject(r1.text)));
 
@@ -1274,7 +1309,7 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
     const r2 = await callAiProxy(AI_DEFAULT_MODEL, repairPrompt(plan), 'personal_plan', {
       responseMimeType: "application/json",
       responseSchema: schema
-    });
+    }, session);
     const repaired = safeJsonObject(r2.text);
     plan = applyFallbackKpi(normalizePlan(Object.keys(repaired).length ? repaired : plan));
   }
@@ -1285,10 +1320,10 @@ export async function generatePersonalPlan(user: UserProfile): Promise<AIPlan> {
 /**
  * Объяснение причин плато и рекомендации
  */
-export async function generatePlateauExplanation(data: unknown): Promise<string> {
+export async function generatePlateauExplanation(data: unknown, session: AiSession): Promise<string> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Объясни пользователю причину плато и дай рекомендации. Данные: ${JSON.stringify(data)}. Ответ должен быть на русском языке, дружелюбным и профессиональным.`,
-    'plateau'
+    'plateau', undefined, session,
   );
   return response.text || "Не удалось получить объяснение от AI.";
 }
@@ -1296,10 +1331,10 @@ export async function generatePlateauExplanation(data: unknown): Promise<string>
 /**
  * Интерпретация еженедельных показателей прогресса
  */
-export async function getWeeklyIntelligenceInterpretation(data: unknown): Promise<string> {
+export async function getWeeklyIntelligenceInterpretation(data: unknown, session: AiSession): Promise<string> {
   const response = await callAiProxy(AI_DEFAULT_MODEL,
     `Интерпретируй еженедельные результаты пользователя: ${JSON.stringify(data)}. Напиши краткий мотивирующий анализ на 3-4 предложения.`,
-    'wis_text'
+    'wis_text', undefined, session,
   );
   return response.text || "Анализ недели не сформирован.";
 }
@@ -1307,7 +1342,7 @@ export async function getWeeklyIntelligenceInterpretation(data: unknown): Promis
 /**
  * Генерация рецепта по изображению
  */
-export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
+export async function getRecipeFromPhoto(photoBase64: string, session: AiSession): Promise<Recipe> {
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
@@ -1346,6 +1381,6 @@ export async function getRecipeFromPhoto(photoBase64: string): Promise<Recipe> {
       },
       required: ["title", "ingredients", "steps"]
     }
-  });
+  }, session);
   return normalizeRecipe(safeJsonObject(response.text));
 }

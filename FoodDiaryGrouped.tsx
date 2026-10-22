@@ -14,12 +14,12 @@ import { toLocalDayKey as localDayKey } from './dateUtils';
 
 export type FoodDiaryGroupedProps = {
   items: FoodEntry[];
-  selectedIds: Set<string>;
+  selectedIds: ReadonlySet<string>;
   toggleSelected: (id: string) => void;
-  bulkMoveTo: (mealType: MealType) => void;
-  bulkDelete: () => void;
-  deleteEntry: (id: string) => void;
-  deletePhoto: (id: string) => void;
+  bulkMoveTo: (mealType: MealType) => Promise<boolean>;
+  bulkDelete: () => Promise<boolean>;
+  deleteEntry: (id: string) => Promise<boolean>;
+  deletePhoto: (id: string) => Promise<boolean>;
   openInsight: (item: FoodEntry) => void;
   openEdit: (item: FoodEntry) => void;
   formatTime: (t: string) => string;
@@ -56,7 +56,25 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
   onDayChange,
 }) => {
   const [mobileActionsFor, setMobileActionsFor] = React.useState<string | null>(null);
+  const [diaryActionBusy, setDiaryActionBusy] = React.useState(false);
+  const [diaryActionError, setDiaryActionError] = React.useState<string | null>(null);
   const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+  const runDiaryAction = async (action: () => Promise<boolean>, failureMessage: string) => {
+    if (diaryActionBusy) return false;
+    setDiaryActionBusy(true);
+    setDiaryActionError(null);
+    try {
+      const saved = await action();
+      if (!saved) setDiaryActionError(failureMessage);
+      return saved;
+    } catch {
+      setDiaryActionError(failureMessage);
+      return false;
+    } finally {
+      setDiaryActionBusy(false);
+    }
+  };
 
   const groups = React.useMemo(() => {
     const dayMap = new Map<string, FoodEntry[]>();
@@ -119,6 +137,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
   return (
     <div className="space-y-6">
+      {diaryActionError && <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{diaryActionError}</div>}
       {groups.length > 1 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {groups.map((dayGroup) => {
@@ -153,8 +172,8 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                disabled={!selectedIds.size}
-                onClick={() => bulkMoveTo('breakfast')}
+                disabled={!selectedIds.size || diaryActionBusy}
+                onClick={() => void runDiaryAction(() => bulkMoveTo('breakfast'), 'Не удалось перенести записи. Данные и выделение сохранены; повторите попытку.')}
                 className="min-h-[40px] text-[10px] px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-black tracking-widest uppercase hover:bg-indigo-500/15 transition disabled:opacity-40"
                 title="Перенести выбранные в завтрак"
               >
@@ -162,8 +181,8 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
               </button>
 
               <button
-                disabled={!selectedIds.size}
-                onClick={bulkDelete}
+                disabled={!selectedIds.size || diaryActionBusy}
+                onClick={() => void runDiaryAction(bulkDelete, 'Не удалось удалить выбранные записи. Данные и выделение сохранены; повторите попытку.')}
                 className="min-h-[40px] text-[10px] px-4 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition disabled:opacity-40"
                 title="Удалить выбранные"
               >
@@ -190,16 +209,16 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
-                      disabled={!selectedIds.size}
-                      onClick={() => bulkMoveTo(g.mt)}
+                      disabled={!selectedIds.size || diaryActionBusy}
+                      onClick={() => void runDiaryAction(() => bulkMoveTo(g.mt), 'Не удалось перенести записи. Данные и выделение сохранены; повторите попытку.')}
                       className="min-h-[38px] text-[10px] px-3.5 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-black tracking-widest uppercase hover:bg-indigo-500/15 transition disabled:opacity-40"
                       title="Перенести выбранные в этот прием пищи"
                     >
                       → {g.title}
                     </button>
                     <button
-                      disabled={!selectedIds.size}
-                      onClick={bulkDelete}
+                      disabled={!selectedIds.size || diaryActionBusy}
+                      onClick={() => void runDiaryAction(bulkDelete, 'Не удалось удалить выбранные записи. Данные и выделение сохранены; повторите попытку.')}
                       className="min-h-[38px] text-[10px] px-3.5 py-2 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition disabled:opacity-40"
                       title="Удалить выбранные"
                     >
@@ -229,6 +248,7 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                               e.stopPropagation();
                               toggleSelected(item.id);
                             }}
+                            disabled={diaryActionBusy}
                             className="mt-10 md:mt-5 h-6 w-6 rounded-md accent-indigo-400 shrink-0"
                             title="Выбрать"
                           />
@@ -291,7 +311,8 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                               {hasPhoto && (
                                 <button
                                   type="button"
-                                  onClick={() => deletePhoto(item.id)}
+                                  onClick={() => void runDiaryAction(() => deletePhoto(item.id), 'Не удалось удалить фото. Запись сохранена; повторите попытку.')}
+                                  disabled={diaryActionBusy}
                                   title="Удалить только фото"
                                   className="min-h-[36px] text-[10px] px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-200 font-black tracking-widest uppercase hover:bg-amber-500/15 transition flex items-center gap-2"
                                 >
@@ -302,7 +323,8 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
 
                               <button
                                 type="button"
-                                onClick={() => deleteEntry(item.id)}
+                                onClick={() => void runDiaryAction(() => deleteEntry(item.id), 'Не удалось удалить запись. Она сохранена; повторите попытку.')}
+                                disabled={diaryActionBusy}
                                 title="Удалить запись (фото и данные)"
                                 className="min-h-[36px] text-[10px] px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase hover:bg-rose-500/15 transition flex items-center gap-2"
                               >
@@ -328,10 +350,11 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                             {hasPhoto && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setMobileActionsFor(null);
-                                  deletePhoto(item.id);
+                                onClick={async () => {
+                                  const saved = await runDiaryAction(() => deletePhoto(item.id), 'Не удалось удалить фото. Запись сохранена; повторите попытку.');
+                                  if (saved) setMobileActionsFor(null);
                                 }}
+                                disabled={diaryActionBusy}
                                 className="min-h-[44px] px-4 rounded-[1.1rem] bg-amber-500/10 border border-amber-500/20 text-amber-200 font-black tracking-widest uppercase text-[11px]"
                               >
                                 Удалить фото
@@ -339,10 +362,11 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
                             )}
                             <button
                               type="button"
-                              onClick={() => {
-                                setMobileActionsFor(null);
-                                deleteEntry(item.id);
+                              onClick={async () => {
+                                const saved = await runDiaryAction(() => deleteEntry(item.id), 'Не удалось удалить запись. Она сохранена; повторите попытку.');
+                                if (saved) setMobileActionsFor(null);
                               }}
+                              disabled={diaryActionBusy}
                               className="min-h-[44px] px-4 rounded-[1.1rem] bg-rose-500/10 border border-rose-500/20 text-rose-200 font-black tracking-widest uppercase text-[11px]"
                             >
                               Удалить запись

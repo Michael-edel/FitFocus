@@ -1,0 +1,292 @@
+# ADR-005: одна постоянная outbox в IndexedDB
+
+Дата: 09.10.2026. Статус: **согласовано; нормализатор, транзакционный
+фундамент, импорт и runtime интегрированы в PR #93; полный lifecycle ещё открыт**.
+Задача: [P0.8](../../TASKS.md). Область кода: [карта документации](../README.md).
+
+Текущая граница: [управляемые записи](../owned-state-writers.md),
+[runtime migration](../legacy-migration.md) и [backup v3](../backup-restore.md).
+Реальный old/new smoke прошёл полный CI; backup-компонент опубликован в
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Account-scoped очистка и локальное подавление legacy-повтора добавлены в ветке;
+остаются физическое удаление общего legacy payload, UI конфликтов, остальные
+callbacks и полный lifecycle выпуска.
+
+Дополнение 11.10.2026: [15 управляемых state-ключей](../owned-state-writers.md)
+подключены, прежний sender текущей сборки удалён. Profile state-upload
+использует общий sender, но сам profile остаётся отдельным API-путём.
+Runtime-импорт, барьер старых сборок и полная приёмка остаются обязательными.
+
+Следующее дополнение 11.10.2026: [редактор профиля](../profile-persistence.md)
+использует ту же values/outbox/meta-транзакцию и claim/finish. Resource=profile
+явно выбирает `/api/profile`; отсутствующий resource сохраняет прежний state
+dispatch. Схема IDB остаётся v2; отдельного profile-store или Promise-outbox
+нет. HTTP требует собственной capability и проверенной привязки к сессии.
+Регистрация и полный lifecycle остаются отдельной незавершённой интеграцией.
+
+Следующий этап 11.10.2026: [регистрация](../registration-persistence.md)
+создаёт canonical profile с baseVersion=0 до AI-запроса; AI-update продолжает
+ту же причинную цепочку. Автоматический перенос legacy-id/prefix при входе
+убран. Полный guarded bootstrap/hydration, auth-fence, runtime legacy и выпуск
+этим дополнением не завершены.
+
+Дополнение 12.10.2026, `dac2de2`: [HTTP bootstrap/state-hydration](../bootstrap-hydration.md)
+проверяют account/session и readGuard. При принятии proof auth-fence
+фиксируется в той же транзакции; hydrate/profile seed проверяют его вместе
+с epoch, revision и pending. Повторное чтение идентичного owned-снимка
+той же версии не меняет revision; новая серверная версия по-прежнему
+защищает независимого редактора. Остальные callbacks, runtime legacy и
+приёмка выпуска остаются открытыми. Это уточнение реализации принятого ADR.
+
+Дополнение 13.10.2026: после удаления аккаунта cleanup атомарно записывает
+`outbox_meta` tombstone, чей ключ содержит SHA-256 account ID. Legacy importer
+проверяет его в транзакции импорта и отмечает старый fingerprint обработанным,
+не копируя payload обратно в outbox/ledger/quarantine. Sender проверяет marker
+при claim/finish. Backup restore учитывает tombstone из текущей базы и v3 файла
+и пропускает account-owned строки. Общие source/snapshot остаются неизменными:
+решение предотвращает локальный повторный импорт/отправку, но не является
+физическим стиранием или серверной синхронизацией.
+Реализация и проверки зафиксированы в [cleanup contract](../account-data-cleanup.md)
+и [legacy migration](../legacy-migration.md) в коммите
+[`c7700eb`](https://github.com/Michael-edel/FitFocus/commit/c7700eb0a6800b535c1111f9410803a2051f7a2e).
+Изменение опубликовано в `fix/durable-outbox`. Документирующий коммит
+[`57e0a93`](https://github.com/Michael-edel/FitFocus/commit/57e0a93f8171393e5d0804e8dc395ff84a25ae94)
+и точный [CI run 38340805337](https://github.com/Michael-edel/FitFocus/actions/runs/38340805337)
+прошли успешно: 1082 unit-теста / 197 файлов, 390 browser passed / 9 skipped,
+audit без уязвимостей, три typecheck, build и 23 HTTP/D1 rollback-запроса.
+
+## Причина
+
+Текущая Map + localStorage-очередь теряет изменения при конкуренции вкладок,
+не связывает данные и операцию одной транзакцией и не хранит явного владельца.
+Наличие Web Locks в браузере не должно менять формат или источник очереди.
+
+## Решение
+
+Расширить существующую IDB `fitfocus-user-state-v1`, сохранив `values`,
+добавив `outbox`, `outbox_migration_items`, `outbox_migration_unknown`
+и метаданные прогресса миграции. В ветке PR #93 после сверки исходной v1
+введена схема 2 в `storage/stateDatabase.ts`, включая outbox_meta.
+Существующий values сохраняется. Примитивы записи/claim/finish реализованы
+отдельно. Компонент импорта добавлен; его runtime-вызов с доказательствами
+ещё не завершён. При необработанном legacy новый sender приостанавливает
+отправку. [Контракт импортера](../legacy-migration.md).
+
+IDB — единственное авторитетное хранилище новой очереди. Web Locks могут
+сокращать конкуренцию отправителей; без них корректность обеспечивают IDB
+claim/lease-транзакции. BroadcastChannel может уведомлять новые вкладки,
+но не переносит очередь и не обновляет код старой вкладки.
+
+Для данных в `values` изменение и outbox-операция сохраняются одной
+readwrite-транзакцией; успех сообщается после `oncomplete`. Для profile
+и иных данных вне этого store требуется явная интеграция, а не обещание
+общей атомарности поверх localStorage и отдельного IDB commit.
+
+## Запись и отправка
+
+Новая операция содержит opId, accountId, ключ, тип, payload, baseVersion,
+локальную ревизию, статус и metadata повтора/конфликта. Состояние попытки
+содержит attemptId, sessionEpoch, owner и числовой startedAtMs.
+
+1. Claim и переход pending → sending коммитятся атомарно в IDB.
+2. После commit начинается HTTP; сеть не удерживается внутри транзакции.
+3. Завершение проверяет актуальные opId/accountId/ревизию/attemptId/сессию
+   и меняет операцию и применимую версию одной транзакцией.
+4. Lease вычисляется по startedAtMs, а не строковому detectedAt/updatedAt.
+   Повторный claim просроченной попытки атомарен; ответ старой игнорируется.
+
+Зависимые IDB-записи выполняются в success-событии последнего чтения, пока
+readwrite-транзакция активна. Продолжение после `Promise.all` не должно
+обращаться к stores или ставить записи в уже завершающуюся транзакцию.
+Актуальные исправления `write`, `claim` и `finish` описаны в
+[карте реализации P0.8](../outbox-implementation.md).
+
+Постоянный accountId не меняется при новом входе. sessionEpoch относится
+к попытке и защищает поздний ответ; новая подтверждённая сессия того же
+аккаунта может возобновить его очередь. Правила конфликтов и причинного
+порядка описаны в [sync-model](../sync-model.md).
+
+## Источники legacy
+
+`fitfocus.remote-kv-outbox.v1` остаётся источником импорта, а не местом записи
+новой очереди. Формат `fitfocus_outbox_ops` из другого scaffold был
+инвентаризирован отдельно: это `OutboxOp` с полями `opId`, `deviceId`, `userUid`,
+`tenantId`, `entityType`, `entityId`, `patch` и `updatedAt`, не формат
+`fitfocus.remote-kv-outbox.v1`. Поиск по runtime-коду нашёл только модуль
+`storage/outbox.ts` и его re-export в `storage/index.ts`, без приложения-
+потребителя; оба удалены в follow-up `e5a6154`. Существующий localStorage ключ
+не очищается, остаётся opaque data и попадает в общий backup; автоконвертации
+или отправки для него нет. См. [инвентаризацию модели данных](../data-model.md).
+
+Legacy не имеет надёжного accountId. Владельца устанавливают только по
+проверяемой принадлежности ключа/данных. Активный аккаунт не доказательство;
+глобальные/неоднозначные ключи не отправляются автоматически.
+
+## Согласованный нормализатор
+
+Нормализатор реализован в `storage/legacyQueue.ts`; 62 проверки покрывают
+все согласованные причины отказа и стабильность fingerprint. Первый CI
+выявил TS2339 в тестовом помощнике; на `f32c5ad` после исправления прошёл
+[полный CI](https://github.com/Michael-edel/FitFocus/actions/runs/37917864872).
+Это не подтверждает реализацию импортера; ниже сохранены правила формата.
+
+```typescript
+type LegacyQueueRecord = {
+  type: "put" | "delete";
+  key: string;
+  value?: string;
+  baseVersion?: number;
+  retryCount?: number;
+};
+
+type LegacyInvalidReason =
+  | "not-an-object"
+  | "invalid-type"
+  | "invalid-key"
+  | "put-without-value"
+  | "delete-with-value"
+  | "invalid-baseVersion"
+  | "invalid-retryCount";
+
+function normalizeLegacyRecord(
+  record: unknown,
+): { ok: true; value: LegacyQueueRecord }
+  | { ok: false; reason: LegacyInvalidReason } {
+  if (typeof record !== "object" || record === null) {
+    return { ok: false, reason: "not-an-object" };
+  }
+  const r = record as Record<string, unknown>;
+  const type = r.type;
+  if (type !== "put" && type !== "delete") {
+    return { ok: false, reason: "invalid-type" };
+  }
+  const key = r.key;
+  if (typeof key !== "string" || key.length === 0) {
+    return { ok: false, reason: "invalid-key" };
+  }
+  if (type === "put" && typeof r.value !== "string") {
+    return { ok: false, reason: "put-without-value" };
+  }
+  if (type === "delete" && "value" in r) {
+    return { ok: false, reason: "delete-with-value" };
+  }
+  let baseVersion = 0;
+  if ("baseVersion" in r) {
+    const bv = r.baseVersion;
+    if (typeof bv !== "number" || !Number.isInteger(bv) || bv < 0) {
+      return { ok: false, reason: "invalid-baseVersion" };
+    }
+    baseVersion = bv;
+  }
+  let retryCount = 0;
+  if ("retryCount" in r) {
+    const rc = r.retryCount;
+    if (typeof rc !== "number" || !Number.isInteger(rc) || rc < 0) {
+      return { ok: false, reason: "invalid-retryCount" };
+    }
+    retryCount = rc;
+  }
+  const normalized: LegacyQueueRecord = {
+    type, key, baseVersion, retryCount,
+  };
+  if (type === "put") normalized.value = r.value as string;
+  return { ok: true, value: normalized };
+}
+
+type UnknownLegacyRecord = {
+  fingerprint: string;
+  rawRecord: unknown;
+  reason: LegacyInvalidReason;
+  detectedAt: string;
+};
+```
+
+Отсутствующие baseVersion/retryCount → 0. Присутствующие undefined, строки,
+дробные/отрицательные числа, NaN/Infinity отклоняются. Пустой key запрещён;
+пустая строка value для put допустима. Delete не содержит свойства value,
+даже со значением undefined. Причины невозможного владения, ошибки чтения
+контейнера и неоднозначного fingerprint учитываются миграцией отдельно;
+они не подменяются кодом повреждения LegacyQueueRecord.
+
+## Fingerprint
+
+Для корректной записи используются нормализованные поля:
+
+```typescript
+const fields: [string, string, string | null, number] = [
+  record.type,
+  record.key,
+  record.type === "put" ? record.value! : null,
+  record.baseVersion ?? 0,
+];
+const canonical = JSON.stringify(fields);
+```
+
+В `legacyQueue.ts` используется SHA-256 от UTF-8 canonical через crypto.subtle;
+итог — `legacy:v1:` и 64 hex-символа. Никаких разделителей строк вместо
+JSON-сериализации массива.
+Индекс и retryCount не входят в fingerprint. Отсутствующая baseVersion и 0
+дают одинаковый результат; перестановка контейнера не создаёт новый импорт.
+
+Для повреждённой записи используется отдельно определённый стабильный
+идентификатор raw-представления. Нельзя сначала «починить» её полями
+по умолчанию и затем отправить как нормальную. При совпадении хеша
+сравниваются канонические поля: коллизия/неоднозначная повторная операция
+не даёт права отбросить rawRecord. Правило для нескольких одинаковых
+legacy-записей и разного retryCount закрепляется тестами реализации.
+
+## Атомарный возобновляемый импорт
+
+Снимок legacy-контейнера читается и разбирается без изменения источника.
+Идентификация, нормализация и хеширование порции выполняются до транзакции;
+не держать IDB-транзакцию открытой во время произвольного async hash/HTTP.
+Повреждённый JSON/контейнер сохраняется для диагностики, не превращается
+в пустую «успешно импортированную» очередь.
+
+В одной readwrite-транзакции порции:
+
+- проверить migration_items на уже обработанную запись и неоднозначность;
+- сохранить импортированную операцию либо rawRecord с причиной в карантине;
+- записать migration item и прогресс этой порции.
+
+Abort откатывает всё перечисленное. Следующий запуск повторяет порцию,
+не получая отметку «импортировано» без операции или наоборот.
+Для больших очередей порции коммитятся отдельно; итоговый статус записывается
+после проверки всех порций. Неизвестные, повреждённые, неоднозначные или
+необработанные записи означают `partial`, а не `completed`.
+
+Legacy-ключ сохраняется до подтверждённого импорта. Его удаление — отдельная
+будущая операция после проверки остатка и старых клиентов. Нельзя менять
+имя источника, чтобы скрыть pending-записи.
+
+## Старые вкладки и upgrade
+
+Новый код закрывает соединение на `versionchange`, явно показывает `blocked`
+и корректно возобновляет открытие. Старая сборка сейчас не содержит нужного
+обработчика: новое уведомление не может добавить ей этот код.
+
+Проверка использует настоящий старый и новый bundle на одном origin
+и в одном browser context. До завершения upgrade и проверки источника
+старые writers нужно остановить: закрытием/обновлением старых вкладок либо
+предварительным совместимым релизом. Старый writer не должен дописать
+legacy после финального marker. Два разных preview-origin этого не проверяют.
+
+Дополнение 14.10.2026, `f3a9abf`: общий `afterIndexedRequests` также
+используется в hydrate/session, recovery actions, indexed user-state backup restore и account
+cleanup. Зависимые записи выполняются в success-событии последнего IDB request;
+пустой набор чтений завершается без ожидания отсутствующего события.
+Unit/typecheck/build и локальные Firefox/Android E2E прошли; CI нового HEAD
+нужно проверить после push. Этот helper не заменяет отдельную проверку всех
+readwrite callback-ов legacy importer и durable backup; полный P0.8 lifecycle
+остаётся открытым.
+
+## Отказ и приёмка
+
+Если IDB недоступна/переполнена или транзакция прервалась, показать явное
+«не сохранено», предложить повтор/экспорт доступных данных. Не создавать
+вторую авторитетную localStorage-outbox и не сообщать об успешной записи.
+
+Проверить нормализатор по всем reason, отсутствие value у delete, стабильность
+fingerprint, abort/restart порции, unknown ownership, коллизии/дубликаты,
+несколько вкладок без Web Locks, late response, lease recovery и реальный
+upgrade старой сборки. Полная [матрица](../sync-model.md#матрица-приёмки).

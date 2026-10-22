@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import clsx from 'clsx';
 import { 
   Activity, 
@@ -47,44 +47,36 @@ import {
   Apple,
 } from 'lucide-react';
 // FIX: Added getWeeklyIntelligenceInterpretation to the import list from geminiService
-import { analyzeFoodPhoto, getCoachAdvice, generatePersonalPlan, generatePlateauExplanation, readAiStatus, AiLastStatus, allowAiRetryNow, getLastAiAction, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateWeeklyMenu, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
-import { analyzeImageQuality } from './services/imageQuality';
+import { analyzeFoodPhoto, generatePersonalPlan, allowAiRetryNow, setLastAiAction, getWeeklyIntelligenceInterpretation, callAiCouncil, generateFamilyWeeklyMenu, setAiStorageScope } from './geminiService';
 import { compressFoodPhoto } from './services/foodPhoto';
-import { MAX_DIARY_ITEMS, MAX_HISTORY_ITEMS, sanitizeFoodEntryForStorage, type FastLogItem } from './storage/foodDiary';
+import { fetchWithResilience } from './services/httpClient';
+import { listenForPageExit } from './storage/sessionTransport';
+import { type FastLogItem } from './storage/foodDiary';
 import { computeConfidence, confidenceLabel, shouldShowImprove, shouldSuggestPortionAdjust } from './services/aiConfidence';
-import { classifyWisShareFailure, isSoftWeeklyAiError } from './services/frontendErrors';
-import { analyzeFoodPhotoEnhanced } from './geminiService';
-import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, LessonQuizOption, FoodInsight, AppSettings, FavoriteRecipe, TariffPlan, AIPlan, AppTheme, FamilyWeeklyMenu } from './types';
-import { formatTime, getDayKey, getWeekKey, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
+import { classifyWisShareFailure } from './services/frontendErrors';
+import { Gender, Goal, UserProfile, FoodItem, FoodEntry, MealType, ActivityLevel, CoachTask, UserHabit, CourseLesson, UsageStats, FoodInsight, AIPlan, FamilyWeeklyMenu } from './types';
+import { formatTime, last7DayKeys, toLocalDayKey as localDayKey } from './dateUtils';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
 import { calculateDailyTargets } from './profileMath';
-import { toggleHabit, calculateStreak, getTodayKey } from './habits';
-import { addWeight, weightDelta } from './weight';
+import { calculateStreak, getTodayKey } from './habits';
 import { detectPlateau } from './plateau';
 import { generateWeeklyIntelligence } from './weeklyIntelligence';
-import { ensureWeeklyReportWithAI, loadWeeklyReports, WeeklyStoredReport } from './weeklyAutoEngine';
-import { trackWisShareEvent } from './analytics/wisShare';
+import { type WeeklyStoredReport } from './weeklyAutoEngine';
 import { calculateFoodStreak } from './analytics/foodStreak';
 import { useAchievements } from './useAchievements';
-import type { AchievementEvaluationContext } from './achievements/engine';
 import { usePaywall } from './usePaywall';
 import { isTestModeEnabled, planLabel, setDevPlanOverride } from './money';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { buildCorrectedFoodPatch, buildFoodCorrectionDraft, type FoodCorrectionDraft } from './foodCorrection';
 import {
-  collectLocalStateItems,
   clearLocalUserData,
-  persistAllUsersSnapshot,
   normalizeUserProfiles,
   readStoredAllUsersSnapshotForUser,
-  renameLocalStoragePrefix,
-  safeRemoveItem,
-  safeSetItem,
 } from './storage/hybrid';
-import { hydrateSessionFromCloud } from './sessionHydration';
 import {
   bootstrapAuthSession,
   clearOAuthContinuationState,
+  consumeOAuthContinuationState,
   createLogoutSession,
   deleteAccountSession,
   ensureInviteCodeIsValid,
@@ -103,6 +95,60 @@ import { useDeleteUserProfile } from './useDeleteUserProfile';
 import { useFamilyCloud } from './useFamilyCloud';
 import { useFoodSelection } from './useFoodSelection';
 import { useFamilyMenu } from './useFamilyMenu';
+import { useProfilePersistence } from './features/profile/useProfilePersistence';
+import { useProfileAutoSync } from './features/profile/useProfileAutoSync';
+import { useCloudSyncRecovery } from './features/profile/useCloudSyncRecovery';
+import { buildCloudSyncBadge } from './features/profile/cloudSyncBadge';
+import { clearAppUiStorage } from './features/profile/clearUiState';
+import { isRegistrationSessionReady, type RegistrationSessionState } from './features/auth/registrationSession';
+import { useDiaryDaySelection } from './features/diary/useDiaryDaySelection';
+import { useFoodDiary } from './features/diary/useFoodDiary';
+import { useCoachAdvice } from './features/ai/useCoachAdvice';
+import { usePlateauExplanation } from './features/ai/usePlateauExplanation';
+import { AiActionScope } from './features/ai/actionScope';
+import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
+import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
+import { retryLastAiAction } from './features/ai/aiRetry';
+import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
+import { useAiActivityStatus } from './features/ai/useAiActivityStatus';
+import { buildAiActivityBadge } from './features/ai/aiActivityBadge';
+import { buildAiRetryMeta } from './features/ai/aiRetryMeta';
+import { resetUsageIfNewPeriod } from './features/usage/resetUsage';
+import { PREMIUM_GATES, canUsePremiumGate, incrementUsageCounter, type UsageCounter } from './features/usage/premiumGates';
+import { useFavoriteRecipes } from './features/recipes/useFavoriteRecipes';
+import { useCourseUiState } from './features/course/useCourseUiState';
+import { useCourseActions } from './features/course/useCourseActions';
+import { useSettingsPersistence } from './features/settings/useSettingsPersistence';
+import { useDocumentTheme } from './features/settings/useDocumentTheme';
+import { useNutritionSearchState } from './features/nutrition/useNutritionSearchState';
+import { useCameraFacingPreference } from './features/nutrition/useCameraFacingPreference';
+import { useAdaptationUiState } from './features/adaptation/useAdaptationUiState';
+import { useRefeedSchedule } from './features/adaptation/useRefeedSchedule';
+import { calculateAdaptationCompliance, calculateAdaptationIndex, calculateAdaptationWeightProgress, calculateExpectedWeightDelta, getAdaptationStatus, getRefeedSuggestion } from './features/adaptation/adaptationMetrics';
+import { usePlanTaskState } from './features/plan/usePlanTaskState';
+import { togglePlanTask } from './features/plan/planTasks';
+import { usePlanUiState } from './features/plan/usePlanUiState';
+import { useDashboardPreferences } from './features/dashboard/useDashboardPreferences';
+import { authenticatedAccountSessionScope, accountSessionRenderKey, getAccountScopedUiValue, useAccountScopedUiState } from './features/state/accountScopedUi';
+import { recordDashboardWeight } from './features/dashboard/weightLogging';
+import { shareWisCard } from './features/dashboard/shareWisCard';
+import { calculateDailyNutrition, calculateDashboardWeightTrend } from './features/dashboard/dashboardMetrics';
+import { calculateNextWeekWeightForecast, findFoodSearchResults } from './features/dashboard/dashboardViewModels';
+import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf';
+import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
+import { useInviteCodeState } from './features/auth/useInviteCodeState';
+import { usePlanActivation } from './features/auth/usePlanActivation';
+import { buildAchievementContext } from './features/achievements/achievementContext';
+import { prepareLoginSession } from './features/auth/loginSession';
+import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
+import { ACTIVE_SESSION_CHANNEL, DurableOutbox, type OutboxCommitGuard, type OutboxLocalCommitGuard, type OutboxReadGuard, type OutboxWriteGuard } from './storage/durableOutbox';
+import { assertReadSession } from './storage/sessionRead';
+import { applyHabitToggle } from './features/habits/legacyProgress';
+import { useHashTabNavigation } from './features/navigation/useHashTabNavigation';
+import { UserStateRepository } from './storage/userStateRepository';
+import { stateSync } from './storage/stateSync';
+import { StateStorageNotice } from './ui/StateStorageNotice';
+import { getStateQueueSummaries, getStateSaveIssues, reportStateSaveIssue, subscribeStateSaveIssues } from './storage/stateSaveStatus';
 import { parseJson } from './safeJson';
 import SidebarNavigation from './SidebarNavigation';
 import AppWorkspace from './AppWorkspace';
@@ -114,7 +160,6 @@ import PaywallDialog from './PaywallDialog';
 import { formatGramsPretty, MealParts } from './mealPresentation';
 import VersionInfoModal from './VersionInfoModal';
 import {
-  AppTabId,
   mobilePrimaryTabIds,
   sidebarCoreTabIds,
   sidebarFeatureTabIds,
@@ -134,12 +179,6 @@ const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
 const RegistrationScreen = React.lazy(() => import('./RegistrationScreen'));
 const AuthChoiceScreen = React.lazy(() => import('./AuthChoiceScreen'));
 
-function getInitialTabFromHash(): AppTabId | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash.replace(/^#\/?/, '').split(/[?&]/)[0];
-  if (!hash || hash === 'admin') return null;
-  return sidebarTabs.some((tab) => tab.id === hash) ? hash as AppTabId : null;
-}
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
 const PlanScreen = React.lazy(() => import('./PlanScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
@@ -149,24 +188,12 @@ const PlanIntroModal = React.lazy(() => import('./PlanIntroModal'));
 const LessonViewModal = React.lazy(() => import('./LessonViewModal'));
 const FamilyMenuPrefsModal = React.lazy(() => import('./FamilyMenuPrefsModal'));
 
-const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
 type UnknownRecord = Record<string, unknown>;
-type AutoTableDocState = { lastAutoTable?: { finalY?: unknown } };
 type FontReadyDocument = Document & { fonts?: { ready?: Promise<unknown> } };
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isBooleanRecord = (value: unknown): value is Record<string, boolean> =>
-  isRecord(value) && Object.values(value).every((item) => typeof item === 'boolean');
-
-const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
-
-const getAutoTableFinalY = (doc: unknown, fallback: number): number => {
-  const finalY = (doc as AutoTableDocState).lastAutoTable?.finalY;
-  return typeof finalY === 'number' && Number.isFinite(finalY) ? finalY : fallback;
-};
 
 const waitForDocumentFonts = async () => {
   const ready = (document as FontReadyDocument).fonts?.ready;
@@ -183,27 +210,37 @@ const waitForDocumentFonts = async () => {
 
 
 
-const pickLessonForToday = (user: UserProfile, lessons: CourseLesson[]): CourseLesson | null => {
-  if (!lessons.length) return null;
-  const completedIds = user.courseProgress?.completedLessonIds || [];
-  const nextLesson = lessons.find(l => !completedIds.includes(l.id));
-  return nextLesson || lessons[0];
-};
-
-const PREMIUM_GATES = {
-  aiFoodPhotoPerDay: { free: 3, pro: Infinity, family: Infinity },
-  aiCoachAdvicePerDay: { free: 3, pro: Infinity, family: Infinity },
-  familyMenuGenerationsPerWeek: { free: 1, pro: 10, family: 100 },
-  weeklyReview: { free: false, pro: true, family: true },
-  metabolicAdaptation: { free: false, pro: true, family: true }
-};
-
 const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_water', title: 'Пить воду', goal: 8, current: 0, unit: 'ст.', streak: 0, lastCompletedDate: null },
   { id: 'h_steps', title: '10,000 шагов', goal: 10000, current: 0, unit: 'шаг', streak: 0, lastCompletedDate: null },
   { id: 'h_veg', title: 'Здоровый завтрак', goal: 1, current: 0, unit: 'порц.', streak: 0, lastCompletedDate: null },
   { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
 ];
+
+const INITIAL_REGISTRATION_DATA: RegistrationData = {
+  name: '',
+  gender: Gender.MALE,
+  weight: 70,
+  height: 170,
+  age: 25,
+  activityLevel: ActivityLevel.MODERATELY_ACTIVE,
+  goal: Goal.LOSS,
+  targetWeight: 65,
+  dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' },
+  medicalRestrictions: '',
+  bloodPressureSystolic: 0,
+  bloodPressureDiastolic: 0,
+  restingPulse: 0,
+  bloodGlucoseMmolL: 0,
+  waistCm: 0,
+  chestCm: 0,
+  hipsCm: 0,
+  plan: 'free',
+  lossDeficit: DEFAULT_DEFICIT,
+  gainSurplus: DEFAULT_SURPLUS,
+  riskAckLoss: false,
+  riskAckGain: false,
+};
 
 
 
@@ -250,24 +287,188 @@ const App: React.FC = () => {
 
 
   const [authState, setAuthState] = useState<'loading' | 'auth_choice' | 'register' | 'app'>('loading');
-  const [inviteCode, setInviteCode] = useState<string>('');
+  const authStateRef = useRef(authState);
+  authStateRef.current = authState;
   const [requireInvite, setRequireInvite] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteChecking, setInviteChecking] = useState<boolean>(false);
 
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [allowCachedUiStateRestore, setAllowCachedUiStateRestore] = useState(false);
+  const uiAccountId = allowCachedUiStateRestore ? currentUser?.id ?? null : null;
+  const { inviteCode, setInviteCode } = useInviteCodeState(uiAccountId);
   const [profileSyncState, setProfileSyncState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [profileSyncNote, setProfileSyncNote] = useState<string | null>(null);
   const [lastProfileSyncAt, setLastProfileSyncAt] = useState<number | null>(null);
-  const [planScope, setPlanScope] = useState<'personal' | 'family'>('personal');
+  const [planScopeState, setPlanScopeState] = useState<{ ownerId: string | null; value: 'personal' | 'family' }>({
+    ownerId: null,
+    value: 'personal',
+  });
+  const planScope = getAccountScopedUiValue(
+    currentUser?.id ?? null,
+    planScopeState.ownerId,
+    planScopeState.value,
+    'personal',
+    allowCachedUiStateRestore,
+  );
+  const setPlanScope = useCallback<React.Dispatch<React.SetStateAction<'personal' | 'family'>>>((update) => {
+    if (!allowCachedUiStateRestore) return;
+    const ownerId = currentUser?.id ?? null;
+    setPlanScopeState((previous) => {
+      const currentValue = previous.ownerId === ownerId ? previous.value : 'personal';
+      return { ownerId, value: typeof update === 'function' ? update(currentValue) : update };
+    });
+  }, [allowCachedUiStateRestore, currentUser?.id]);
+  const [userStateRepository, setUserStateRepository] = useState<UserStateRepository | null>(null);
+  const [userProfileRepository, setUserProfileRepository] = useState<UserStateRepository | null>(null);
+  const [loginReadGuard, setLoginReadGuard] = useState<OutboxReadGuard | null>(null);
+  const rootAccountSessionScope = allowCachedUiStateRestore && currentUser?.id
+    ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+    : null;
+  // Feedback belongs to the login session while the workspace reconciles its cache.
+  const profileSyncNoteScope = authenticatedAccountSessionScope(loginReadGuard, currentUser?.id);
+  const { value: profileSyncNote, setValue: setProfileSyncNote } = useAccountScopedUiState<string | null>(
+    profileSyncNoteScope,
+    null,
+  );
+  const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);
+  const loginAttemptRef = useRef(0);
+  const authBootstrapAttemptRef = useRef(0);
+  const registrationAttemptRef = useRef(0);
+  const registrationControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { registrationControllerRef.current?.abort(); }, []);
+  const stateQueues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
+  const stateSaveIssues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
 
   const [googleMe, setGoogleMe] = useState<
   null | { sub?: string; email?: string; name?: string; picture?: string; roles?: string[] }
 >(null);
+  const [registrationSessionState, setRegistrationSessionState] = useState<RegistrationSessionState>({
+    identity: null,
+    status: 'checking',
+  });
+  const registrationSessionStateRef = useRef(registrationSessionState);
+  registrationSessionStateRef.current = registrationSessionState;
+  const registrationSessionGuardRef = useRef<{
+    identity: string;
+    sessionKey: string | null;
+    invalid: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const identity = authState === 'register' ? googleMe?.sub : undefined;
+    registrationSessionGuardRef.current = null;
+    if (!identity) {
+      setRegistrationSessionState({ identity: null, status: 'checking' });
+      return;
+    }
+
+    let disposed = false;
+    let checking = false;
+    const setSessionStatus = (status: 'checking' | 'active' | 'unavailable' | 'changed') => {
+      setRegistrationSessionState(previous => previous.identity === identity && previous.status === status
+        ? previous
+        : { identity, status });
+    };
+    setSessionStatus('checking');
+    const outbox = new DurableOutbox();
+    const refreshSession = () => {
+      if (checking) return;
+      checking = true;
+      void outbox.sessionState()
+        .then(({ active }) => {
+          if (disposed) return;
+          let guard = registrationSessionGuardRef.current;
+          if (!guard || guard.identity !== identity) {
+            guard = { identity, sessionKey: null, invalid: false };
+            registrationSessionGuardRef.current = guard;
+          }
+          if (guard.invalid) {
+            setSessionStatus('changed');
+            return;
+          }
+
+          const sessionKey = active
+            ? JSON.stringify([active.accountId, active.serverSessionId ?? null, active.sessionEpoch])
+            : null;
+          if (!active || active.accountId !== identity || !sessionKey
+            || (guard.sessionKey !== null && guard.sessionKey !== sessionKey)) {
+            guard.invalid = true;
+            setSessionStatus('changed');
+            return;
+          }
+
+          guard.sessionKey = sessionKey;
+          setSessionStatus('active');
+        })
+        .catch(() => {
+          if (!disposed) setSessionStatus('unavailable');
+        })
+        .finally(() => { checking = false; });
+    };
+
+    refreshSession();
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(ACTIVE_SESSION_CHANNEL);
+    } catch {
+      // IndexedDB polling and focus listeners remain as fallbacks.
+    }
+    channel?.addEventListener('message', refreshSession);
+    const interval = window.setInterval(refreshSession, 2_000);
+    const refreshWhenVisible = () => { if (!document.hidden) refreshSession(); };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      channel?.removeEventListener('message', refreshSession);
+      channel?.close();
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [authState, googleMe?.sub]);
+  const authIdentityRef = useRef(googleMe?.sub);
+  authIdentityRef.current = googleMe?.sub;
+  const isCurrentProfileSession = useMemo(() => {
+    const attempt = loginAttemptRef.current;
+    return () => attempt === loginAttemptRef.current;
+  }, [userProfileRepository]);
+  const suppressNextFullProfileSyncRef = useRef(false);
+  const hasPendingProfileChangesRef = useRef(false);
+  const profileEditRevisionRef = useRef(0);
+  const hasProfileDraftRef = useRef(false);
+  const [hasProfileDraft, setHasProfileDraft] = useState(false);
+  const onProfileDraftChange = useCallback((dirty: boolean) => {
+    if (hasProfileDraftRef.current !== dirty) setHasProfileDraft(dirty);
+    hasProfileDraftRef.current = dirty;
+    if (dirty) profileEditRevisionRef.current += 1;
+  }, []);
+  const persistUser = useProfilePersistence({
+    repository: userProfileRepository,
+    currentUser,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    hasPendingProfileChangesRef,
+    setCurrentUser,
+    setAllUsers,
+    setProfileSyncState,
+  });
+
   const isAdmin = !!googleMe?.roles?.includes('admin');
+  useEffect(() => stateSync.subscribeReadGuard(guard => {
+    setLoginReadGuard(current => {
+      if (!current || current.accountId !== guard.accountId || current.serverSessionId !== guard.serverSessionId) return current;
+      if (current.sessionEpoch === guard.sessionEpoch && current.authFence === guard.authFence) return current;
+      return guard;
+    });
+  }), []);
+  useEffect(() => {
+    if (currentUser?.id && currentUser.id === googleMe?.sub) return startStateSyncLifecycle(currentUser.id);
+    stateSync.stop();
+  }, [currentUser?.id, googleMe?.sub]);
   const normalizedAllUsers = useMemo(() => normalizeUserProfiles(allUsers), [allUsers]);
 
+  const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
   const {
     cloudFamily,
     cloudFamilyMembers,
@@ -294,8 +495,11 @@ const App: React.FC = () => {
     setFamilyShoppingLoading,
     setCloudFamilyMenu,
     setCloudFamilyMembers,
+    familyMenuRepository,
   } = useFamilyCloud({
     currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
     planScope,
     setPlanScope,
     weekStartISO,
@@ -307,47 +511,20 @@ const App: React.FC = () => {
     familyMenuLoading,
     familyMenuPrefs,
     familyMenuPrefsOpen,
+    familyMenuProfiles,
     handleGenerateFamilyWeeklyMenu,
     setFamilyMenuError,
     setFamilyMenuPrefs,
     setFamilyMenuPrefsOpen,
   } = useFamilyMenu({
-    allUsers,
-    cloudFamily,
-    cloudFamilyMenu,
-    currentUser,
-    generateFamilyWeeklyMenu,
-    loadCloudFamily,
-    loadFamilyShopping,
-    setAllUsers,
-    setCloudFamilyMenu,
-    setCurrentUser,
-    weekStartISO,
+    cloudFamily, cloudFamilyMembers, cloudFamilyMenu, currentUser, generateFamilyWeeklyMenu,
+    familyMenuRepository, loginGuard: loginReadGuard, isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef, persistUser, setCloudFamilyMenu, setFamilyShopping, weekStartISO,
   });
 
   useEffect(() => {
     setAiStorageScope(currentUser?.id ?? null);
   }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const key = `fitfocus_data_${currentUser.id}_invite_code`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        setInviteCode(raw);
-        safeSetItem(key, raw);
-      }
-    } catch {}
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    try {
-      if (currentUser?.id) {
-        safeSetItem(`fitfocus_data_${currentUser.id}_invite_code`, inviteCode);
-      }
-    } catch {}
-  }, [inviteCode, currentUser?.id]);
 
   // --- Local JSON backup (hybrid approach):
   // - keep normal localStorage flow (fast)
@@ -368,79 +545,21 @@ const App: React.FC = () => {
     setCurrentUser,
   });
   
-  const [foodDiary, setFoodDiary] = useState<FoodItem[]>([]);
-  const selectedDiaryDayStorageKey = useMemo(
-    () => `fitfocus.nutrition.selected-day.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
+  const {
+    setSelectedDiaryDayKey,
+    resolvedDiaryDayKey,
+    selectedDiaryStats,
+  } = useDiaryDaySelection(currentUser?.id, foodDiary, allowCachedUiStateRestore);
+  const { value: insightModal, setValue: setInsightModal } = useAccountScopedUiState<
+    null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }
+  >(rootAccountSessionScope, null);
+  const { value: editFoodModal, setValue: setEditFoodModal } = useAccountScopedUiState<FoodCorrectionDraft | null>(
+    rootAccountSessionScope,
+    null,
   );
-  const selectedDiaryDaySkipSaveRef = useRef(false);
-  const [selectedDiaryDayKey, setSelectedDiaryDayKey] = useState<string>('');
-  useEffect(() => {
-    try {
-      const todayKey = localDayKey(new Date()) || '';
-      const savedKey = localStorage.getItem(selectedDiaryDayStorageKey) || '';
-      selectedDiaryDaySkipSaveRef.current = true;
-      setSelectedDiaryDayKey(savedKey === todayKey ? savedKey : '');
-    } catch {
-      selectedDiaryDaySkipSaveRef.current = true;
-      setSelectedDiaryDayKey('');
-    }
-  }, [selectedDiaryDayStorageKey]);
-  useEffect(() => {
-    if (selectedDiaryDaySkipSaveRef.current) {
-      selectedDiaryDaySkipSaveRef.current = false;
-      return;
-    }
-    try {
-      if (selectedDiaryDayKey) {
-        localStorage.setItem(selectedDiaryDayStorageKey, selectedDiaryDayKey);
-      } else {
-        localStorage.removeItem(selectedDiaryDayStorageKey);
-      }
-    } catch {
-      // ignore storage issues
-    }
-  }, [selectedDiaryDayKey, selectedDiaryDayStorageKey]);
-  const diaryDayKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const item of foodDiary) {
-      const key = localDayKey(item.timestamp);
-      if (key) keys.add(key);
-    }
-    return Array.from(keys).sort((a, b) => (a < b ? 1 : -1));
-  }, [foodDiary]);
-  const resolvedDiaryDayKey = useMemo(() => {
-    const todayKey = localDayKey(new Date()) || '';
-    if (selectedDiaryDayKey && diaryDayKeys.includes(selectedDiaryDayKey)) return selectedDiaryDayKey;
-    if (diaryDayKeys.includes(todayKey)) return todayKey;
-    return diaryDayKeys[0] || todayKey;
-  }, [diaryDayKeys, selectedDiaryDayKey]);
-  const selectedDiaryStats = useMemo(() => {
-    if (!resolvedDiaryDayKey) {
-      return { calories: 0, protein: 0, fat: 0, carbs: 0 };
-    }
-    const dayEntries = foodDiary.filter((item) => localDayKey(item.timestamp) === resolvedDiaryDayKey);
-    return dayEntries.reduce((acc, item) => ({
-      calories: acc.calories + (item.calories || 0),
-      protein: acc.protein + (item.protein || 0),
-      fat: acc.fat + (item.fat || 0),
-      carbs: acc.carbs + (item.carbs || 0),
-    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
-  }, [foodDiary, resolvedDiaryDayKey]);
-  const [insightModal, setInsightModal] = useState<null | { id: string; photo: string; name: string; insight: FoodInsight; nonFood?: boolean }>(null);
-  const [editFoodModal, setEditFoodModal] = useState<null | FoodCorrectionDraft>(null);
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const [activeTab, setActiveTab] = useState<AppTabId>(() => getInitialTabFromHash() || 'dashboard');
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  useEffect(() => {
-    const applyHashTab = () => {
-      const tab = getInitialTabFromHash();
-      if (tab) setActiveTab(tab);
-    };
-    applyHashTab();
-    window.addEventListener('hashchange', applyHashTab);
-    return () => window.removeEventListener('hashchange', applyHashTab);
-  }, []);
+  const { activeTab, setActiveTab } = useHashTabNavigation('dashboard');
+  const { value: mobileMoreOpen, setValue: setMobileMoreOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
   const sidebarFeatureTabs = sidebarVisibleTabs.filter(tab => sidebarFeatureTabIds.includes(tab.id));
@@ -464,149 +583,54 @@ const App: React.FC = () => {
     }
   }, [planScope, cloudFamily?.id, loadFamilyShopping]);
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const cameraFacingStorageKey = useMemo(
-    () => `fitfocus.nutrition.camera-facing.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const cameraFacingSkipSaveRef = useRef(false);
-  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>(() => {
-    try {
-      return (localStorage.getItem(cameraFacingStorageKey) as 'user' | 'environment' | null) || 'environment';
-    } catch {
-      return 'environment';
-    }
-  });
-  useEffect(() => {
-    try {
-      cameraFacingSkipSaveRef.current = true;
-      const saved = localStorage.getItem(cameraFacingStorageKey);
-      setCameraFacing(saved === 'user' ? 'user' : 'environment');
-    } catch {
-      cameraFacingSkipSaveRef.current = true;
-      setCameraFacing('environment');
-    }
-  }, [cameraFacingStorageKey]);
-  useEffect(() => {
-    if (cameraFacingSkipSaveRef.current) {
-      cameraFacingSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(cameraFacingStorageKey, cameraFacing);
-    } catch {
-      // ignore storage issues
-    }
-  }, [cameraFacing, cameraFacingStorageKey]);
-  const dashboardWeightStorageKey = useMemo(
-    () => `fitfocus.dashboard.new-weight.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const dashboardWeightSkipSaveRef = useRef(false);
-  const [newWeight, setNewWeight] = useState<string>(() => {
-    try {
-      return localStorage.getItem(dashboardWeightStorageKey) || '';
-    } catch {
-      return '';
-    }
-  });
-  useEffect(() => {
-    try {
-      dashboardWeightSkipSaveRef.current = true;
-      setNewWeight(localStorage.getItem(dashboardWeightStorageKey) || '');
-    } catch {
-      dashboardWeightSkipSaveRef.current = true;
-      setNewWeight('');
-    }
-  }, [dashboardWeightStorageKey]);
-  useEffect(() => {
-    if (dashboardWeightSkipSaveRef.current) {
-      dashboardWeightSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(dashboardWeightStorageKey, newWeight);
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [dashboardWeightStorageKey, newWeight]);
+  const { value: isScanning, setValue: setIsScanning } = useAccountScopedUiState(rootAccountSessionScope, false);
+  const { value: cameraOpen, setValue: setCameraOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
+  const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id, allowCachedUiStateRestore);
+  const {
+    newWeight,
+    setNewWeight,
+    pdfIncludeMealLog,
+    setPdfIncludeMealLog,
+  } = useDashboardPreferences(currentUser?.id, allowCachedUiStateRestore);
   
-  type CourseUiState = {
-    lessonId: string | null;
-    isLessonViewOpen: boolean;
-    isQuizActive: boolean;
-    selectedQuizOptionId: string | null;
-  };
-
-  const courseUiStorageKey = useMemo(
-    () => (currentUser?.id ? `fitfocus.course.ui.v1:${currentUser.id}` : null),
-    [currentUser?.id],
-  );
-  const courseUiHydratedKeyRef = useRef<string | null>(null);
-
-  const [currentLesson, setCurrentLesson] = useState<CourseLesson | null>(null);
-  const [isLessonViewOpen, setIsLessonViewOpen] = useState(false);
-  const [isQuizActive, setIsQuizActive] = useState(false);
-  const [selectedQuizOption, setSelectedQuizOption] = useState<LessonQuizOption | null>(null);
   const [courseLibrary, setCourseLibrary] = useState<CourseLesson[] | null>(null);
+  const {
+    currentLesson,
+    setCurrentLesson,
+    isLessonViewOpen,
+    setIsLessonViewOpen,
+    isQuizActive,
+    setIsQuizActive,
+    selectedQuizOption,
+    setSelectedQuizOption,
+  } = useCourseUiState({
+    currentUser,
+    courseLibrary,
+    allowCachedUiStateRestore,
+  });
 
   // Metabolic Adaptation States
-  const [adaptLoading, setAdaptLoading] = useState(false);
-  const [adaptNote, setAdaptNote] = useState<string>('');
-  const [refeedDate, setRefeedDate] = useState<string | null>(null);
+  const { value: adaptLoading, setValue: setAdaptLoading } = useAccountScopedUiState(rootAccountSessionScope, false);
+  const { value: adaptNote, setValue: setAdaptNote } = useAccountScopedUiState(rootAccountSessionScope, '');
+  const { refeedDate, scheduleRefeedTomorrow } = useRefeedSchedule(uiAccountId);
 
-  const [adaptExpanded, setAdaptExpanded] = useState(false);
-  const [adaptRead, setAdaptRead] = useState(false);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
-    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
-    try {
-      const readValue = localStorage.getItem(kRead);
-      const expValue = localStorage.getItem(kExp);
-      if (readValue !== null) {
-        setAdaptRead(readValue === '1');
-        safeSetItem(kRead, readValue);
-      }
-      if (expValue !== null) {
-        setAdaptExpanded(expValue === '1');
-        safeSetItem(kExp, expValue);
-      }
-    } catch {}
-  }, [currentUser?.id]);
+  const {
+    adaptExpanded,
+    setAdaptExpanded,
+    adaptRead,
+    setAdaptRead,
+  } = useAdaptationUiState(uiAccountId);
 
   const resetUiState = useCallback(() => {
-    const userId = currentUser?.id;
-    try {
-      if (userId) {
-        [
-          `fitfocus.dashboard.new-weight.v1:${userId}`,
-          `fitfocus.course.ui.v1:${userId}`,
-          `fitfocus.plan.ui.v1:${userId}`,
-          `fitfocus.plan.active-day.v1:${userId}`,
-          `fitfocus.progress.ui.v1:${userId}`,
-          `fitfocus.progress-archive.sections.v1:${userId}`,
-          `fitfocus.settings.ui.v1:${userId}`,
-          `fitfocus.dashboard.pdf-include-meal-log.v1:${userId}`,
-          `fitfocus.dashboard.mobile-more-open.v1:${userId}`,
-          `fitfocus.nutrition.search.v1:${userId}`,
-          `fitfocus.nutrition.camera-facing.v1:${userId}`,
-        ].forEach((key) => localStorage.removeItem(key));
-      }
-    } catch {
-      // ignore
-    }
+    clearAppUiStorage(currentUser?.id);
 
-    dashboardWeightSkipSaveRef.current = true;
-    cameraFacingSkipSaveRef.current = true;
     setNewWeight('');
     setPdfIncludeMealLog(false);
     setMobileMoreOpen(false);
     setCameraFacing('environment');
     setIsScanning(false);
     setCameraOpen(false);
+    paywall.closePaywall();
     setCurrentLesson(null);
     setIsLessonViewOpen(false);
     setIsQuizActive(false);
@@ -623,224 +647,38 @@ const App: React.FC = () => {
     setShowSearchResults(false);
     setInsightModal(null);
     setEditFoodModal(null);
-  }, [currentUser?.id, setPlanScope, setFamilyMenuPrefsOpen]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const kRead = `fitfocus_data_${currentUser.id}_adapt_read`;
-    const kExp = `fitfocus_data_${currentUser.id}_adapt_expanded`;
-    try {
-      safeSetItem(kRead, adaptRead ? '1' : '0');
-      safeSetItem(kExp, adaptExpanded ? '1' : '0');
-    } catch {}
-  }, [adaptRead, adaptExpanded, currentUser?.id]);
+  }, [currentUser?.id, paywall.closePaywall, setCameraOpen, setEditFoodModal, setFamilyMenuPrefsOpen,
+    setInsightModal, setIsScanning, setMobileMoreOpen, setPlanScope]);
 
   // Weekly Reports History
   const [weeklyReports, setWeeklyReports] = useState<WeeklyStoredReport[]>([]);
 
-  // Settings
-  const [settings, setSettings] = useState<AppSettings>(() => ({ theme: 'dark', language: 'ru', soundEnabled: false, musicEnabled: false }));
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const key = `fitfocus_data_${currentUser.id}_settings`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = parseJson(raw);
-        if (
-          isRecord(parsed)
-          && (parsed.theme === 'dark' || parsed.theme === 'light' || parsed.theme === 'violet' || parsed.theme === 'calm' || parsed.theme === 'premium')
-          && parsed.language === 'ru'
-          && typeof parsed.soundEnabled === 'boolean'
-          && typeof parsed.musicEnabled === 'boolean'
-        ) {
-          setSettings({
-            theme: parsed.theme,
-            language: 'ru',
-            soundEnabled: parsed.soundEnabled,
-            musicEnabled: parsed.musicEnabled,
-          });
-        }
-        safeSetItem(key, raw);
-      } else {
-        safeSetItem(key, JSON.stringify(settings));
-      }
-    } catch {}
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    try {
-      if (!currentUser?.id) return;
-      safeSetItem(`fitfocus_data_${currentUser.id}_settings`, JSON.stringify(settings));
-    } catch {}
-  }, [settings, currentUser?.id]);
+  const { settings, setSettings } = useSettingsPersistence({
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+  });
 
   // AI status badge (shows when AI is live/cache/fallback or cooling down due to quota)
-  const [aiStatus, setAiStatus] = useState<AiLastStatus | null>(() => {
-    try { return readAiStatus(); } catch { return null; }
+  const { aiStatus, lastAiAction } = useAiActivityStatus(
+    allowCachedUiStateRestore ? currentUser?.id ?? null : null,
+  );
+
+  useDocumentTheme(settings.theme);
+
+  const {
+    favoriteRecipes,
+    addFavoriteRecipe,
+    removeFavoriteRecipe,
+    clearFavoriteRecipes,
+  } = useFavoriteRecipes({
+    userId: uiAccountId,
+    repository: uiAccountId ? userStateRepository : null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
   });
 
-  const [lastAiAction, setLastAiActionState] = useState(() => {
-    try { return getLastAiAction(); } catch { return null; }
-  });
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      try { setAiStatus(readAiStatus()); } catch {}
-      try { setLastAiActionState(getLastAiAction()); } catch {}
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  // Apply theme to document root (works for Vite/PWA and AI Studio preview)
-  useEffect(() => {
-    const root = document.documentElement;
-    // store theme in a data-attribute for CSS variables
-    root.dataset.ffTheme = settings.theme;
-    // Tailwind dark-mode class: enabled for all themes except 'light'
-    const isDark = settings.theme !== 'light';
-    root.classList.toggle('dark', isDark);
-  }, [settings.theme]);
-
-  // Favorite recipes
-  const [favoriteRecipes, setFavoriteRecipes] = useState<FavoriteRecipe[]>([]);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setFavoriteRecipes([]);
-      return;
-    }
-    const key = `fitfocus_data_${currentUser.id}_favorite_recipes`;
-    const normalizeFavoriteRecipe = (item: unknown): FavoriteRecipe | null => {
-      if (!isRecord(item)) return null;
-      const rawRecipe = isRecord(item.recipe) ? item.recipe : null;
-      const toIngredient = (value: unknown): { name: string; amount?: string } | null => {
-        if (typeof value === 'string') {
-          const text = value.trim();
-          if (!text) return null;
-          const separators = ['—', '–', '-', ':'];
-          for (const separator of separators) {
-            const idx = text.indexOf(separator);
-            if (idx > 0) {
-              const name = text.slice(0, idx).trim();
-              const amount = text.slice(idx + separator.length).trim();
-              if (name && amount) return { name, amount };
-            }
-          }
-          return { name: text };
-        }
-        if (!value || typeof value !== 'object') return null;
-        const ing = value as { name?: unknown; title?: unknown; amount?: unknown; grams?: unknown; value?: unknown };
-        const name = String(ing.name || ing.title || '').trim();
-        if (!name) return null;
-        const amount = ing.amount ?? ing.grams ?? ing.value;
-        return {
-          name,
-          amount: amount === undefined || amount === null || amount === '' ? undefined : String(amount),
-        };
-      };
-
-      const ingredientHasAmount = (value: unknown) => !!toIngredient(value)?.amount;
-      const pickIngredientSource = (primary: unknown, fallback: unknown) => {
-        const primaryArr = Array.isArray(primary) ? primary : [];
-        const fallbackArr = Array.isArray(fallback) ? fallback : [];
-        if (primaryArr.some(ingredientHasAmount)) return primaryArr;
-        if (fallbackArr.some(ingredientHasAmount)) return fallbackArr;
-        return primaryArr.length ? primaryArr : fallbackArr;
-      };
-      const toIsoDate = (value: unknown) => {
-        if (typeof value === 'string' || typeof value === 'number') {
-          const date = new Date(value);
-          if (Number.isFinite(date.getTime())) return date.toISOString();
-        }
-        return new Date().toISOString();
-      };
-
-      const ingredientsSource = pickIngredientSource(item.ingredients, rawRecipe?.ingredients);
-      const stepsSource = Array.isArray(rawRecipe?.steps)
-        ? rawRecipe.steps
-        : Array.isArray(item.steps)
-          ? item.steps
-          : [];
-      const ingredients = ingredientsSource
-        .map(toIngredient)
-        .filter(isPresent);
-      const steps = stepsSource
-        .map((step: unknown, idx: number) => {
-          if (typeof step === 'string') {
-            const text = step.trim();
-            return text ? { n: idx + 1, text } : null;
-          }
-          if (!isRecord(step)) return null;
-          const text = String(step.text || step.step || '').trim();
-          if (!text) return null;
-          const n = Number(step.n || idx + 1);
-          const timeMin = step.timeMin ?? step.time_minutes;
-          return {
-            n: Number.isFinite(n) && n > 0 ? n : idx + 1,
-            text,
-            ...(timeMin === undefined || timeMin === null || timeMin === ''
-              ? {}
-              : { timeMin: Number(timeMin) || undefined }),
-          };
-        })
-        .filter(isPresent);
-      const recipe = {
-        title: String(rawRecipe?.title || item.title || 'Рецепт'),
-        servings: Number(rawRecipe?.servings ?? item.servings ?? 0) || undefined,
-        timeMinutes: Number(rawRecipe?.timeMinutes ?? item.timeMinutes ?? 0) || undefined,
-        ingredients,
-        steps,
-        tips: Array.isArray(rawRecipe?.tips) ? rawRecipe.tips.map(String).filter(Boolean) : [],
-      };
-      return {
-        id: String(item.id || globalThis.crypto?.randomUUID?.() || Date.now().toString()),
-        title: String(item.title || recipe.title),
-        createdAt: typeof item.createdAt === 'string' ? item.createdAt : toIsoDate(item.createdAt),
-        photo: typeof item.photo === 'string' ? item.photo : undefined,
-        allergens: Array.isArray(item.allergens) ? item.allergens.map(String).filter(Boolean) : undefined,
-        intolerances: Array.isArray(item.intolerances) ? item.intolerances.map(String).filter(Boolean) : undefined,
-        sourceFoodName: typeof item.sourceFoodName === 'string' ? item.sourceFoodName : undefined,
-        recipe,
-      };
-    };
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) {
-        setFavoriteRecipes([]);
-        return;
-      }
-      const parsed = parseJson(raw);
-      const normalized = Array.isArray(parsed) ? parsed.map(normalizeFavoriteRecipe).filter(isPresent) : [];
-      setFavoriteRecipes(normalized);
-      safeSetItem(key, JSON.stringify(normalized));
-    } catch {
-      setFavoriteRecipes([]);
-    }
-  }, [currentUser?.id]);
-
-  const persistFavorites = useCallback((next: FavoriteRecipe[]) => {
-    setFavoriteRecipes(next);
-    if (!currentUser?.id) return;
-    try {
-      safeSetItem(`fitfocus_data_${currentUser.id}_favorite_recipes`, JSON.stringify(next));
-    } catch {}
-  }, [currentUser?.id]);
-
-  const addFavoriteRecipe = useCallback((fav: FavoriteRecipe) => {
-    persistFavorites([fav, ...favoriteRecipes].slice(0, 100));
-  }, [favoriteRecipes, persistFavorites]);
-
-  const removeFavoriteRecipe = useCallback((id: string) => {
-    persistFavorites(favoriteRecipes.filter(r => r.id !== id));
-  }, [favoriteRecipes, persistFavorites]);
-
-  const clearFavoriteRecipes = useCallback(() => {
-    persistFavorites([]);
-  }, [persistFavorites]);
-
-  const paywall = usePaywall(currentUser?.plan || 'free', requireInvite);
   const modeBadge = useMemo(() => {
     if (requireInvite || isTestModeEnabled()) {
       return {
@@ -853,42 +691,6 @@ const App: React.FC = () => {
       cls: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-200',
     };
   }, [paywall.plan, requireInvite]);
-  const pdfMealLogStorageKey = useMemo(
-    () => `fitfocus.dashboard.pdf-include-meal-log.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const pdfMealLogSkipSaveRef = useRef(false);
-  const [pdfIncludeMealLog, setPdfIncludeMealLog] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(pdfMealLogStorageKey) === '1';
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      pdfMealLogSkipSaveRef.current = true;
-      setPdfIncludeMealLog(localStorage.getItem(pdfMealLogStorageKey) === '1');
-    } catch {
-      pdfMealLogSkipSaveRef.current = true;
-      setPdfIncludeMealLog(false);
-    }
-  }, [pdfMealLogStorageKey]);
-  useEffect(() => {
-    if (pdfMealLogSkipSaveRef.current) {
-      pdfMealLogSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(pdfMealLogStorageKey, pdfIncludeMealLog ? '1' : '0');
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [pdfIncludeMealLog, pdfMealLogStorageKey]);
-
-  const [coachCard, setCoachCard] = useState<{ title: string; advice: string; bullets: string[] } | null>(null);
-  const [coachLoading, setCoachLoading] = useState(false);
-
   const [habits, setHabits] = useState<UserHabit[]>(INITIAL_HABITS);
   // AI Council (Orchestrator v2)
   const {
@@ -896,85 +698,38 @@ const App: React.FC = () => {
     setCouncilInput,
     councilLoading,
     councilStage,
+    councilError,
     councilMessages,
+    canClearCouncilHistory,
     expandedCouncilThoughtIds,
     setExpandedCouncilThoughtIds,
     councilScrollRef,
     handleCouncilSubmit,
     clearCouncilHistory,
-  } = useCouncilChat({ currentUser, foodDiary, habits });
+  } = useCouncilChat({
+    currentUser, foodDiary, habits,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    allowCachedUiStateRestore,
+  });
   const [foodHistory, setFoodHistory] = useState<FastLogItem[]>([]);
   const [foodFavorites, setFoodFavorites] = useState<FastLogItem[]>([]);
-  const nutritionSearchStorageKey = useMemo(
-    () => `fitfocus.nutrition.search.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const nutritionSearchSkipSaveRef = useRef(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  useEffect(() => {
-    try {
-      nutritionSearchSkipSaveRef.current = true;
-      const raw = localStorage.getItem(nutritionSearchStorageKey);
-      if (!raw) {
-        setSearchQuery('');
-        setShowSearchResults(false);
-        return;
-      }
-      try {
-        const parsed = parseJson(raw);
-        const record = isRecord(parsed) ? parsed : {};
-        setSearchQuery(typeof record.query === 'string' ? record.query : '');
-        setShowSearchResults(record.open === true);
-      } catch {
-        setSearchQuery(raw);
-        setShowSearchResults(false);
-      }
-    } catch {
-      nutritionSearchSkipSaveRef.current = true;
-      setSearchQuery('');
-      setShowSearchResults(false);
-    }
-  }, [nutritionSearchStorageKey]);
-  useEffect(() => {
-    if (nutritionSearchSkipSaveRef.current) {
-      nutritionSearchSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(nutritionSearchStorageKey, JSON.stringify({ query: searchQuery, open: showSearchResults }));
-    } catch {
-      // ignore storage issues
-    }
-  }, [nutritionSearchStorageKey, searchQuery, showSearchResults]);
+  const {
+    searchQuery,
+    setSearchQuery,
+    showSearchResults,
+    setShowSearchResults,
+  } = useNutritionSearchState(currentUser?.id, allowCachedUiStateRestore);
 
   const openEditFood = (item: FoodEntry) => {
+    if (!allowCachedUiStateRestore) return;
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
-  const [regData, setRegData] = useState<RegistrationData>({
-    name: '',
-    gender: Gender.MALE,
-    weight: 70,
-    height: 170,
-    age: 25,
-    activityLevel: ActivityLevel.MODERATELY_ACTIVE,
-    goal: Goal.LOSS,
-    targetWeight: 65,
-    dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict' as const, notes: '' },
-    medicalRestrictions: '',
-    bloodPressureSystolic: 0,
-    bloodPressureDiastolic: 0,
-    restingPulse: 0,
-    bloodGlucoseMmolL: 0,
-    waistCm: 0,
-    chestCm: 0,
-    hipsCm: 0,
-    plan: 'free' as TariffPlan,
-    lossDeficit: DEFAULT_DEFICIT,
-    gainSurplus: DEFAULT_SURPLUS,
-    riskAckLoss: false,
-    riskAckGain: false
-  });
+  const registrationScope = googleMe?.sub ? `registration:${googleMe.sub}` : null;
+  const { value: regData, setValue: setRegData } = useAccountScopedUiState(
+    registrationScope,
+    INITIAL_REGISTRATION_DATA,
+  );
 
   useEffect(() => {
     if (authState !== 'register') return;
@@ -985,121 +740,27 @@ const App: React.FC = () => {
   }, [authState, googleMe?.email, googleMe?.name, regData.name]);
 
   const [onboardingMode, setOnboardingMode] = useState<'mvp' | 'investor'>('mvp');
-  const [isActivatingPlan, setIsActivatingPlan] = useState(false);
-  const [activationStep, setActivationStep] = useState(0);
-  const activationTimerRef = useRef<number | null>(null);
-  const activationIntervalRef = useRef<number | null>(null);
 
-  const planUiStorageKey = useMemo(
-    () => `fitfocus.plan.ui.v1:${currentUser?.id ?? 'anon'}`,
-    [currentUser?.id],
-  );
-  const planUiSkipSaveRef = useRef(false);
-  const [planIntroOpen, setPlanIntroOpen] = useState(false);
-  const [weeklyMenuLoading, setWeeklyMenuLoading] = useState(false);
-  const [weeklyMenuError, setWeeklyMenuError] = useState<string | null>(null);
-  const [planTaskDone, setPlanTaskDone] = useState<Record<string, boolean>>({});
-  const [planWeekExpanded, setPlanWeekExpanded] = useState<Record<string, boolean>>({});
-  const [planRulesExpanded, setPlanRulesExpanded] = useState(false);
+  const { planTaskDone, setPlanTaskDone } = usePlanTaskState(uiAccountId);
+  const {
+    planIntroOpen,
+    setPlanIntroOpen,
+    planRulesExpanded,
+    setPlanRulesExpanded,
+    planWeekExpanded,
+    setPlanWeekExpanded,
+  } = usePlanUiState({
+    userId: currentUser?.id,
+    allowCachedUiStateRestore,
+    weekDayKeys: currentUser?.aiPlan?.weeklyMenu?.days.map((day) => day.day) ?? [],
+    planScope,
+    setPlanScope,
+    familyMenuPrefsOpen,
+    setFamilyMenuPrefsOpen,
+  });
   const [versionInfoOpen, setVersionInfoOpen] = useState(false);
 
-  useEffect(() => {
-    try {
-      planUiSkipSaveRef.current = true;
-      const raw = localStorage.getItem(planUiStorageKey);
-      if (!raw) {
-        setPlanIntroOpen(false);
-        setPlanRulesExpanded(false);
-        setPlanScope('personal');
-        setFamilyMenuPrefsOpen(false);
-        return;
-      }
-      const parsed = parseJson(raw);
-      const record = isRecord(parsed) ? parsed : {};
-      setPlanIntroOpen(record.planIntroOpen === true);
-      setPlanRulesExpanded(record.planRulesExpanded === true);
-      setPlanScope(record.planScope === 'family' ? 'family' : 'personal');
-      setFamilyMenuPrefsOpen(record.familyMenuPrefsOpen === true);
-    } catch {
-      planUiSkipSaveRef.current = true;
-      setPlanIntroOpen(false);
-      setPlanRulesExpanded(false);
-      setPlanScope('personal');
-      setFamilyMenuPrefsOpen(false);
-    }
-  }, [planUiStorageKey]);
-
-  useEffect(() => {
-    if (!currentUser?.id) {
-      setPlanTaskDone({});
-      return;
-    }
-    try {
-      const newKey = `fitfocus_data_${currentUser.id}_plan_task_done`;
-      const raw = localStorage.getItem(newKey);
-      if (raw) {
-        safeSetItem(newKey, raw);
-      }
-      const parsed = raw ? parseJson(raw) : null;
-      setPlanTaskDone(isBooleanRecord(parsed) ? parsed : {});
-    } catch {
-      setPlanTaskDone({});
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    safeSetItem(`fitfocus_data_${currentUser.id}_plan_task_done`, JSON.stringify(planTaskDone));
-  }, [currentUser?.id, planTaskDone]);
-
-  useEffect(() => {
-    const next: Record<string, boolean> = {};
-    (currentUser?.aiPlan?.weeklyMenu?.days ?? []).forEach((day, idx) => {
-      next[day.day] = typeof planWeekExpanded[day.day] === 'boolean' ? planWeekExpanded[day.day] : idx < 2;
-    });
-    setPlanWeekExpanded(next);
-  }, [currentUser?.aiPlan?.weeklyMenu?.weekStart, currentUser?.aiPlan?.weeklyMenu?.days?.length]);
-
-  useEffect(() => {
-    try {
-      planUiSkipSaveRef.current = true;
-      const raw = localStorage.getItem(planUiStorageKey);
-      if (!raw) return;
-      const parsed = parseJson(raw);
-      const storedWeek = isRecord(parsed) && isBooleanRecord(parsed.planWeekExpanded) ? parsed.planWeekExpanded : {};
-      const days = currentUser?.aiPlan?.weeklyMenu?.days ?? [];
-      if (!days.length) {
-        setPlanWeekExpanded(storedWeek);
-        return;
-      }
-      const next: Record<string, boolean> = {};
-      days.forEach((day, idx) => {
-        next[day.day] = typeof storedWeek[day.day] === 'boolean' ? storedWeek[day.day] : idx < 2;
-      });
-      setPlanWeekExpanded(next);
-    } catch {
-      planUiSkipSaveRef.current = true;
-    }
-  }, [currentUser?.aiPlan?.weeklyMenu?.days?.length, currentUser?.aiPlan?.weeklyMenu?.weekStart, planUiStorageKey]);
-
-  useEffect(() => {
-    if (planUiSkipSaveRef.current) {
-      planUiSkipSaveRef.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(planUiStorageKey, JSON.stringify({
-        planIntroOpen,
-        planRulesExpanded,
-        planScope,
-        familyMenuPrefsOpen,
-        planWeekExpanded,
-      }));
-    } catch {
-      // no-op
-    }
-  }, [familyMenuPrefsOpen, planIntroOpen, planRulesExpanded, planScope, planUiStorageKey, planWeekExpanded]);
-  const [planError, setPlanError] = useState<string | null>(null);
+  const { value: planError, setValue: setPlanError } = useAccountScopedUiState<string | null>(registrationScope, null);
 
   // Cinematic AI activation steps
   const ACTIVATION_TOTAL_MS = 3200;
@@ -1116,60 +777,39 @@ const App: React.FC = () => {
   const regNameTrim = (regData.name ?? '').trim();
   const regNameValid = regNameTrim.length > 0;
 
-  const suppressNextFullProfileSyncRef = useRef(false);
-  const suppressProfileSyncStateRef = useRef(false);
-  const hasPendingProfileChangesRef = useRef(false);
-  const lastAutoCloudSyncAttemptAtRef = useRef(0);
-  const CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS = 60_000;
+  const getAchievementContext = useCallback(() => buildAchievementContext({
+    currentUser,
+    foodDiary,
+    weeklyReportsCount: weeklyReports.length,
+    shoppingItems: familyShopping?.items,
+    familyActive: Boolean(cloudFamily),
+    todayKey: getTodayKey(),
+  }), [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
 
-  const persistUser = useCallback((updated: UserProfile) => {
-    setCurrentUser(updated);
-    if (!suppressProfileSyncStateRef.current) {
-      setProfileSyncState('saving');
-    }
-    if (googleMe?.sub && !suppressNextFullProfileSyncRef.current) {
-      hasPendingProfileChangesRef.current = true;
-    }
-    setAllUsers(prev => {
-      const found = prev.some(u => u.id === updated.id);
-      const next = found ? prev.map(u => u.id === updated.id ? updated : u) : [updated, ...prev];
-      const normalized = normalizeUserProfiles(next);
-      persistAllUsersSnapshot(updated.id, normalized);
-      return normalized;
-    });
-  }, [googleMe?.sub, persistAllUsersSnapshot]);
-
-  const buildAchievementContext = useCallback((): AchievementEvaluationContext => {
-    const weightHistory = currentUser?.weightHistory || [];
-    const firstWeight = typeof weightHistory[0]?.weight === 'number' ? weightHistory[0].weight : null;
-    const latestWeight =
-      typeof weightHistory[weightHistory.length - 1]?.weight === 'number'
-        ? weightHistory[weightHistory.length - 1].weight
-        : typeof currentUser?.weight === 'number'
-          ? currentUser.weight
-          : null;
-    const todayHabits = currentUser?.dailyHabits?.[getTodayKey()] || {};
-    return {
-      profileExists: !!currentUser,
-      profileDetailsCompleted: !!currentUser?.profileDetailsCompleted,
-      hasAiPlan: !!currentUser?.aiPlan,
-      hasWeeklyMenu: !!currentUser?.aiPlan?.weeklyMenu || !!currentUser?.aiPlan?.familyWeeklyMenu,
-      foodDiaryCount: foodDiary.length,
-      foodStreak: calculateFoodStreak(foodDiary).streak,
-      weightHistoryCount: weightHistory.length,
-      initialWeight: firstWeight,
-      latestWeight,
-      measurementsCount: currentUser?.measurementsHistory?.length || 0,
-      wisCount: weeklyReports.length,
-      shoppingCheckedCount: familyShopping?.items?.filter((item) => item.checked).length || 0,
-      familyActive: !!cloudFamily,
-      waterToday: !!todayHabits.water,
-      sleepHours: typeof currentUser?.wearableSleepHoursLastNight === 'number' ? currentUser.wearableSleepHoursLastNight : null,
-    };
-  }, [cloudFamily, currentUser, familyShopping?.items, foodDiary, weeklyReports.length]);
-
-  const achievements = useAchievements({ userId: currentUser?.id, getContext: buildAchievementContext });
+  const achievements = useAchievements({ userId: currentUser?.id, getContext: getAchievementContext,
+    isCurrentSession: isCurrentProfileSession, loginGuard: loginReadGuard });
   const checkAchievements = achievements.checkAchievements;
+  const {
+    persistFoodDiary,
+    addFoodToDiary,
+    addFoodToDiaryGuarded,
+    updateFoodEntry,
+    updateFoodEntryGuarded,
+    deleteFoodPhoto,
+    deleteFoodEntry,
+  } = useFoodDiary({
+    userId: currentUser?.id,
+    repository: userStateRepository,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    foodDiary,
+    foodHistory,
+    setFoodDiary,
+    inferMealType,
+    setFoodHistory,
+    setSelectedDiaryDayKey,
+    checkAchievements,
+  });
   const achievementBootstrapUserRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1193,42 +833,18 @@ const App: React.FC = () => {
   }, [allUsers, normalizedAllUsers]);
 
   // ---- Weekly menus (personal + family) ----
-  const handleGenerateWeeklyMenu = useCallback(async () => {
-    if (!currentUser?.aiPlan) return;
-    setWeeklyMenuError(null);
-    setWeeklyMenuLoading(true);
-    try {
-      const weeklyMenu = await generateWeeklyMenu(currentUser, currentUser.aiPlan);
-      const updatedUser: UserProfile = { ...currentUser, aiPlan: { ...currentUser.aiPlan, weeklyMenu } };
-      persistUser(updatedUser);
-      void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true });
-    } catch {
-      setWeeklyMenuError('Не удалось сгенерировать меню на неделю.');
-    } finally {
-      setWeeklyMenuLoading(false);
-    }
-  }, [checkAchievements, currentUser, persistUser]);
-
-  const resetUsageIfNewTime = useCallback((user: UserProfile): UserProfile => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const weekKey = getWeekKey(new Date());
-    const usage = user.usage || {};
-    let updated = false;
-    const nextUsage = { ...usage };
-    if (usage.dayKey !== today) {
-      nextUsage.dayKey = today;
-      nextUsage.aiFoodPhotoCount = 0;
-      nextUsage.aiCoachCount = 0;
-      updated = true;
-    }
-    if (usage.weekKey !== weekKey) {
-      nextUsage.weekKey = weekKey;
-      nextUsage.familyMenuCount = 0;
-      updated = true;
-    }
-    if (updated) return { ...user, usage: nextUsage };
-    return user;
-  }, []);
+  const {
+    weeklyMenuLoading,
+    weeklyMenuError,
+    handleGenerateWeeklyMenu,
+  } = useWeeklyMenuGeneration({
+    currentUser,
+    loginGuard: loginReadGuard,
+    persistUser,
+    checkAchievements,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+  });
 
   const targets = useMemo(() => {
     if (!currentUser) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
@@ -1240,302 +856,188 @@ const App: React.FC = () => {
     return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
   }, [currentUser, foodDiary, habits, targets.calories]);
 
-  const forecastNextWeek = useMemo(() => {
-    if (!weekly || !currentUser) return 0;
-    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * 7) / 7700;
-    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * 7) / 7700;
-    return 0;
-  }, [weekly, currentUser]);
+  const forecastNextWeek = useMemo(() => calculateNextWeekWeightForecast(currentUser, Boolean(weekly), {
+    lossDeficit: DEFAULT_DEFICIT,
+    gainSurplus: DEFAULT_SURPLUS,
+  }), [weekly, currentUser]);
 
-  const exportWeeklyPDF = async (report: WeeklyStoredReport) => {
-    const [{ default: jsPDF }, autoTableModule, { ensurePdfInterFont }] = await Promise.all([
-  import('jspdf'),
-  import('jspdf-autotable'),
-  import('./pdf/font'),
-]);
-const autoTable = autoTableModule.default;
-const doc = new jsPDF();
-await ensurePdfInterFont(doc);
-    doc.setFont("Inter", "normal");
-    doc.setFontSize(18);
-    doc.text("FitFocus — Еженедельный AI-отчёт (WIS)", 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Неделя: ${report.weekKey}`, 14, 30);
-    doc.text(`WIS (индекс недели): ${report.data.wis}/100`, 14, 36);
-    autoTable(doc, {
-      startY: 45,
-      styles: { font: 'Inter' },
-      head: [["Показатель", "Значение"]],
-      body: [
-        ["Дельта 7 дней", `${report.data.weightDelta7.toFixed(1)} кг`],
-        ["Дельта 30 дней", `${report.data.weightDelta30.toFixed(1)} кг`],
-        ["Комплаенс", `${report.data.compliance}%`],
-        ["Адаптация", `${report.data.adaptationIndex}/100`],
-      ],
-    });
-    if (report.aiText) {
-      doc.setFontSize(12);
-      const finalY = getAutoTableFinalY(doc, 90);
-      doc.text("AI Интерпретация:", 14, finalY + 10);
-      doc.setFontSize(10);
-      doc.text(doc.splitTextToSize(report.aiText, 180), 14, finalY + 18);
-    }
-    doc.save(`FitFocus_Weekly_Report_${report.weekKey}.pdf`);
-  };
-
-  type WisShareState = 'idle' | 'busy' | 'success' | 'error';
   const wisShareCardRef = useRef<HTMLDivElement | null>(null);
-  const wisShareResetTimerRef = useRef<number | null>(null);
-  const [wisShareState, setWisShareState] = useState<WisShareState>('idle');
-  const [wisShareMessage, setWisShareMessage] = useState<string | null>(null);
+  const wisShareScope = accountSessionRenderKey(loginReadGuard, currentUser?.id);
+  const { wisShareState, wisShareMessage, setWisShareNotice } = useWisShareNotice(
+    wisShareScope,
+    allowCachedUiStateRestore,
+  );
 
-  const setWisShareNotice = useCallback((state: WisShareState, message: string | null) => {
-    setWisShareState(state);
-    setWisShareMessage(message);
-    if (wisShareResetTimerRef.current) {
-      window.clearTimeout(wisShareResetTimerRef.current);
-      wisShareResetTimerRef.current = null;
+  const isCurrentAccountSession = useCallback(async () => {
+    if (!allowCachedUiStateRestore || !isCurrentProfileSession()) return false;
+    if (loginReadGuard) {
+      try {
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      } catch {
+        return false;
+      }
     }
-    if (state !== 'busy' && message) {
-      wisShareResetTimerRef.current = window.setTimeout(() => {
-        setWisShareState('idle');
-        setWisShareMessage(null);
-      }, 3500);
-    }
-  }, []);
+    return allowCachedUiStateRestore && isCurrentProfileSession();
+  }, [allowCachedUiStateRestore, isCurrentProfileSession, loginReadGuard]);
 
-  useEffect(() => () => {
-    if (wisShareResetTimerRef.current) {
-      window.clearTimeout(wisShareResetTimerRef.current);
-    }
-  }, []);
+  const exportWeeklyPDF = useCallback(async (report: WeeklyStoredReport) => {
+    if (!await isCurrentAccountSession()) return;
+    const saved = await exportWeeklyReportPdf(report, { isCurrentSession: isCurrentAccountSession });
+    if (!saved || !await isCurrentAccountSession()) return;
+  }, [isCurrentAccountSession]);
 
   const handleShareWisCard = useCallback(async () => {
-    if (!currentUser || !weekly) return;
+    if (!currentUser || !weekly || !allowCachedUiStateRestore || !isCurrentProfileSession()) return;
     const card = wisShareCardRef.current;
     if (!card) {
       setWisShareNotice('error', 'Не удалось подготовить карточку WIS. Попробуйте ещё раз.');
-      trackWisShareEvent('wis_share_failed', { reason: 'share_card_missing', wis: weekly.wis });
       return;
     }
 
     setWisShareNotice('busy', 'Готовим PNG-карточку WIS...');
-    trackWisShareEvent('wis_share_clicked', { wis: weekly.wis, status: weekly.status });
 
     try {
-      const html2canvasModule = await import('html2canvas');
-      const html2canvas = html2canvasModule.default;
-      await waitForDocumentFonts();
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      const canvas = await html2canvas(card, {
-        useCORS: true,
-        scale: 1,
-        backgroundColor: null,
+      const method = await shareWisCard({
+        card,
+        wis: weekly.wis,
+        waitForFonts: waitForDocumentFonts,
+        isCurrentSession: isCurrentAccountSession,
       });
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (!blob) {
-        throw new Error('canvas_to_blob_failed');
-      }
-
-      const file = new File([blob], `FitFocus_WIS_${weekly.wis}.png`, { type: 'image/png' });
-      const canShareFiles =
-        typeof navigator !== 'undefined' &&
-        typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [file] });
-
-      if (canShareFiles) {
-        await navigator.share({
-          files: [file],
-          title: 'FitFocus WIS',
-          text: 'Моя недельная WIS-карточка FitFocus',
-        });
-        setWisShareNotice('success', 'Карточка готова и передана в системное меню отправки.');
-        trackWisShareEvent('wis_share_success', { method: 'share_sheet', wis: weekly.wis });
-        void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
-        return;
-      }
-
-      const url = URL.createObjectURL(blob);
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `FitFocus_WIS_${weekly.wis}.png`;
-        link.rel = 'noopener';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-      setWisShareNotice('success', 'Системная отправка недоступна — PNG скачан на устройство.');
-      trackWisShareEvent('wis_share_success', { method: 'download', wis: weekly.wis });
+      if (!await isCurrentAccountSession()) return;
+      setWisShareNotice('success', method === 'share_sheet'
+        ? 'Карточка готова и передана в системное меню отправки.'
+        : 'Системная отправка недоступна — PNG скачан на устройство.');
       void checkAchievements('wis_share_success', { wisCount: Math.max(weeklyReports.length, 1) });
+      return;
     } catch (error: unknown) {
+      if (!await isCurrentAccountSession()) return;
       const reason = classifyWisShareFailure(error);
       setWisShareNotice('error', 'Не удалось создать картинку. Попробуйте скачать PDF или повторите позже.');
-      trackWisShareEvent('wis_share_failed', { reason, wis: weekly.wis });
     }
-  }, [checkAchievements, currentUser, weekly, weeklyReports.length, setWisShareNotice]);
+  }, [allowCachedUiStateRestore, checkAchievements, currentUser, isCurrentProfileSession, isCurrentAccountSession,
+    weekly, weeklyReports.length, setWisShareNotice]);
 
-  // Оптимизированный запуск AI генерации еженедельных отчетов
-  const aiReportGenerationRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!currentUser || !weekly) return;
-    
-    const weekKey = getWeekKey(new Date());
-    // Если отчет для этой недели с этим WIS уже генерируется или готов - пропускаем
-    if (aiReportGenerationRef.current === `${currentUser.id}_${weekKey}_${weekly.wis}`) return;
+  const aiReportGenerationRef = useWeeklyAiReport({
+    currentUser,
+    weekly,
+    targets,
+    setWeeklyReports,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+  });
 
-    const generateAI = async () => {
-      aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
-      setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
-      // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-      return await getWeeklyIntelligenceInterpretation({
-        name: currentUser.name,
-        goal: currentUser.goal,
-        wis: weekly.wis,
-        status: weekly.status,
-        weightDelta7: weekly.weightDelta7,
-        weightDelta30: weekly.weightDelta30,
-        compliancePct: weekly.compliance,
-        adaptationIndex: weekly.adaptationIndex,
-        calorieTarget: targets.calories,
-        macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs }
-      });
-    };
-
-    ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI).then(() => {
-      setWeeklyReports(loadWeeklyReports(currentUser.id));
-    }).catch((err: unknown) => {
-      // В dev StrictMode/перезапусках это нормальные "мягкие" ситуации — не засоряем консоль
-      if (!isSoftWeeklyAiError(err)) console.error("Weekly AI reporting failed", { code: "WEEKLY_AI_REPORT_FAILED" });
-      aiReportGenerationRef.current = null; // Позволяем переповтор при следующем изменении
-    });
-  }, [currentUser?.id, weekly?.wis]); // Срабатывает только при смене юзера или изменении итогового балла
-
-  const dailyStats = useMemo(() => {
-    const todayKey = localDayKey(new Date());
-    const todayDiary = foodDiary.filter((item) => localDayKey(item.timestamp) === todayKey);
-    return todayDiary.reduce((acc, item) => ({
-      calories: acc.calories + item.calories,
-      protein: acc.protein + item.protein,
-      fat: acc.fat + item.fat,
-      carbs: acc.carbs + item.carbs,
-    }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
-  }, [foodDiary]);
+  const dailyStats = useMemo(() => calculateDailyNutrition(foodDiary), [foodDiary]);
   const lessons = courseLibrary ?? [];
 
-  const weightTrend = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory || []).length < 2) return undefined;
-    const sorted = [...currentUser.weightHistory].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const last = sorted[sorted.length - 1];
-    const prev = sorted[sorted.length - 2];
-    const diff = last.weight - prev.weight;
-    const delta7 = weightDelta(currentUser.weightHistory, 7);
-    const delta30 = weightDelta(currentUser.weightHistory, 30);
-    return { current: last.weight, diff, diffPct: (diff / prev.weight) * 100, delta7, delta30 };
-  }, [currentUser]);
+  const weightTrend = useMemo(() => calculateDashboardWeightTrend(currentUser?.weightHistory), [currentUser?.weightHistory]);
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    const combined = [...foodHistory, ...foodFavorites];
-    const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
-    return unique.filter(item => item.name.toLowerCase().includes(q)).slice(0, 5);
-  }, [searchQuery, foodHistory, foodFavorites]);
+  const searchResults = useMemo(() => findFoodSearchResults(searchQuery, foodHistory, foodFavorites), [searchQuery, foodHistory, foodFavorites]);
 
   const logout = useMemo(() => createLogoutSession({
+    onClearLocalSession: () => {
+      authBootstrapAttemptRef.current += 1;
+      registrationAttemptRef.current += 1;
+      registrationControllerRef.current?.abort();
+      loginAttemptRef.current += 1; setUserStateRepository(null);
+      setUserProfileRepository(null);
+      setLoginReadGuard(null);
+      hasProfileDraftRef.current = false;
+      setHasProfileDraft(false);
+      void stateSync.invalidate().catch(() => {
+        if (googleMe?.sub) reportStateSaveIssue({ accountId: googleMe.sub, key: `fitfocus_data_${googleMe.sub}_sync`, kind: 'error', reason: 'logout-storage' });
+      });
+    },
     googleSub: googleMe?.sub,
+    loginGuard: loginReadGuard,
+    assertCurrentSession: async () => {
+      if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+      await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+    },
     setGoogleMe,
     setCurrentUser,
     setProfileSyncState,
     setLastProfileSyncAt,
     setAuthState,
-  }), [googleMe?.sub]);
+  }), [googleMe?.sub, isCurrentProfileSession, loginReadGuard]);
 
   const deleteAccount = useCallback(async () => {
     const deletedUserId = googleMe?.sub ?? currentUser?.id ?? null;
     await deleteAccountSession({
       googleSub: googleMe?.sub,
-      clearLocalData: deletedUserId ? () => {
-        clearLocalUserData(deletedUserId);
+      loginGuard: loginReadGuard,
+      assertCurrentSession: async () => {
+        if (!loginReadGuard) throw new Error('LOGIN_SESSION_CHANGED');
+        await assertReadSession(loginReadGuard, { isCurrentSession: isCurrentProfileSession });
+      },
+      clearLocalData: deletedUserId ? async () => {
+        const cleanup = await clearLocalUserData(deletedUserId);
         setAllUsers(prev => prev.filter(user => user.id !== deletedUserId));
+        if (!cleanup.complete) {
+          const reasons = [
+            !cleanup.localStorageCleared ? 'часть данных localStorage недоступна для удаления' : '',
+            !cleanup.indexedDbCleared ? 'не удалось полностью очистить IndexedDB' : '',
+            cleanup.legacyEvidenceRetained ? 'legacy-очередь содержит записи аккаунта или данные без подтверждённого владельца; они сохранены для безопасной миграции' : '',
+          ].filter(Boolean);
+          alert(`Аккаунт удалён на сервере, но локальная очистка завершена не полностью: ${reasons.join('; ')}.`);
+        }
       } : undefined,
       onLogout: logout,
     });
-  }, [currentUser?.id, googleMe?.sub, logout, setAllUsers]);
+  }, [currentUser?.id, googleMe?.sub, isCurrentProfileSession, loginReadGuard, logout, setAllUsers]);
 
   const loginAsUser = useCallback(async (
     user: UserProfile,
-    authUser: null | { sub?: string; email?: string; picture?: string } = googleMe,
+    authUser: null | { sub?: string; email?: string; picture?: string },
+    isCurrent: () => boolean = () => true,
+    readGuard?: OutboxReadGuard,
   ) => {
-    const normalizedUser = authUser?.sub && user.id !== authUser.sub
-      ? {
-          ...user,
-          id: authUser.sub,
-          googleSub: authUser.sub,
-          email: authUser.email ?? user.email,
-          picture: authUser.picture ?? user.picture,
-        }
-      : user;
-
-    if (authUser?.sub && user.id !== authUser.sub) {
-      renameLocalStoragePrefix(
-        `fitfocus_data_${user.id}_`,
-        `fitfocus_data_${authUser.sub}_`,
-      );
-      persistAllUsersSnapshot(authUser.sub, (readStoredAllUsersSnapshotForUser<UserProfile>(user.id) || [user]).map((profile) =>
-        profile.id === user.id
-          ? {
-              ...profile,
-              id: authUser.sub,
-              googleSub: authUser.sub,
-              email: authUser.email ?? profile.email,
-              picture: authUser.picture ?? profile.picture,
-            }
-          : profile
-      ));
-    }
-
-    const hydrated = await hydrateSessionFromCloud(normalizedUser, {
-      resetUsageIfNewTime,
+    if (!isCurrent()) return;
+    const loginAttempt = ++loginAttemptRef.current;
+    const prepared = await prepareLoginSession(user, authUser, {
       initialHabits: INITIAL_HABITS,
+      resetUsageIfNewTime: resetUsageIfNewPeriod,
+      isCurrentSession: () => loginAttempt === loginAttemptRef.current && isCurrent(),
+      readGuard,
     });
-
-    const nextUserBase = authUser?.sub && hydrated.currentUser.id !== authUser.sub
-      ? {
-          ...hydrated.currentUser,
-          id: authUser.sub,
-          googleSub: authUser.sub,
-          email: authUser.email ?? hydrated.currentUser.email,
-          picture: authUser.picture ?? hydrated.currentUser.picture,
-        }
-      : hydrated.currentUser;
-    const nextUser = nextUserBase.aiPlan ? nextUserBase : { ...nextUserBase, aiPlan: buildFallbackAiPlan(nextUserBase) };
-    setCurrentUser(nextUser);
-    if (Array.isArray(hydrated.allUsers) && hydrated.allUsers.length > 0) {
-      setAllUsers(hydrated.allUsers);
-    }
-    setWeeklyReports(hydrated.weeklyReports);
-    setFoodDiary(hydrated.foodDiary);
-    setHabits(hydrated.habits);
-    setFoodHistory(hydrated.foodHistory);
-    setFoodFavorites(hydrated.foodFavorites);
-    setCoachCard(hydrated.coachCard);
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    const profileRepository = prepared.hydrated.repository ?? new UserStateRepository(prepared.currentUser.id);
+    const pendingProfile = await profileRepository.hasPending('profile');
+    if (prepared.hydrated.readGuard) await assertReadSession(prepared.hydrated.readGuard, { isCurrentSession: isCurrent });
+    if (loginAttempt !== loginAttemptRef.current || !isCurrent()) return;
+    setUserStateRepository(profileRepository);
+    setUserProfileRepository(profileRepository);
+    setLoginReadGuard(prepared.hydrated.readGuard ?? null);
+    hasProfileDraftRef.current = false;
+    setHasProfileDraft(false);
+    setCurrentUser(prepared.currentUser);
+    if (prepared.hydrated.allUsers.length > 0) setAllUsers(prepared.hydrated.allUsers);
+    setWeeklyReports(prepared.hydrated.weeklyReports);
+    setFoodDiary(prepared.hydrated.foodDiary);
+    setHabits(prepared.hydrated.habits);
+    setFoodHistory(prepared.hydrated.foodHistory);
+    setFoodFavorites(prepared.hydrated.foodFavorites);
+    setCoachCard(prepared.hydrated.coachCard);
     setCurrentLesson(null);
     clearOAuthContinuationState();
     setAuthState('app');
-    setProfileSyncState('saved');
-    setLastProfileSyncAt(Date.now());
-    if (!hydrated.currentUser.aiPlan) {
-      persistUser(nextUser);
-    }
-  }, [googleMe?.sub, googleMe?.email, googleMe?.picture, resetUsageIfNewTime]);
+    hasPendingProfileChangesRef.current = pendingProfile;
+    setProfileSyncState(pendingProfile ? 'saving' : 'idle');
+    setLastProfileSyncAt(null);
+  }, []);
 
 
-  const pushProfileToCloud = useCallback(async (profile: UserProfile) => {
+  const applyRemoteProfile = useCallback((profile: UserProfile) => {
+    loginAttemptRef.current += 1;
+    const refreshed = resetUsageIfNewPeriod(profile);
+    setUserProfileRepository(new UserStateRepository(profile.id));
+    setCurrentUser(refreshed);
+    setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? refreshed : user)));
+    hasPendingProfileChangesRef.current = false;
+    setProfileSyncState('idle');
+    setProfileSyncNote('Профиль обновлён из облака.');
+  }, [setProfileSyncNote]);
+
+  const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
       setProfileSyncState('idle');
       setProfileSyncNote(null);
@@ -1543,39 +1045,38 @@ await ensurePdfInterFont(doc);
     }
     await pushProfileToCloudService(profile, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      syncStateImpl: id => stateSync.flushPending(id),
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloudService(patch, {
+    return patchProfileInCloudService(patch, {
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      loginGuard: loginReadGuard,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, loginAsUser, persistUser]);
+  }, [currentUser, applyRemoteProfile, loginReadGuard, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
-    await patchProfileInCloud(patch);
+    const committed = await patchProfileInCloud(patch);
+    if (!committed || !isCurrentProfileSession()) return false;
     if (patch.profileDetailsCompleted) {
       void checkAchievements('profile_details_completed', { profileDetailsCompleted: true });
     }
@@ -1585,7 +1086,8 @@ await ensurePdfInterFont(doc);
     if (typeof patch.wearableSleepHoursLastNight === 'number' && patch.wearableSleepHoursLastNight >= 8) {
       void checkAchievements('sleep_8h_recorded', { sleepHours: patch.wearableSleepHoursLastNight });
     }
-  }, [checkAchievements, patchProfileInCloud]);
+    return true;
+  }, [checkAchievements, patchProfileInCloud, isCurrentProfileSession]);
 
   const syncAllLocalDataNow = useCallback(async () => {
     if (!googleMe?.sub) {
@@ -1596,19 +1098,17 @@ await ensurePdfInterFont(doc);
     }
     await syncAllLocalDataNowService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
 
   useEffect(() => {
     if (profileSyncState === 'saved') {
@@ -1624,225 +1124,103 @@ await ensurePdfInterFont(doc);
     }
     await reloadUserFromCloudService({
       currentUser,
+      repository: userProfileRepository,
+      isCurrentSession: isCurrentProfileSession,
+      profileEditRevisionRef,
+      hasUncommittedDraft: () => hasProfileDraftRef.current,
       setProfileSyncState,
       setProfileSyncNote,
       setLastProfileSyncAt,
-      setAllUsers,
       persistUser,
-      loginAsUser,
-      collectLocalStateItemsImpl: collectLocalStateItems,
-      persistAllUsersSnapshotImpl: persistAllUsersSnapshot,
-      fetchImpl: fetch,
-      suppressNextFullProfileSyncRef,
-      suppressProfileSyncStateRef,
+      refreshProfileWithGuardImpl: id => stateSync.refreshProfileWithGuard(id),
+      assertReadGuardImpl: guard => assertReadSession(guard, { isCurrentSession: isCurrentProfileSession }),
+      setLoginReadGuard,
+      applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, loginAsUser, persistUser]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setLoginReadGuard]);
 
-  // Server-driven: persist profile changes to D1 (debounced)
-  const profileSaveTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!currentUser) return;
-    if (!googleMe?.sub) {
-      if (profileSyncState !== 'idle') {
-        setProfileSyncState('idle');
-      }
-      if (profileSyncNote) {
-        setProfileSyncNote(null);
-      }
-      if (lastProfileSyncAt !== null) {
-        setLastProfileSyncAt(null);
-      }
-      return;
-    }
-    if (suppressNextFullProfileSyncRef.current) {
-      suppressNextFullProfileSyncRef.current = false;
-      return;
-    }
-    if (profileSaveTimer.current) window.clearTimeout(profileSaveTimer.current);
-    profileSaveTimer.current = window.setTimeout(async () => {
-      await pushProfileToCloud(currentUser);
-    }, 500);
-    return () => {
-      if (profileSaveTimer.current) {
-        window.clearTimeout(profileSaveTimer.current);
-        profileSaveTimer.current = null;
-      }
-    };
-  }, [currentUser, googleMe?.sub, pushProfileToCloud]);
+  // Edits are already durable. A debounce wakes the current sender without obtaining fresh proof.
+  useProfileAutoSync({
+    currentUser,
+    cloudUserId: googleMe?.sub,
+    hasUncommittedDraft: hasProfileDraft,
+    suppressNextFullProfileSyncRef,
+    hasPendingProfileChangesRef,
+    pushProfileToCloud: flushPendingProfileToCloud,
+    setProfileSyncState,
+    setProfileSyncNote,
+    setLastProfileSyncAt,
+  });
 
-  const deltaDays = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 1;
-    const log = currentUser.weightHistory ?? [];
-    const first = log[0];
-    const last = log[log.length - 1];
-    const days = Math.floor((new Date(last.date).getTime() - new Date(first.date).getTime()) / 86400000);
-    // показываем «дельту» за доступный период, но не больше 14 дней
-    return Math.max(1, Math.min(14, isFinite(days) ? days : 1));
-  }, [currentUser]);
+  const adaptationWeightProgress = useMemo(
+    () => calculateAdaptationWeightProgress(currentUser?.weightHistory),
+    [currentUser?.weightHistory],
+  );
+  const deltaDays = adaptationWeightProgress.deltaDays;
+  const weightDeltaN = adaptationWeightProgress.weightDelta;
 
-  const weightDeltaN = useMemo(() => {
-    if (!currentUser || (currentUser.weightHistory ?? []).length < 2) return 0;
-    const log = currentUser.weightHistory ?? [];
-    const now = log[log.length - 1];
-    const ms = deltaDays * 86400000;
-    const past = log
-      .slice()
-      .reverse()
-      .find(e => new Date(now.date).getTime() - new Date(e.date).getTime() >= ms);
-    return past ? (now.weight - past.weight) : (now.weight - log[0].weight);
-  }, [currentUser, deltaDays]);
+  const expectedN = useMemo(
+    () => currentUser ? calculateExpectedWeightDelta(currentUser, deltaDays) : 0,
+    [currentUser, deltaDays],
+  );
 
-  const expectedN = useMemo(() => {
-    if (!currentUser) return 0;
-    if (currentUser.goal === Goal.LOSS) return (-(Number(currentUser.lossDeficit ?? DEFAULT_DEFICIT)) * deltaDays) / 7700;
-    if (currentUser.goal === Goal.GAIN) return ((Number(currentUser.gainSurplus ?? DEFAULT_SURPLUS)) * deltaDays) / 7700;
-    return 0;
-  }, [currentUser, deltaDays]);
+  const compliancePct = useMemo(
+    () => currentUser ? calculateAdaptationCompliance(foodDiary, habits, targets.calories) : 0,
+    [currentUser, foodDiary, habits, targets.calories],
+  );
 
-  const compliancePct = useMemo(() => {
-    if (!currentUser) return 0;
-    const now = Date.now();
-    const last7 = foodDiary.filter(f => (now - new Date(f.timestamp).getTime()) <= 7 * 86400000);
-    if (!last7.length) return 0;
-    const sums: Record<string, number> = {};
-    for (const f of last7) {
-      const key = localDayKey(f.timestamp);
-      if (!key) continue;
-      sums[key] = (sums[key] ?? 0) + (f.calories ?? 0);
-    }
-    const days = Object.keys(sums);
-    const okDays = days.filter(d => sums[d] <= (targets.calories || 1) * 1.1).length;
-    const dietScore = okDays / Math.max(1, days.length);
-    const habitScore = (habits.filter(h => h.current >= h.goal).length) / Math.max(1, habits.length);
-    return Math.round((dietScore * 0.6 + habitScore * 0.4) * 100);
-  }, [currentUser, foodDiary, habits, targets.calories]);
+  const adaptationIndex = useMemo(
+    () => currentUser ? calculateAdaptationIndex(currentUser.goal, expectedN, weightDeltaN) : 0,
+    [currentUser, expectedN, weightDeltaN],
+  );
 
-  const adaptationIndex = useMemo(() => {
-    if (!currentUser) return 0;
-    if (currentUser.goal === Goal.MAINTAIN) return 0;
-    const exp = expectedN;
-    if (exp === 0) return 0;
-    const actual = weightDeltaN;
-    const progress = currentUser.goal === Goal.LOSS
-      ? Math.min(1, Math.max(0, (Math.abs(actual) / Math.abs(exp))))
-      : Math.min(1, Math.max(0, (actual / exp)));
-    const idx = Math.round((1 - progress) * 100);
-    return Math.max(0, Math.min(100, idx));
-  }, [currentUser, expectedN, weightDeltaN]);
+  const adaptationStatus = useMemo(
+    () => currentUser ? getAdaptationStatus(currentUser.goal, adaptationIndex) : { label: '—', color: 'text-slate-400', level: 'none' as const },
+    [currentUser, adaptationIndex],
+  );
 
-  const adaptationStatus = useMemo(() => {
-    if (!currentUser) return { label: '—', color: 'text-slate-400', level: 'none' as const };
-    if (currentUser.goal === Goal.MAINTAIN) return { label: 'Поддержание', color: 'text-slate-300', level: 'none' as const };
-    if (adaptationIndex < 35) return { label: 'Низкая', color: 'text-emerald-300', level: 'low' as const };
-    if (adaptationIndex < 70) return { label: 'Средняя', color: 'text-amber-300', level: 'mid' as const };
-    return { label: 'Высокая', color: 'text-rose-300', level: 'high' as const };
-  }, [currentUser, adaptationIndex]);
-
-  const refeedSuggestion = useMemo(() => {
-    if (!currentUser) return { type: 'stay' as const };
-    if (currentUser.goal !== Goal.LOSS) return { type: 'stay' as const };
-    if (compliancePct < 70) return { type: 'stay' as const };
-    if (adaptationIndex >= 70) return { type: 'refeed' as const, caloriesTomorrow: targets.calories + 300 };
-    if (adaptationIndex >= 45) return { type: 'adjust' as const, stepsExtra: 2000 };
-    return { type: 'stay' as const };
-  }, [currentUser, compliancePct, adaptationIndex, targets.calories]);
-
-  const scheduleRefeedTomorrow = useCallback(() => {
-    if (!currentUser) return;
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const value = localDayKey(d);
-    safeSetItem(key, value);
-    setRefeedDate(value);
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const key = `fitfocus_data_${currentUser.id}_refeed`;
-    const value = localStorage.getItem(key);
-    if (value) {
-      safeSetItem(key, value);
-    }
-    setRefeedDate(value);
-  }, [currentUser?.id]);
+  const refeedSuggestion = useMemo(
+    () => currentUser ? getRefeedSuggestion(currentUser.goal, compliancePct, adaptationIndex, targets.calories) : { type: 'stay' as const },
+    [currentUser, compliancePct, adaptationIndex, targets.calories],
+  );
 
   const checkLimit = useCallback((type: keyof typeof PREMIUM_GATES) => {
     if (!currentUser) return false;
-    const usage = currentUser.usage || {};
-    if (type === 'aiFoodPhotoPerDay') return (usage.aiFoodPhotoCount || 0) < (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan] || 3);
-    if (type === 'aiCoachAdvicePerDay') return (usage.aiCoachCount || 0) < (PREMIUM_GATES.aiCoachAdvicePerDay[paywall.plan] || 1);
-    return Boolean(PREMIUM_GATES[type][paywall.plan]);
+    return canUsePremiumGate(type, paywall.plan, currentUser.usage);
   }, [currentUser, paywall.plan]);
 
-  const incrementUsage = useCallback((key: keyof UsageStats) => {
+  const incrementUsage = useCallback((key: UsageCounter) => {
     if (!currentUser) return;
-    const nextUsage = { ...currentUser.usage, [key]: (Number(currentUser.usage?.[key as keyof UsageStats]) || 0) + 1 };
-    persistUser({ ...currentUser, usage: nextUsage });
+    persistUser({ ...currentUser, usage: incrementUsageCounter(currentUser.usage, key) });
   }, [currentUser, persistUser]);
 
-  const persistFoodDiary = useCallback((nextDiary: FoodItem[]) => {
-    if (!currentUser) return;
-    const nextStorage = (nextDiary || []).map(sanitizeFoodEntryForStorage).slice(0, MAX_DIARY_ITEMS);
-    safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
-  }, [currentUser?.id]);
+  const remainingPhotoScans = useMemo(() => {
+    if (!currentUser) return 0;
+    const allowance = PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan];
+    return getRemainingFoodPhotoScans(allowance, currentUser.usage?.aiFoodPhotoCount);
+  }, [currentUser, paywall.plan]);
 
-  const addFoodToDiary = useCallback((item: FastLogItem) => {
-    if (!currentUser) return;
-    const ts = item.timestamp ?? new Date().toISOString();
-    // Keep photo in UI state (so user sees it immediately), but strip it from persisted localStorage payload to avoid quota issues.
-    const entryForState: FoodItem = { ...item, id: Date.now().toString(), timestamp: ts, mealType: item.mealType ?? inferMealType(ts) };
-    const entryForStorage = sanitizeFoodEntryForStorage(entryForState);
+  const incrementPhotoUsage = useCallback((guard: OutboxCommitGuard) => {
+    if (!currentUser) return Promise.resolve(null);
+    return persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiFoodPhotoCount'),
+    }), guard);
+  }, [currentUser, persistUser]);
 
-    // Use functional update so rapid consecutive adds (e.g. multiple scans)
-    // don't overwrite previous entries because of stale closures.
-    setFoodDiary((prev) => {
-      const prevArr = prev || [];
-      const nextState = [entryForState, ...prevArr].slice(0, MAX_DIARY_ITEMS);
-      const nextStorage = [entryForStorage, ...prevArr.map(sanitizeFoodEntryForStorage)].slice(0, MAX_DIARY_ITEMS);
-      safeSetItem(`fitfocus_data_${currentUser.id}_diary`, JSON.stringify(nextStorage));
-      const nextDayKey = localDayKey(ts);
-      if (nextDayKey) setSelectedDiaryDayKey(nextDayKey);
-      return nextState;
-    });
-    const historyItem = { ...item };
-    delete historyItem.photo;
-    if (historyItem.insight) delete historyItem.insight.recipe;
-    setFoodHistory((previousHistory) => {
-      const nextHistory = [historyItem, ...previousHistory.filter((history) => history.name !== item.name)]
-        .slice(0, MAX_HISTORY_ITEMS);
-      safeSetItem(`fitfocus_data_${currentUser.id}_history`, JSON.stringify(nextHistory));
-      return nextHistory;
-    });
-    const hasAiPhoto = Boolean(item.photo || item.photoThumb);
-    void checkAchievements(hasAiPhoto ? 'ai_photo_success' : 'food_manual_added', {
-      foodDiaryCount: foodDiary.length + 1,
-      hasAiPhoto,
-    });
-    return entryForState;
-  }, [checkAchievements, foodDiary.length, currentUser]);
-  const updateFoodEntry = useCallback((id: string, patch: Partial<FoodItem>) => {
-    if (!currentUser) return;
-    setFoodDiary((prev) => {
-      const next = (prev || []).map(it => (it.id === id ? { ...it, ...patch } : it));
-      persistFoodDiary(next);
-      const updated = next.find((it) => it.id === id);
-      if (updated?.timestamp) setSelectedDiaryDayKey(localDayKey(updated.timestamp));
-      return next;
-    });
-  }, [currentUser, persistFoodDiary]);
-
-  const deleteFoodPhoto = useCallback((id: string) => {
-    updateFoodEntry(id, { photo: undefined, photoThumb: undefined });
-  }, [updateFoodEntry]);
-
-  const deleteFoodEntry = useCallback((id: string) => {
-    if (!currentUser) return;
-    setFoodDiary((prev) => {
-      const next = (prev || []).filter(it => it.id !== id);
-      persistFoodDiary(next);
-      return next;
-    });
-  }, [currentUser, persistFoodDiary]);
+  const processPhotoFiles = useFoodPhotoAnalysis({
+    userId: currentUser?.id,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    remainingScans: remainingPhotoScans,
+    openPaywall: paywall.openPaywall,
+    setScanning: setIsScanning,
+    compressPhoto: compressFoodPhoto,
+    analyzePhoto: analyzeFoodPhoto,
+    addFoodToDiary: addFoodToDiaryGuarded,
+    incrementUsage: incrementPhotoUsage,
+    showInsight: setInsightModal,
+  });
 
   const {
     selectedFoodIds,
@@ -1850,71 +1228,77 @@ await ensurePdfInterFont(doc);
     clearFoodSelection,
     bulkUpdateMealType,
     bulkRemoveSelectedFoods,
-  } = useFoodSelection(setFoodDiary, deleteFoodEntry, persistFoodDiary);
+  } = useFoodSelection(
+    foodDiary,
+    setFoodDiary,
+    persistFoodDiary,
+    allowCachedUiStateRestore && currentUser?.id
+      ? accountSessionRenderKey(loginReadGuard, currentUser.id)
+      : null,
+  );
 
   const handleDiaryDayChange = useCallback((dayKey: string) => {
     clearFoodSelection();
     setSelectedDiaryDayKey(dayKey);
   }, [clearFoodSelection]);
 
-  const handleToggleHabit = useCallback((habitKey: 'water' | 'steps' | 'breakfast' | 'sleep') => {
-    if (!currentUser) return;
-    const updatedUser = toggleHabit(currentUser, habitKey);
-    persistUser(updatedUser);
-    const legacyMap: Record<string, string> = { water: 'h_water', steps: 'h_steps', breakfast: 'h_veg', sleep: 'h_sleep' };
-    const lid = legacyMap[habitKey];
-    if (lid) {
-      const isDone = updatedUser.dailyHabits?.[getTodayKey()]?.[habitKey];
-      const nextHabits = habits.map(h => h.id === lid ? { ...h, current: isDone ? h.goal : 0 } : h);
-      setHabits(nextHabits);
-      if (habitKey === 'water' && isDone) {
+  const handleToggleHabit = useCallback(async (habitKey: 'water' | 'steps' | 'breakfast' | 'sleep'): Promise<'saved' | 'failed'> => {
+    if (!currentUser || !loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
+    const result = applyHabitToggle(currentUser, habits, habitKey);
+    try {
+      const operation = await persistUser(result.updatedProfile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setHabits(result.habits);
+      if (result.waterGoalReached) {
         void checkAchievements('habit_water_done', { waterToday: true });
       }
+      return 'saved';
+    } catch {
+      return 'failed';
     }
-  }, [checkAchievements, currentUser, habits, persistUser]);
+  }, [checkAchievements, currentUser, habits, isCurrentProfileSession, loginReadGuard, persistUser]);
 
   const handleToggleTask = useCallback((taskDate: string) => {
-    if (!currentUser || !currentUser.tasks) return;
-    const nextTasks = currentUser.tasks.map(t => t.date === taskDate ? { ...t, completed: !t.completed } : t);
-    persistUser({ ...currentUser, tasks: nextTasks });
+    if (!currentUser) return;
+    const nextTasks = togglePlanTask(currentUser.tasks, taskDate);
+    if (nextTasks) persistUser({ ...currentUser, tasks: nextTasks });
   }, [currentUser, persistUser]);
 
   const exportShortPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadShortHealthReportPdf } = await import('./pdf');
-    await downloadShortHealthReportPdf({ user: currentUser, targets, foodDiary, habits });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadShortHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, isCurrentAccountSession]);
 
   const exportDetailedPdf = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !await isCurrentAccountSession()) return;
     const { downloadDetailedHealthReportPdf } = await import('./pdf');
-    await downloadDetailedHealthReportPdf({ user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog });
+    if (!await isCurrentAccountSession()) return;
+    const saved = await downloadDetailedHealthReportPdf({
+      user: currentUser, targets, foodDiary, habits, includeMealLog: pdfIncludeMealLog,
+      isCurrentSession: isCurrentAccountSession,
+    });
+    if (!saved || !await isCurrentAccountSession()) return;
     void checkAchievements('pdf_report_generated');
-  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog]);
+  }, [checkAchievements, currentUser, targets, foodDiary, habits, pdfIncludeMealLog, isCurrentAccountSession]);
 
   const bootstrapAuth = useCallback(async () => {
-    let continueAfterOAuth = false;
-    try {
-      continueAfterOAuth = sessionStorage.getItem(AUTH_PENDING_STORAGE_KEY) === '1';
-    } catch {}
-
-    try {
-      const authParam = new URLSearchParams(window.location.search).get('auth');
-      if (authParam === 'google' || authParam === 'apple') {
-        continueAfterOAuth = true;
-        try {
-          sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
-        } catch {}
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('auth');
-        window.history.replaceState({}, '', cleanUrl.toString());
-      }
-    } catch {}
+    const attempt = ++authBootstrapAttemptRef.current;
+    const isCurrent = () => attempt === authBootstrapAttemptRef.current;
+    const continueAfterOAuth = consumeOAuthContinuationState();
 
     await bootstrapAuthSession({
       requireInvite,
-      loginAsUser,
+      loginAsUser: (user, authUser, readGuard) => loginAsUser(user, authUser, isCurrent, readGuard),
+      isCurrentSession: isCurrent,
       setGoogleMe,
       setInviteError,
       setAuthState,
@@ -1926,6 +1310,21 @@ await ensurePdfInterFont(doc);
 
   useEffect(() => {
     void bootstrapAuth();
+    return () => { authBootstrapAttemptRef.current += 1; };
+  }, [bootstrapAuth]);
+
+  // A PWA reopened while offline cannot confirm its cloud session. Keep this
+  // listener active during the initial bootstrap too: connectivity can return
+  // before a failed request moves authState to auth_choice.
+  useEffect(() => {
+    const retryBootstrapWhenOnline = () => {
+      const state = authStateRef.current;
+      if (navigator.onLine && !authIdentityRef.current && (state === 'loading' || state === 'auth_choice')) {
+        void bootstrapAuth();
+      }
+    };
+    window.addEventListener('online', retryBootstrapWhenOnline);
+    return () => window.removeEventListener('online', retryBootstrapWhenOnline);
   }, [bootstrapAuth]);
 
   useEffect(() => {
@@ -1961,107 +1360,72 @@ await ensurePdfInterFont(doc);
     };
   }, []);
 
-  useEffect(() => {
-    if (!currentUser || !courseLibrary) return;
-    if (!courseUiStorageKey) return;
-
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) {
-      let savedCourseUi: CourseUiState | null = null;
-      try {
-        const raw = localStorage.getItem(courseUiStorageKey);
-        if (raw) {
-          const parsed = parseJson(raw);
-          if (
-            isRecord(parsed)
-            && (typeof parsed.lessonId === 'string' || parsed.lessonId === null)
-            && typeof parsed.isLessonViewOpen === 'boolean'
-            && typeof parsed.isQuizActive === 'boolean'
-            && (typeof parsed.selectedQuizOptionId === 'string' || parsed.selectedQuizOptionId === null)
-          ) {
-            const lessonId = typeof parsed.lessonId === 'string' ? parsed.lessonId : null;
-            const selectedQuizOptionId = typeof parsed.selectedQuizOptionId === 'string' ? parsed.selectedQuizOptionId : null;
-            savedCourseUi = {
-              lessonId,
-              isLessonViewOpen: parsed.isLessonViewOpen,
-              isQuizActive: parsed.isQuizActive,
-              selectedQuizOptionId,
-            };
-          }
-        }
-      } catch {
-        savedCourseUi = null;
-      }
-
-      const savedLesson = savedCourseUi?.lessonId ? courseLibrary.find((lesson) => lesson.id === savedCourseUi.lessonId) || null : null;
-      const nextLesson = savedLesson || pickLessonForToday(currentUser, courseLibrary);
-      if (nextLesson) {
-        setCurrentLesson(nextLesson);
-      }
-      setIsLessonViewOpen(Boolean(savedCourseUi?.isLessonViewOpen));
-      setIsQuizActive(Boolean(savedCourseUi?.isQuizActive));
-      if (nextLesson?.quiz && savedCourseUi?.selectedQuizOptionId) {
-        setSelectedQuizOption(nextLesson.quiz.options.find((option) => option.id === savedCourseUi.selectedQuizOptionId) || null);
-      } else {
-        setSelectedQuizOption(null);
-      }
-      courseUiHydratedKeyRef.current = courseUiStorageKey;
-      return;
-    }
-
-    if (currentLesson) return;
-    const nextLesson = pickLessonForToday(currentUser, courseLibrary);
-    if (nextLesson) setCurrentLesson(nextLesson);
-  }, [currentUser, courseLibrary, currentLesson, courseUiStorageKey]);
-
-  useEffect(() => {
-    if (!courseUiStorageKey) return;
-    if (courseUiHydratedKeyRef.current !== courseUiStorageKey) return;
-    const payload: CourseUiState = {
-      lessonId: currentLesson?.id || null,
-      isLessonViewOpen,
-      isQuizActive,
-      selectedQuizOptionId: selectedQuizOption?.id || null,
-    };
-    try {
-      localStorage.setItem(courseUiStorageKey, JSON.stringify(payload));
-    } catch {
-      // Ignore storage quota or privacy errors.
-    }
-  }, [courseUiStorageKey, currentLesson?.id, isLessonViewOpen, isQuizActive, selectedQuizOption?.id]);
-
-  useEffect(() => {
-    if (!googleMe?.sub || !currentUser) return;
-    const syncFromCloud = () => {
-      if (document.visibilityState && document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastAutoCloudSyncAttemptAtRef.current < CLOUD_SYNC_AUTO_RETRY_COOLDOWN_MS) {
-        return;
-      }
-      lastAutoCloudSyncAttemptAtRef.current = now;
-      if (hasPendingProfileChangesRef.current || profileSyncState === 'error') {
-        void syncAllLocalDataNow();
-        return;
-      }
-      void reloadUserFromCloud();
-    };
-    window.addEventListener('online', syncFromCloud);
-    document.addEventListener('visibilitychange', syncFromCloud);
-    return () => {
-      window.removeEventListener('online', syncFromCloud);
-      document.removeEventListener('visibilitychange', syncFromCloud);
-    };
-  }, [googleMe?.sub, currentUser?.id, profileSyncState, reloadUserFromCloud, syncAllLocalDataNow]);
+  useCloudSyncRecovery({
+    cloudUserId: googleMe?.sub,
+    currentUserId: currentUser?.id,
+    sessionKey: loginReadGuard
+      ? JSON.stringify([loginReadGuard.accountId, loginReadGuard.serverSessionId, loginReadGuard.sessionEpoch])
+      : null,
+    profileSyncState,
+    hasPendingProfileChangesRef,
+    syncAllLocalDataNow,
+    reloadUserFromCloud,
+  });
 
   // Load public env flags (no auth)
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/api/env', { credentials: 'include' });
-        if (!r.ok) return;
-        const raw = await r.json().catch(() => null) as unknown;
-        if (isRecord(raw) && typeof raw.requireInvite === 'boolean') setRequireInvite(raw.requireInvite);
-      } catch {}
-    })();
+    let disposed = false;
+    let generation = 0;
+    let controller: AbortController | null = null;
+    let removePageExit = () => {};
+
+    const loadPublicEnv = () => {
+      const requestGeneration = ++generation;
+      removePageExit();
+      controller?.abort();
+      const requestController = new AbortController();
+      controller = requestController;
+      removePageExit = listenForPageExit(() => {
+        if (requestGeneration !== generation) return;
+        generation += 1;
+        requestController.abort();
+      });
+
+      void (async () => {
+        try {
+          const r = await fetchWithResilience('/api/env', {
+            credentials: 'include',
+            signal: requestController.signal,
+          }, { retries: 1 });
+          if (disposed || requestGeneration !== generation || !r.ok) return;
+          const raw = await r.json().catch(() => null) as unknown;
+          if (!disposed && requestGeneration === generation && isRecord(raw)
+            && typeof raw.requireInvite === 'boolean') {
+            setRequireInvite(raw.requireInvite);
+          }
+        } catch {
+          // Public configuration is optional until the next page load/restore.
+        } finally {
+          if (requestGeneration === generation) removePageExit();
+        }
+      })();
+    };
+
+    const onPageShow = (event: Event) => {
+      if (!(event as PageTransitionEvent).persisted || disposed) return;
+      setInviteChecking(false);
+      loadPublicEnv();
+    };
+
+    window.addEventListener('pageshow', onPageShow);
+    loadPublicEnv();
+    return () => {
+      disposed = true;
+      generation += 1;
+      removePageExit();
+      window.removeEventListener('pageshow', onPageShow);
+      controller?.abort();
+    };
   }, []);
 
   const ensureInviteOk = useCallback(async (): Promise<boolean> => {
@@ -2073,49 +1437,6 @@ await ensurePdfInterFont(doc);
     });
   }, [requireInvite, inviteCode]);
 
-  const processPhotoFiles = useCallback(async (files: File[]) => {
-    if (!files.length || !currentUser) return;
-
-    // Paywall check once per batch
-    if (!checkLimit('aiFoodPhotoPerDay')) return paywall.openPaywall();
-
-    setIsScanning(true);
-    try {
-      for (const file of files) {
-        const { dataUrl: photo, thumbUrl: photoThumb, base64 } = await compressFoodPhoto(file);
-        const result = await analyzeFoodPhoto(base64);
-        if (!result) continue;
-
-        const nonFood = result.nonFood === true;
-        const insight: FoodInsight = {
-          calories: nonFood ? 0 : result.calories,
-          macros: {
-            protein: nonFood ? 0 : result.protein,
-            fat: nonFood ? 0 : result.fat,
-            carbs: nonFood ? 0 : result.carbs,
-          },
-          ingredients: nonFood || !Array.isArray(result.ingredients) ? [] : result.ingredients,
-          notes: Array.isArray(result.notes) ? result.notes : []
-        };
-
-        const newEntry = addFoodToDiary({
-          ...result,
-          ...(nonFood ? { calories: 0, protein: 0, fat: 0, carbs: 0, ingredients: [], nonFood: true } : {}),
-          photo,
-          photoThumb,
-          insight,
-        });
-        if (newEntry) setInsightModal({ id: newEntry.id, photo, name: result.name, insight, nonFood: newEntry.nonFood === true });
-        incrementUsage('aiFoodPhotoCount');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    finally {
-      setIsScanning(false);
-    }
-  }, [currentUser, addFoodToDiary, checkLimit, incrementUsage, paywall]);
-
   const handlePhotoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     await processPhotoFiles(files);
@@ -2123,217 +1444,215 @@ await ensurePdfInterFont(doc);
     try { e.target.value = ''; } catch {}
   }, [processPhotoFiles]);
 
-const logWeight = useCallback(() => {
-    if (!currentUser || !newWeight) return;
-    const nextWeight = parseFloat(newWeight);
-    const updatedUser = addWeight(currentUser, nextWeight);
-    persistUser(updatedUser);
-    setNewWeight('');
-    void checkAchievements('log_weight', {
-      weightHistoryCount: updatedUser.weightHistory?.length || 0,
-      latestWeight: nextWeight,
-    });
-  }, [checkAchievements, currentUser, newWeight, persistUser]);
-
-  const handleGetCoachAdvice = async () => {
-    if (!currentUser) return;
-    if (!checkLimit('aiCoachAdvicePerDay')) return paywall.openPaywall();
-    // Remember last action for "Retry" button
-    setLastAiAction({ feature: 'coach_advice', type: 'coach', userId: currentUser.id });
-    setCoachLoading(true);
+const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> => {
+    if (!currentUser || !newWeight) return 'invalid';
+    const result = recordDashboardWeight(currentUser, newWeight);
+    if (result.kind === 'invalid') return 'invalid';
+    if (!loginReadGuard || loginReadGuard.accountId !== currentUser.id || !isCurrentProfileSession()) return 'failed';
     try {
-      const todayKey = getTodayKey();
-      const todayHabits = currentUser.dailyHabits?.[todayKey] || {};
-      const habitsDone = Object.values(todayHabits).filter(Boolean).length;
-      const advice = await getCoachAdvice({
-        user: {
-          name: currentUser.name,
-          goal: currentUser.goal,
-          caloriesTarget: targets.calories,
-          proteinTarget: targets.protein,
-          fatTarget: targets.fat,
-          carbsTarget: targets.carbs,
-          adaptationMultiplier: currentUser.adaptationMultiplier,
-          bloodPressureSystolic: currentUser.bloodPressureSystolic,
-          bloodPressureDiastolic: currentUser.bloodPressureDiastolic,
-          restingPulse: currentUser.restingPulse,
-          waistCm: currentUser.waistCm,
-          chestCm: currentUser.chestCm,
-          hipsCm: currentUser.hipsCm,
-          medicalRestrictions: currentUser.medicalRestrictions,
-        },
-        today: { calories: dailyStats.calories, protein: dailyStats.protein, fat: dailyStats.fat, carbs: dailyStats.carbs, habitsDone, habitsTotal: 4 }
+      const operation = await persistUser(result.profile, {
+        readGuard: { ...loginReadGuard },
+        canCommit: isCurrentProfileSession,
+      }, { durable: true });
+      if (operation?.status !== 'pending' || !isCurrentProfileSession()) return 'failed';
+      setNewWeight('');
+      void checkAchievements('log_weight', {
+        weightHistoryCount: result.profile.weightHistory?.length || 0,
+        latestWeight: result.weight,
       });
-      setCoachCard(advice); incrementUsage('aiCoachCount');
-      safeSetItem(`fitfocus_data_${currentUser.id}_last_coach_card`, JSON.stringify(advice));
-      void checkAchievements('ai_coach_success');
-    } catch (e) { console.error(e); } finally { setCoachLoading(false); }
-  };
-
-  const handleAiRetry = useCallback(async (opts?: { force?: boolean }) => {
-    const last = (() => { try { return getLastAiAction(); } catch { return null; } })();
-    
-    // Clear cooldown/throttle and potentially proceed
-    const canRun = allowAiRetryNow(last?.feature, opts);
-    if (!canRun) return;
-
-    if (!last || !currentUser) return;
-
-    if (last.type === 'coach') {
-      await handleGetCoachAdvice();
-      return;
+      return 'saved';
+    } catch {
+      return 'failed';
     }
+  }, [checkAchievements, currentUser, isCurrentProfileSession, loginReadGuard, newWeight, persistUser, setNewWeight]);
 
-    if (last.type === 'plan') {
-      try {
-        const aiPlan = await generatePersonalPlan(currentUser);
-        persistUser({ ...currentUser, aiPlan });
-      } catch (e) {
-        console.error(e);
-        persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
+  const {
+    coachCard,
+    setCoachCard,
+    coachLoading,
+    handleGetCoachAdvice,
+  } = useCoachAdvice({
+    currentUser,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    targets,
+    dailyStats,
+    canUseCoachAdvice: () => checkLimit('aiCoachAdvicePerDay'),
+    openPaywall: paywall.openPaywall,
+    incrementUsage: guard => persistUser(previous => ({
+      ...previous,
+      usage: incrementUsageCounter(previous.usage, 'aiCoachCount'),
+    }), guard),
+    repository: userStateRepository,
+    checkAchievements: () => checkAchievements('ai_coach_success'),
+  });
+
+  const handlePlateauExplanation = usePlateauExplanation({
+    currentUserId: currentUser?.id ?? null,
+    loginGuard: loginReadGuard,
+    isCurrentSession: isCurrentProfileSession,
+    profileEditRevisionRef,
+    setLoading: setAdaptLoading,
+    setNote: setAdaptNote,
+  });
+
+  const aiRetryScope = useMemo(() => new AiActionScope(isCurrentProfileSession), [currentUser?.id, isCurrentProfileSession]);
+  useLayoutEffect(() => {
+    aiRetryScope.activate();
+    const hide = () => { aiRetryScope.invalidate(); setAdaptLoading(false); };
+    const show = (event: PageTransitionEvent) => { if (event.persisted) aiRetryScope.activate(); };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', hide);
+      window.addEventListener('pageshow', show);
+    }
+    return () => {
+      aiRetryScope.invalidate();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', hide);
+        window.removeEventListener('pageshow', show);
       }
-      return;
-    }
+    };
+  }, [aiRetryScope, setAdaptLoading]);
 
-    if (last.type === 'plateau') {
-      setAdaptLoading(true);
-      try {
-        const txt = await generatePlateauExplanation({
-          name: currentUser.name,
-          goal: currentUser.goal,
-          compliancePct,
-          weightDeltaN,
-          expectedN,
-          adaptationIndex,
-          suggestion: refeedSuggestion,
-        });
-        setAdaptNote(txt);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setAdaptLoading(false);
-      }
-      return;
-    }
-
-    if (last.type === 'wis') {
-      if (!weekly) return;
-      try {
-        aiReportGenerationRef.current = null;
-        const weekKey = getWeekKey(new Date());
-        const generateAI = async () => {
-          aiReportGenerationRef.current = `${currentUser.id}_${weekKey}_${weekly.wis}`;
-          setLastAiAction({ feature: 'wis_text', type: 'wis', userId: currentUser.id });
-          // FIX: getWeeklyIntelligenceInterpretation is now correctly imported
-          return await getWeeklyIntelligenceInterpretation({
-            name: currentUser.name,
-            goal: currentUser.goal,
-            wis: weekly.wis,
-            status: weekly.status,
-            weightDelta7: weekly.weightDelta7,
-            weightDelta30: weekly.weightDelta30,
-            compliancePct: weekly.compliance,
-            adaptationIndex: weekly.adaptationIndex,
-            calorieTarget: targets.calories,
-            macros: { protein: targets.protein, fat: targets.fat, carbs: targets.carbs },
-          });
-        };
-        await ensureWeeklyReportWithAI(currentUser.id, weekly, generateAI);
-        setWeeklyReports(loadWeeklyReports(currentUser.id));
-      } catch (e) {
-        console.error(e);
-      }
-      return;
-    }
-  }, [currentUser, weekly, targets, compliancePct, weightDeltaN, expectedN, adaptationIndex, refeedSuggestion, persistUser, handleGetCoachAdvice]);
+  const handleAiRetry = useCallback((opts?: { force?: boolean }) => {
+    const attempt = aiRetryScope.begin();
+    if (!attempt) return Promise.resolve();
+    return retryLastAiAction({
+      currentUser,
+      weekly,
+      targets,
+      compliancePct,
+      weightDeltaN,
+      expectedN,
+      adaptationIndex,
+      refeedSuggestion,
+      persistUser,
+      retryCoachAdvice: (action, retryOptions) => handleGetCoachAdvice(action, retryOptions),
+      retryPlateauExplanation: (input, action, retryOptions) => handlePlateauExplanation(input, action, retryOptions),
+      weeklyReportGenerationRef: aiReportGenerationRef,
+      controller: attempt.controller,
+      profileEditRevisionRef,
+      loginGuard: loginReadGuard,
+      isCurrentSession: attempt.isCurrent,
+      setWeeklyReports,
+    }, opts).finally(attempt.finish);
+  }, [
+    adaptationIndex,
+    aiRetryScope,
+    compliancePct,
+    currentUser,
+    expectedN,
+    handleGetCoachAdvice,
+    handlePlateauExplanation,
+    loginReadGuard,
+    profileEditRevisionRef,
+    persistUser,
+    refeedSuggestion,
+    targets,
+    weekly,
+    weightDeltaN,
+  ]);
 
   const handleRegister = useCallback(async () => {
-    await runRegistrationFlow({
-      regData,
-      regNameValid,
-      allUsersCount: normalizedAllUsers.length,
-      requireInvite,
-      inviteCode,
-      googleMe,
-      setPlanError,
-      setLastAiAction,
-      setDevPlanOverride,
-      generatePersonalPlan,
-      loginAsUser,
-      persistUser,
-      setAllUsers,
-      setCurrentUser,
-      setAuthState,
-      setActiveTab,
-      setPlanIntroOpen,
-      fetchImpl: fetch,
-    });
-  }, [regData, loginAsUser, persistUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe, generatePersonalPlan, setLastAiAction]);
-
-  const handleActivateWithTransition = useCallback(() => {
-    if (isActivatingPlan) return;
-    setActivationStep(0); setIsActivatingPlan(true);
-    if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-    activationIntervalRef.current = window.setInterval(() => {
-      setActivationStep((s) => Math.min(s + 1, ACTIVATION_STEPS.length - 1));
-    }, ACTIVATION_STEP_MS);
-    if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
-    activationTimerRef.current = window.setTimeout(async () => {
-      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-      activationIntervalRef.current = null; activationTimerRef.current = null;
-      await handleRegister(); setIsActivatingPlan(false);
-    }, ACTIVATION_TOTAL_MS);
-  }, [handleRegister, isActivatingPlan, ACTIVATION_STEPS.length, ACTIVATION_STEP_MS, ACTIVATION_TOTAL_MS]);
-
-  useEffect(() => {
-    return () => {
-      if (activationIntervalRef.current) window.clearInterval(activationIntervalRef.current);
-      if (activationTimerRef.current) window.clearTimeout(activationTimerRef.current);
+    const attempt = ++registrationAttemptRef.current;
+    registrationControllerRef.current?.abort();
+    const controller = new AbortController();
+    registrationControllerRef.current = controller;
+    const bootstrap = authBootstrapAttemptRef.current;
+    const accountId = googleMe?.sub;
+    const isCurrent = () => {
+      const sessionGuard = registrationSessionGuardRef.current;
+      return attempt === registrationAttemptRef.current && bootstrap === authBootstrapAttemptRef.current
+        && accountId === authIdentityRef.current
+        && isRegistrationSessionReady(accountId, registrationSessionStateRef.current)
+        && sessionGuard?.identity === accountId && sessionGuard.sessionKey !== null && !sessionGuard.invalid;
     };
-  }, []);
+    const getProfileWriteGuard = async (): Promise<OutboxLocalCommitGuard | null> => {
+      if (!accountId || !isCurrent()) return null;
+      const { active } = await new DurableOutbox().sessionState();
+      if (!isCurrent() || !active || active.accountId !== accountId
+        || typeof active.serverSessionId !== 'string' || !/^[a-f0-9]{64}$/.test(active.serverSessionId)
+        || !active.sessionEpoch) return null;
+      const sessionGuard = registrationSessionGuardRef.current;
+      const sessionKey = JSON.stringify([active.accountId, active.serverSessionId, active.sessionEpoch]);
+      if (sessionGuard?.identity !== accountId || sessionGuard.invalid || sessionGuard.sessionKey !== sessionKey) return null;
+      return {
+        localCommitGuard: {
+          accountId,
+          serverSessionId: active.serverSessionId,
+          sessionEpoch: active.sessionEpoch,
+        },
+        canCommit: isCurrent,
+      };
+    };
+    try {
+      await runRegistrationFlow({
+        regData,
+        regNameValid,
+        allUsersCount: normalizedAllUsers.length,
+        requireInvite,
+        inviteCode,
+        googleMe,
+        setPlanError,
+        setLastAiAction,
+        setDevPlanOverride,
+        generatePersonalPlan,
+        loginAsUser: (user, readGuard) => loginAsUser(user, googleMe, isCurrent, readGuard),
+        controller,
+        isCurrentSession: isCurrent,
+        getProfileWriteGuard,
+        setActiveTab,
+        setPlanIntroOpen,
+        fetchImpl: fetch,
+      });
+    } finally {
+      if (registrationControllerRef.current === controller) registrationControllerRef.current = null;
+    }
+  }, [regData, loginAsUser, regNameValid, normalizedAllUsers.length, requireInvite, inviteCode, googleMe,
+    registrationSessionState, setPlanError, setActiveTab, setPlanIntroOpen, generatePersonalPlan, setDevPlanOverride, setLastAiAction]);
+
+  const { isActivatingPlan, activationStep, startPlanActivation: handleActivateWithTransition } = usePlanActivation({
+    totalMs: ACTIVATION_TOTAL_MS,
+    stepCount: ACTIVATION_STEPS.length,
+    onComplete: handleRegister,
+  });
 
   useEffect(() => {
     if (!currentUser) return;
     if (currentUser.aiPlan) return;
-    persistUser({ ...currentUser, aiPlan: buildFallbackAiPlan(currentUser) });
-  }, [currentUser?.id, currentUser?.aiPlan, persistUser]);
+    if (hasProfileDraftRef.current) return;
+    if (loginReadGuard && loginReadGuard.accountId !== currentUser.id) return;
+    const writeGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+      readGuard: { ...loginReadGuard },
+      canCommit: isCurrentProfileSession,
+    } : undefined;
+    void persistUser(previous => previous.aiPlan ? previous : {
+      ...previous,
+      aiPlan: buildFallbackAiPlan(previous),
+    }, writeGuard, { durable: true }).catch(() => undefined);
+  }, [currentUser, hasProfileDraft, isCurrentProfileSession, loginReadGuard, persistUser]);
 
-  const closeLessonView = useCallback(() => {
-    setIsQuizActive(false);
-    setIsLessonViewOpen(false);
-    setSelectedQuizOption(null);
-  }, []);
-
-  const handleMarkLessonRead = useCallback(() => {
-    if (!currentUser || !currentLesson) return;
-    const progress = currentUser.courseProgress || { completedLessonIds: [], streak: 0 };
-    if (progress.completedLessonIds.includes(currentLesson.id)) {
-      closeLessonView();
-      return;
-    }
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    const nextProgress = {
-      completedLessonIds: [...progress.completedLessonIds, currentLesson.id],
-      lastLessonDate: todayStr,
-      lastLessonId: currentLesson.id,
-      streak: (progress.streak || 0) + 1
-    };
-    persistUser({ ...currentUser, courseProgress: nextProgress });
-    closeLessonView();
-  }, [closeLessonView, currentUser, currentLesson, persistUser]);
-
-  const handleStartLessonQuiz = useCallback(() => {
-    if (!currentLesson?.quiz) return;
-    setSelectedQuizOption(null);
-    setIsQuizActive(true);
-  }, [currentLesson]);
-
-  const handleQuizSubmit = useCallback(() => {
-    if (!currentUser || !currentLesson || !selectedQuizOption) return;
-    const newAnswer = { lessonId: currentLesson.id, optionId: selectedQuizOption.id, date: new Date().toLocaleDateString('en-CA') };
-    persistUser({ ...currentUser, lessonQuizAnswers: [...(currentUser.lessonQuizAnswers || []), newAnswer] });
-    closeLessonView();
-  }, [closeLessonView, currentUser, currentLesson, persistUser, selectedQuizOption]);
+  const courseWriteGuard: OutboxWriteGuard | undefined = loginReadGuard ? {
+    localCommitGuard: {
+      accountId: loginReadGuard.accountId,
+      serverSessionId: loginReadGuard.serverSessionId,
+      sessionEpoch: loginReadGuard.sessionEpoch,
+    },
+    canCommit: isCurrentProfileSession,
+  } : undefined;
+  const { closeLessonView, handleMarkLessonRead, handleStartLessonQuiz, handleQuizSubmit, isSavingLesson, lessonSaveError } = useCourseActions({
+    currentUser,
+    currentLesson,
+    selectedQuizOption,
+    persistUser,
+    writeGuard: courseWriteGuard,
+    isCurrentSession: isCurrentProfileSession,
+    setIsLessonViewOpen,
+    setIsQuizActive,
+    setSelectedQuizOption,
+    toDayKey: localDayKey,
+  });
 
   const todayTask = useMemo(() => {
     const today = localDayKey(new Date());
@@ -2342,86 +1661,18 @@ const logWeight = useCallback(() => {
 
   const plateau = useMemo(() => currentUser ? detectPlateau(currentUser) : false, [currentUser]);
 
-  const aiBadge = useMemo(() => {
-    const s = aiStatus;
-    const now = Date.now();
-    const cooling = (s?.cooldownUntil ?? 0) > now;
+  const aiBadge = useMemo(() => buildAiActivityBadge(aiStatus), [aiStatus]);
 
-    if (!s) {
-      return { label: 'AI: готов', cls: 'bg-slate-800/60 text-slate-300 border-slate-700', title: 'AI готов к работе' };
-    }
+  const retryMeta = useMemo(() => buildAiRetryMeta(lastAiAction, aiStatus), [aiStatus, lastAiAction]);
 
-    if (cooling) {
-      return {
-        label: 'AI: пауза',
-        cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20',
-        title: `AI временно ограничен (квота/лимит). Используется кэш/фолбэк до ${new Date(s.cooldownUntil || now).toLocaleTimeString()}`
-      };
-    }
-
-    if (s.source.includes('cooldown')) {
-      return { label: 'AI: кэш', cls: 'bg-amber-500/10 text-amber-200 border-amber-500/20', title: s.reason || 'Используется кэш из-за лимитов' };
-    }
-    if (s.source === 'cache') {
-      return { label: 'AI: кэш', cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20', title: 'Показывается ранее сгенерированный результат' };
-    }
-    if (s.source === 'fallback') {
-      return { label: 'AI: офлайн', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'AI недоступен, используется локальный совет' };
-    }
-    if (s.source === 'error') {
-      return { label: 'AI: ошибка', cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20', title: s.reason || 'Ошибка AI' };
-    }
-    return { label: 'AI: online', cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20', title: 'AI отвечает в реальном времени' };
-  }, [aiStatus]);
-
-  const retryMeta = useMemo(() => {
-    const cooling = (aiStatus?.cooldownUntil ?? 0) > Date.now();
-    const typeLabel = !lastAiAction ? '' : (lastAiAction.type === 'coach' ? 'Coach' : lastAiAction.type === 'plan' ? 'Plan' : lastAiAction.type === 'plateau' ? 'Plateau' : 'WIS');
-    const label = lastAiAction ? `Retry: ${typeLabel}` : 'Retry';
-    const title = !lastAiAction
-      ? 'Нет действия для повтора'
-      : (cooling ? 'AI сейчас на паузе из-за квоты. Используйте Force, если понимаете риск.' : 'Повторить последнее действие AI');
-    return { cooling, label, title };
-  }, [aiStatus, lastAiAction]);
-
-  const syncBadge = useMemo(() => {
-    const lastSync = lastProfileSyncAt ? new Date(lastProfileSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-    if (!googleMe?.sub) {
-      return {
-        label: 'Cloud: local',
-        cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
-        title: 'Облачная синхронизация не активна: войдите в Google, чтобы сохранять данные между устройствами.',
-      };
-    }
-    if (profileSyncState === 'saving') {
-      return {
-        label: 'Cloud: saving',
-        cls: 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20',
-        title: `Синхронизация с облаком… Последний успешный синк: ${lastSync}`,
-      };
-    }
-    if (profileSyncState === 'saved') {
-      return {
-        label: 'Cloud: saved',
-        cls: 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20',
-        title: `Синхронизировано с облаком. Последний синк: ${lastSync}`,
-      };
-    }
-    if (profileSyncState === 'error') {
-      return {
-        label: 'Cloud: error',
-        cls: 'bg-rose-500/10 text-rose-200 border-rose-500/20',
-        title: profileSyncNote
-          ? `${profileSyncNote} Последний успешный синк: ${lastSync}`
-          : `Ошибка синхронизации. Последний успешный синк: ${lastSync}`,
-      };
-    }
-    return {
-      label: 'Cloud: idle',
-      cls: 'bg-slate-800/60 text-slate-300 border-slate-700',
-      title: profileSyncNote || `Синхронизация готова. Последний синк: ${lastSync}`,
-    };
-  }, [googleMe?.sub, lastProfileSyncAt, profileSyncNote, profileSyncState]);
+  const syncBadge = useMemo(() => buildCloudSyncBadge({
+    hasCloudSession: Boolean(googleMe?.sub),
+    state: profileSyncState,
+    note: profileSyncNote,
+    lastSyncAt: lastProfileSyncAt,
+    stateQueue: stateQueues.find((queue) => queue.accountId === currentUser?.id),
+    localSaveError: stateSaveIssues.some((issue) => issue.accountId === currentUser?.id && issue.kind === 'error'),
+  }), [googleMe?.sub, currentUser?.id, lastProfileSyncAt, profileSyncNote, profileSyncState, stateQueues, stateSaveIssues]);
 
   const createFamilyCloudWithAchievements = useCallback(async () => {
     await createFamilyCloud();
@@ -2434,13 +1685,13 @@ const logWeight = useCallback(() => {
   }, [checkAchievements, joinFamilyCloud]);
 
   const generateFamilyMenuNowWithAchievements = useCallback(async () => {
-    await generateFamilyMenuNow();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await generateFamilyMenuNow();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, generateFamilyMenuNow]);
 
   const handleGenerateFamilyWeeklyMenuWithAchievements = useCallback(async () => {
-    await handleGenerateFamilyWeeklyMenu();
-    void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
+    const menu = await handleGenerateFamilyWeeklyMenu();
+    if (menu) void checkAchievements('weekly_menu_generated', { hasWeeklyMenu: true, familyActive: true });
   }, [checkAchievements, handleGenerateFamilyWeeklyMenu]);
 
   const toggleFamilyShoppingItemWithAchievements = useCallback(async (name: string, checked: boolean) => {
@@ -2463,6 +1714,7 @@ const logWeight = useCallback(() => {
       deleteAccount,
       persistUser,
       patchProfileInCloud: patchProfileInCloudWithAchievements,
+      onProfileDraftChange,
       onExportBackup,
       onImportBackup,
       onConnectAutosave,
@@ -2473,6 +1725,7 @@ const logWeight = useCallback(() => {
       syncAllLocalDataNow,
       reloadUserFromCloud,
       resetUiState,
+      onAccountUiCacheRestoreAllowedChange: setAllowCachedUiStateRestore,
       aiBadge,
       retryMeta,
     },
@@ -2503,9 +1756,7 @@ const logWeight = useCallback(() => {
       scheduleRefeedTomorrow,
       expectedN,
       adaptLoading,
-      setAdaptLoading,
-      setLastAiAction,
-      generatePlateauExplanation,
+      generatePlateauExplanation: handlePlateauExplanation,
       adaptNote,
       setAdaptNote,
       adaptExpanded,
@@ -2526,6 +1777,7 @@ const logWeight = useCallback(() => {
       dismissAchievementToast: achievements.dismissAchievementToast,
     },
     progress: {
+      isCurrentSession: isCurrentAccountSession,
       weightHistory: currentUser?.weightHistory || [],
       measurementsHistory: currentUser?.measurementsHistory || [],
       progressPhotos: currentUser?.progressPhotos || [],
@@ -2578,6 +1830,8 @@ const logWeight = useCallback(() => {
       currentUserGoal: currentUser?.goal || Goal.MAINTAIN,
       DEFAULT_DEFICIT,
       DEFAULT_SURPLUS,
+      loginGuard: loginReadGuard,
+      isCurrentSession: isCurrentProfileSession,
       ShoppingListCardComponent: ShoppingListCard,
     },
     nutrition: {
@@ -2587,7 +1841,7 @@ const logWeight = useCallback(() => {
       setCameraFacing,
       handlePhotoUpload,
       processPhotoFiles,
-      remainingScans: checkLimit('aiFoodPhotoPerDay') ? (PREMIUM_GATES.aiFoodPhotoPerDay[paywall.plan as 'free'] || 3) - (currentUser?.usage?.aiFoodPhotoCount || 0) : 0,
+      remainingScans: remainingPhotoScans,
       searchQuery,
       setSearchQuery,
       showSearchResults,
@@ -2601,7 +1855,10 @@ const logWeight = useCallback(() => {
       bulkRemoveSelectedFoods,
       deleteFoodEntry,
       deleteFoodPhoto,
-      openInsight: (item: FoodItem) => setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true }),
+      openInsight: (item: FoodItem) => {
+        if (!allowCachedUiStateRestore) return;
+        setInsightModal({ id: item.id, photo: (item.photoThumb || item.photo) as string, name: item.name, insight: item.insight!, nonFood: item.nonFood === true });
+      },
       openEditFood,
       formatTime,
       mealTypeLabel,
@@ -2634,7 +1891,9 @@ const logWeight = useCallback(() => {
       setCouncilInput,
       councilLoading,
       councilStage,
+      councilError,
       councilMessages,
+      canClearCouncilHistory,
       expandedCouncilThoughtIds,
       setExpandedCouncilThoughtIds,
       councilScrollRef,
@@ -2675,6 +1934,24 @@ const logWeight = useCallback(() => {
     </React.Suspense>
   );
 
+  if (authState === 'register' && !isRegistrationSessionReady(googleMe?.sub, registrationSessionState)) {
+    const status = registrationSessionState.identity === googleMe?.sub
+      ? registrationSessionState.status
+      : 'checking';
+    const registrationSessionMessage = status === 'checking'
+      ? 'Проверяем активную сессию…'
+      : status === 'unavailable'
+        ? 'Не удалось подтвердить активную сессию. Данные регистрации скрыты; повторите вход.'
+        : 'Сессия изменилась в другой вкладке. Обновите страницу, чтобы продолжить.';
+    return (
+      <div className="min-h-[100dvh] bg-slate-950 px-4 flex items-center justify-center text-slate-200">
+        <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
+          {registrationSessionMessage}
+        </div>
+      </div>
+    );
+  }
+
   if (authState === 'register') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
@@ -2694,32 +1971,36 @@ const logWeight = useCallback(() => {
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
+      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
-      {isScanning && (
+      {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
           <p className="text-slate-100 font-black text-xl animate-pulse">Анализирую фото...</p>
         </div>
       )}
-      {paywall.isPaywallOpen && (
+      {allowCachedUiStateRestore && paywall.isPaywallOpen && (
         <PaywallDialog
           currentPlan={paywall.plan}
           currentUser={currentUser}
           isAdmin={isAdmin}
+          loginGuard={loginReadGuard}
+          isCurrentSession={isCurrentProfileSession}
           onPersistUser={persistUser}
           onClose={paywall.closePaywall}
         />
       )}
       
-      {editFoodModal && (
+      {allowCachedUiStateRestore && editFoodModal && (
         <FoodEditModal
           draft={editFoodModal}
           onChange={setEditFoodModal}
           onClose={() => setEditFoodModal(null)}
-          onSave={() => {
+          onSave={async () => {
             const currentEntry = foodDiary.find((item) => item.id === editFoodModal.id);
             const patch = buildCorrectedFoodPatch(editFoodModal, currentEntry?.insight);
-            updateFoodEntry(editFoodModal.id, patch);
+            const saved = await updateFoodEntry(editFoodModal.id, patch);
+            if (!saved) return false;
             if (insightModal?.id === editFoodModal.id && patch.insight) {
               setInsightModal({
                 ...insightModal,
@@ -2729,22 +2010,35 @@ const logWeight = useCallback(() => {
               });
             }
             setEditFoodModal(null);
+            return true;
           }}
         />
       )}
 
-{insightModal && (
+{allowCachedUiStateRestore && insightModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl animate-in zoom-in duration-300">
             <React.Suspense fallback={<div className="rounded-[2rem] bg-slate-900 border border-slate-800 p-6 text-center text-slate-500 font-medium">Загрузка разбора...</div>}>
               <FoodInsightCard
+                sourceId={insightModal.id}
+                currentUserId={currentUser?.id}
+                loginGuard={loginReadGuard}
+                isCurrentSession={isCurrentProfileSession}
                 photo={insightModal.photo}
                 name={insightModal.name}
                 insight={insightModal.insight}
                 nonFood={Boolean(insightEntry?.nonFood ?? insightModal.nonFood)}
                 isPro={paywall.canUsePro}
                 onEdit={insightEntry ? () => openEditFood(insightEntry) : undefined}
-                onUpdateInsight={(next) => { if (!currentUser) return; const newDiary = foodDiary.map(it => it.id === insightModal.id ? { ...it, insight: next } : it); setFoodDiary(newDiary); persistFoodDiary(newDiary); setInsightModal({ ...insightModal, insight: next }); }}
+                onUpdateInsight={async (next, guard, isCurrent) => {
+                  const sourceId = insightModal.id;
+                  const saved = await updateFoodEntryGuarded(sourceId, { insight: next }, guard, isCurrent);
+                  if (!saved || !isCurrent()) return false;
+                  setInsightModal(previous => previous?.id === sourceId && isCurrent()
+                    ? { ...previous, insight: next }
+                    : previous);
+                  return true;
+                }}
                 onSaveRecipe={addFavoriteRecipe}
                 onClose={() => setInsightModal(null)}
               />
@@ -2772,7 +2066,7 @@ const logWeight = useCallback(() => {
       <AppWorkspace
         workspaceProps={workspaceProps}
       />
-      {activeTab === 'dashboard' && currentUser && weekly && (
+      {allowCachedUiStateRestore && activeTab === 'dashboard' && currentUser && weekly && (
         <ShareWisCard
           ref={wisShareCardRef}
           weekly={weekly}
@@ -2786,10 +2080,10 @@ const logWeight = useCallback(() => {
         />
       )}
       {/* Family menu pre-questions */}
-      {familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
+      {allowCachedUiStateRestore && familyMenuPrefsOpen && currentUser && paywall.plan === 'family' && (
         <React.Suspense fallback={null}>
           <FamilyMenuPrefsModal
-            allUsers={allUsers}
+            allUsers={familyMenuProfiles}
             familyMenuPrefs={familyMenuPrefs}
             setFamilyMenuPrefs={setFamilyMenuPrefs}
             onClose={() => setFamilyMenuPrefsOpen(false)}
@@ -2798,22 +2092,26 @@ const logWeight = useCallback(() => {
         </React.Suspense>
       )}
 
+      {allowCachedUiStateRestore && (
+        <React.Suspense fallback={null}>
+          <PlanIntroModal
+            currentUser={currentUser}
+            planError={planError}
+            open={planIntroOpen}
+            onClose={() => setPlanIntroOpen(false)}
+            onOpenPlan={() => setActiveTab('plan')}
+            onOpenNutrition={() => setActiveTab('nutrition')}
+          />
+        </React.Suspense>
+      )}
       <React.Suspense fallback={null}>
-        <PlanIntroModal
-          currentUser={currentUser}
-          planError={planError}
-          open={planIntroOpen}
-          onClose={() => setPlanIntroOpen(false)}
-          onOpenPlan={() => setActiveTab('plan')}
-          onOpenNutrition={() => setActiveTab('nutrition')}
-        />
-      </React.Suspense>
-      <React.Suspense fallback={null}>
-        {isLessonViewOpen && currentLesson && (
+        {allowCachedUiStateRestore && isLessonViewOpen && currentLesson && (
           <LessonViewModal
             currentLesson={currentLesson}
             isQuizActive={isQuizActive}
             selectedQuizOption={selectedQuizOption}
+            isSaving={isSavingLesson}
+            saveError={lessonSaveError}
             onClose={closeLessonView}
             setSelectedQuizOption={setSelectedQuizOption}
             handleMarkLessonRead={handleMarkLessonRead}

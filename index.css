@@ -1,6 +1,13 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "./tailwind.config.js";
+
+/* Preserve v3 focus outlines for existing outline-none controls in forced colors. */
+@layer utilities {
+  .outline-none {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+}
 
 /* Local Inter variable font (offline-first) */
 @font-face {
@@ -57,6 +64,11 @@ body { font-family: 'Inter', sans-serif; }
 }
 .text-slate-400, .text-slate-500, .text-slate-600 {
   color: var(--ff-muted) !important;
+}
+
+/* Keep active navigation labels readable on the light theme surface. */
+:root[data-ff-theme="light"] .ff-navigation .ff-navigation-active {
+  color: #4f46e5;
 }
 
 /* Inputs & placeholders */

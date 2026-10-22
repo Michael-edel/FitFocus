@@ -58,19 +58,14 @@ export default defineConfig(({ mode }) => {
 
       VitePWA({
         strategies: 'injectManifest',
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
+        injectRegister: false,
         srcDir: '.',
         filename: 'sw.ts',
         devOptions: { enabled: false },
         injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,svg,png,webmanifest,woff2}'],
         },
-        workbox: {
-          cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: true,
-        },
-
         manifest: {
           name: 'FitFocus',
           short_name: 'FitFocus',
@@ -105,8 +100,7 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/pdf/')) return 'pdf';
               if (id.includes('/ui/components/CameraCapture')) return 'camera';
               if (id.includes('/charts')) return 'charts';
-              if (id.includes('/geminiService')) return 'ai-core';
-              if (id.includes('/weeklyAutoEngine') || id.includes('/orchestrator')) return 'ai-reasoning';
+              if (id.includes('/geminiService') || id.includes('/weeklyAutoEngine') || id.includes('/orchestrator')) return 'ai';
               return undefined;
             }
 

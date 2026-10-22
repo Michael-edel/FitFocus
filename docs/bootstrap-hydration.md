@@ -1,0 +1,152 @@
+# Загрузка сессии и облачных данных FitFocus
+
+Сверено: 12.10.2026. Код компонента:
+[`dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf`](https://github.com/Michael-edel/FitFocus/commit/dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf),
+ветка `fix/durable-outbox`. Unit/типы/guards и целевые E2E прошли;
+полная локальная матрица выявила нестабильный profile-сценарий iPhone PWA.
+На `3550cc8` добавлено [исправление стабильности формы](profile-persistence.md#стабильность-формы-при-изменении-уведомления).
+Полная приёмка и причины Safari page errors при reload остаются открытыми.
+[CI `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617)
+прошёл с одним flaky; следующий [CI `57f956d`](https://github.com/Michael-edel/FitFocus/actions/runs/38170218508)
+прошёл без flaky. Оба предшествуют исправлению UI.
+[CI `45315d9`](https://github.com/Michael-edel/FitFocus/actions/runs/38172605267),
+включающий исправление `3550cc8`, прошёл: 846 unit в 178 файлах,
+152 browser passed / 9 skips, без flaky. Локальное падение Safari на reload
+сохранено в журнале и остаётся открытым; успешный CI не устанавливает его причину.
+Результат опубликованной ревизии не переносится на незавершённые локальные изменения.
+Общий порядок: [TASKS](../TASKS.md); опубликованное состояние:
+[статус проекта](project-status.md).
+
+## Зачем нужен этап
+
+Ответ, начатый до выхода или смены аккаунта в другой вкладке, не должен
+записывать облачный снимок или активировать прежний вход. Загрузка также
+не должна заменять локальную правку, ожидающую отправки. Для этого проверка
+сессии нужна и в HTTP, и в транзакции применения данных.
+
+## Что реализовано
+
+| Граница | Реализация компонента |
+|---|---|
+| Подтверждение чтения | [sessionRead.ts](https://github.com/Michael-edel/FitFocus/blob/dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf/storage/sessionRead.ts) проверяет `/api/me`, account, server session и capability; возвращает readGuard |
+| Постоянная граница сессии | [durableOutbox.ts](../storage/durableOutbox.ts) принимает сессию вместе с auth-fence одной транзакцией; проверяет fence и epoch при hydrate |
+| Ограниченный HTTP | [sessionTransport.ts](https://github.com/Michael-edel/FitFocus/blob/dac2de27d7697e3bb724eacd5e9fcf7b41d72cbf/storage/sessionTransport.ts) ограничивает время чтения тела и размер ответа; чтение не больше 1 MiB |
+| Серверный bootstrap | [bootstrap.ts](../functions/api/bootstrap.ts) проверяет привязку к сессии до доступа к данным; возвращает публичные поля user без сырого sid |
+| Вход | [authSession.ts](../authSession.ts) проверяет scope bootstrap и передаёт readGuard в загрузку; ошибка сессии видна пользователю |
+| Профиль | [profileState.ts](../storage/profileState.ts) проверяет владельца; облачный seed использует guard, epoch и fence |
+| State | [sessionHydration.ts](../sessionHydration.ts) проверяет protocol, prefix, версии и дубликаты; применяет 15 управляемых ключей через repository |
+| Активация интерфейса | [loginSession.ts](../features/auth/loginSession.ts) и [App.tsx](../App.tsx) передают guard и проверяют его перед применением результата входа |
+
+Повторный `/me` без допустимого proof останавливает вход, в том числе
+на пути без входящего readGuard. Ошибка сети, 408, 429 и 5xx сохраняют
+чтение собственного локального профиля; неподтверждённый облачный снимок
+при этом не применяется. Эти исходы проверяются раздельно.
+
+## HTTP-контракт
+
+`/api/me` объявляет `bootstrapSync: { protocol: 1, guard: 1 }` отдельно
+от `stateSync`. Для guarded-чтения клиент передаёт пару
+`X-FitFocus-State-Account` / `X-FitFocus-State-Session`.
+Успешный ответ должен подтвердить ту же пару и протокол endpoint:
+
+| Endpoint | Protocol | Guard | Дополнительная проверка |
+|---|---|---|---|
+| `/api/bootstrap` | `X-FitFocus-Bootstrap-Protocol: 1` | `X-FitFocus-Bootstrap-Guard: 1` | `body.user.sub` совпадает с account; профиль принадлежит ему и имеет допустимую версию |
+| `/api/state` | `X-FitFocus-State-Protocol: 2` | `X-FitFocus-State-Guard: 1` | Все items имеют допустимые key/value/exists/version; повторяющиеся key запрещены |
+
+Серверный bootstrap требует парный account/session proof через
+`requireScopedStateUser`; unscoped legacy-запрос получает 401 до чтения профиля,
+state и features. Старые bundles нужно обновить до rollout. Проверка заголовков
+не заменяет авторизацию cookie на сервере.
+Применение снимка дополнительно проверяет локальную сессию в IndexedDB.
+Подробности действующих state/profile-контрактов: [API_CONTRACTS](../API_CONTRACTS.md).
+
+## Порядок загрузки и защита данных
+
+1. До `/me` зафиксировать локальный auth-fence. Принять ответ только для
+   текущей попытки входа; guard содержит accountId, serverSessionId,
+   sessionEpoch и authFence из одной транзакции.
+2. Читать bootstrap с этим guard. Проверить HTTP scope и владельца профиля.
+   Создавать локальный снимок только с ещё действующим guard.
+3. До загрузки state запомнить локальные revisions и повторно проверить `/me`.
+   Ошибка наблюдения локального ключа не заменяется revision=0.
+4. Проверить весь state-ответ до применения. Pending, локальная правка,
+   legacy-intent, изменившаяся revision, epoch или fence запрещают замену
+   соответствующего значения.
+5. Перед активацией интерфейса снова проверить сессию. Поздний ответ аккаунта A
+   не должен изменять активную сессию аккаунта B.
+
+Повторное чтение уже принадлежащего аккаунту снимка с теми же value/exists
+и серверной версией не повышает локальную revision. Проверки guard, pending
+и ожидаемой revision выполняются до этого сравнения. Первое подтверждение
+отсутствия всё равно создаёт owner/meta, чтобы старая localStorage-копия
+не возвращалась. Новая серверная версия повышает revision даже при прежнем
+payload: независимый редактор со старой версией остаётся устаревшим.
+
+Временная ошибка транспорта может допускать чтение собственного локального
+профиля. Подтверждённый выход, отказ доступа и неподдерживаемый протокол
+должны останавливать вход. Эти исходы требуют разных тестов.
+
+## Что проверено локально
+
+Локальные результаты кода компонента:
+
+- 846 unit-тестов в 178 файлах прошли.
+- Три режима typecheck, admin/auth/API guards, схема из 21 миграции и
+  30 таблиц, privacy coverage 27 таблиц прошли.
+- Все четыре bootstrap-сценария и сценарий двух вкладок прошли по три
+  повторения на Chromium, Firefox и Android Chrome. В том прогоне очистка
+  истории выявила гонку повторного чтения в тесте; её исправили отдельно.
+- После исправления очистка истории прошла 15 повторений: пять на каждом
+  из Chromium, Firefox и Android Chrome, без retries.
+- Полная матрица: 144 passed / 1 failed / 9 skips, без retries. Все новые
+  bootstrap-сценарии и прежние восемь падений прошли. Тест конфликта профиля
+  на iPhone PWA не увидел операцию после Save; десять диагностических повторов
+  прошли; следующий прогон Safari/PWA (два workers) дал 18 passed / 2 failed.
+  Диагностика зафиксировала pointerdown в Save и pointerup/click в DIV
+  через 12 мс, без операции и PUT. Потеря клика воспроизведена; влияние
+  изменяющего высоту notice ещё нужно доказать регрессионным тестом.
+  Второе падение — console `/api/me due to access control checks` после reload;
+  причина не подтверждена. Оба случая остаются открытыми.
+  Исходные результаты сохранены [в журнале](stabilization-progress.md).
+
+Новые проверки находятся в [server bootstrap tests](../tests/bootstrap_session_guard.test.ts),
+[read guard tests](../tests/session_read_guard.test.ts),
+[auth-fence tests](../tests/hydration_auth_fence.test.ts),
+[bootstrap E2E](../e2e/bootstrap-session.spec.ts) и обновлённых
+[hydration tests](../tests/session_hydration_durable.test.ts).
+Они проверяют неверный scope, поздний ответ после смены аккаунта,
+отмену/ограничение тела и запрет применения снимка после изменения fence.
+
+Браузерные проверки используют Playwright и mock API. Они не подтверждают
+настоящий OAuth, staging или production. Текущие проверки не подменяются
+успешным CI базовой ревизии.
+
+## Приёмка компонента и оставшаяся работа
+
+- [x] Запретить активацию на пути без входящего readGuard, когда `/me`
+  успешно ответил, но вернул `user: null`, отказ доступа или отсутствие
+  необходимой capability; отсутствие guard теперь всегда останавливает этот путь.
+- [x] Добавить регрессии для отказов и допустимого чтения собственных данных
+  при ошибке сети или временной недоступности `/me`.
+- [x] Устранить ложное устаревание редактора другой вкладки при повторном
+  чтении идентичного снимка; сохранить конфликт при настоящем изменении версии.
+- [x] Проверять очищенную историю и статус операции по одному снимку IDB,
+  дождавшись pending/legacy-паузы; stale localStorage не возвращает историю.
+- [x] Стабилизировать высоту notice при удержанном profile Save (`3550cc8`):
+  семь проектов и 20 повторов Safari/PWA прошли; один жест создаёт одну операцию.
+- [ ] Разобрать Safari console errors при reload, сохранив проверку
+  неожиданных ошибок; повторный успех не считать исправлением.
+- [x] Проверить [CI `ece4e7a`](https://github.com/Michael-edel/FitFocus/actions/runs/38168916617):
+  success, 846 unit, 144 browser passed / 1 flaky / 9 skips. Flaky регистрации
+  iPhone Safari связан с сообщением `/api/profile due to access control checks`;
+  его причина ещё не подтверждена.
+- [ ] Получить полную приёмку без retries и проверить CI итогового HEAD.
+
+После этого снимка runtime legacy подключён: owner берётся из свежего `/api/me`,
+а Service Worker fence ждёт подтверждения всех same-origin вкладок. Остаются
+остальные family/AI callbacks и полный lifecycle. Old/new migration smoke с
+настоящим intent прошёл локально 7/7 и полный [CI на `00cd005`](https://github.com/Michael-edel/FitFocus/actions/runs/38324638965); JSON backup v3
+реализован в [`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+UI конфликтов, account-scoped очистка всех связанных stores и выпуск остаются
+открытыми; критерии — в [TASKS](../TASKS.md).

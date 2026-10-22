@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet, onRequestPost, onRequestPut } from '../functions/api/admin/invites';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminInvitesGetContext = Parameters<typeof onRequestGet>[0];
 type AdminInvitesPostContext = Parameters<typeof onRequestPost>[0];
 type AdminInvitesPutContext = Parameters<typeof onRequestPut>[0];
@@ -107,9 +108,12 @@ function makeDb(options: { inviteExists?: boolean } = {}) {
 
 async function getInvites(db: ReturnType<typeof makeDb>, query = '') {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   const request = new Request(`https://fitfocus.test/api/admin/invites${query}`, {
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
     },
   });
 
@@ -130,10 +134,13 @@ async function putInvite(db: ReturnType<typeof makeDb>, body: Record<string, unk
 
 async function putInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   const request = new Request('https://fitfocus.test/api/admin/invites', {
     method: 'PUT',
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       'Content-Type': 'application/json',
     },
     body,
@@ -156,10 +163,13 @@ async function postInvite(db: ReturnType<typeof makeDb>, body: Record<string, un
 
 async function postInviteRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   const request = new Request('https://fitfocus.test/api/admin/invites', {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       'Content-Type': 'application/json',
     },
     body,

@@ -55,3 +55,14 @@ export async function requireFamilyOwner(db: D1Database, userId: string): Promis
   if (family.owner_user_id !== userId) throw new Error("FORBIDDEN");
   return family;
 }
+
+/** Requires ownership of the caller-selected active family, never an arbitrary current membership. */
+export async function requireFamilyOwnerForTarget(
+  db: D1Database,
+  familyId: string,
+  userId: string,
+): Promise<FamilyAccess> {
+  const family = await requireFamilyMember(db, familyId, userId);
+  if (family.owner_user_id !== userId) throw new Error("FORBIDDEN");
+  return family;
+}

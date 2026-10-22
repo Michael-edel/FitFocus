@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/admin/user_roles';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminUserRolesContext = Parameters<typeof onRequestPost>[0];
 
 const SECRET = 'unit-test-secret';
@@ -114,11 +115,15 @@ async function postRole(db: ReturnType<typeof makeDb>, body: Record<string, unkn
 
 async function postRoleRaw(db: ReturnType<typeof makeDb>, body: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   const request = new Request('https://fitfocus.test/api/admin/user_roles', {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'admin-roles-test-01',
     },
     body,
   });
@@ -181,6 +186,7 @@ describe('admin user role management', () => {
     const res = await postRole(db, { user_id: 'user-1', role: 'support', action: 'add' });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('X-Request-ID')).toBe('admin-roles-test-01');
     expect(db.batches).toHaveLength(1);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT OR IGNORE INTO user_roles') && run.binds[1] === 'support')).toBe(true);
     expect(db.batches[0].some((run) => run.sql.includes('INSERT INTO admin_events'))).toBe(true);

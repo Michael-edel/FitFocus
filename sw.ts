@@ -3,6 +3,13 @@ import { clientsClaim } from 'workbox-core';
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import {
+  LEGACY_WRITER_FENCE_CHECK,
+  LEGACY_WRITER_FENCE_PROBE,
+  LEGACY_WRITER_FENCE_REPLY,
+  doesLegacyWriterFenceCoverCurrentClients,
+} from './storage/legacyWriterFence';
+import { prepareActivePushSession, requestPushJson } from './services/pushSession';
 
 const APP_TITLE = 'FitFocus';
 const APP_ICON = '/icon.svg';
@@ -18,6 +25,7 @@ declare global {
 }
 
 const sw = self as unknown as WorkboxServiceWorkerScope;
+const LEGACY_WRITER_PROBE_TIMEOUT_MS = 1_500;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -111,6 +119,66 @@ clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+// injectManifest requires its own activation handler. Do not skip waiting on install:
+// the client first asks the user to save edits in every open FitFocus tab.
+sw.addEventListener('message', (event) => {
+  if (!isRecord(event.data)) return;
+  if (event.data.type === 'SKIP_WAITING') {
+    event.waitUntil(sw.skipWaiting());
+    return;
+  }
+  if (event.data.type === LEGACY_WRITER_FENCE_CHECK) {
+    const replyPort = event.ports[0];
+    const challengeId = event.data.challengeId;
+    const requestedBuildId = event.data.buildId;
+    if (!replyPort || typeof challengeId !== 'string' || typeof requestedBuildId !== 'string') return;
+    event.waitUntil((async () => {
+      const source = event.source && 'id' in event.source ? event.source as Client : null;
+      const windows = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const clients = await Promise.all(windows.map(async (client) => {
+        const channel = new MessageChannel();
+        const evidence = await new Promise<{ id: string; buildId: string | null }>((resolve) => {
+          let settled = false;
+          const finish = (buildId: string | null) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            channel.port1.close();
+            channel.port2.close();
+            resolve({ id: client.id, buildId });
+          };
+          const timer = setTimeout(() => finish(null), LEGACY_WRITER_PROBE_TIMEOUT_MS);
+          channel.port1.onmessage = (messageEvent: MessageEvent<unknown>) => {
+            const reply = messageEvent.data;
+            if (!isRecord(reply) || reply.type !== LEGACY_WRITER_FENCE_REPLY
+              || reply.challengeId !== challengeId || typeof reply.buildId !== 'string') return finish(null);
+            finish(reply.buildId);
+          };
+          try {
+            client.postMessage({ type: LEGACY_WRITER_FENCE_PROBE, challengeId }, [channel.port2]);
+          } catch {
+            finish(null);
+          }
+        });
+        return evidence;
+      }));
+      const complete = doesLegacyWriterFenceCoverCurrentClients(
+        requestedBuildId,
+        __FITFOCUS_BUILD_ID__,
+        source?.id,
+        clients,
+      );
+      replyPort.postMessage({ type: LEGACY_WRITER_FENCE_REPLY, challengeId,
+        workerBuildId: __FITFOCUS_BUILD_ID__, complete, clients });
+      replyPort.close();
+    })().catch(() => {
+      replyPort.postMessage({ type: LEGACY_WRITER_FENCE_REPLY, challengeId,
+        workerBuildId: __FITFOCUS_BUILD_ID__, complete: false, clients: [] });
+      replyPort.close();
+    }));
+  }
+});
+
 registerRoute(
   ({ request }) => request.mode === 'navigate',
   new NetworkFirst({
@@ -190,9 +258,10 @@ sw.addEventListener('pushsubscriptionchange', (event) => {
     }
 
     if (subscription) {
-      await fetch(new URL('/api/push/subscribe', sw.location.origin), {
+      const session = await prepareActivePushSession();
+      if (!session) return;
+      await requestPushJson(session, '/api/push/subscribe', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: subscription.toJSON() }),
       });

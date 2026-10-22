@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost as deleteAccount } from '../functions/api/account/delete';
 import { onRequestPost as logoutAll } from '../functions/api/logout_all';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 
 type DeleteAccountContext = Parameters<typeof deleteAccount>[0];
 type LogoutAllContext = Parameters<typeof logoutAll>[0];
@@ -33,7 +34,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { lastAdmin?: boolean } = {}) {
+function makeDb(options: { lastAdmin?: boolean; softDeleteSuccess?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   return {
     runs,
@@ -75,7 +76,7 @@ function makeDb(options: { lastAdmin?: boolean } = {}) {
         async run() {
           runs.push({ sql, binds: this.binds });
           if (sql.includes('UPDATE users') && sql.includes('deletion_scheduled_at')) {
-            return { success: true, meta: { changes: 0 } };
+            return { success: true, meta: { changes: options.softDeleteSuccess ? 1 : 0 } };
           }
           return { success: true, meta: { changes: 1 } };
         },
@@ -103,7 +104,7 @@ describe('public account endpoint errors', () => {
       ...baseContext(),
       request: new Request('https://fitfocus.test/api/logout_all', {
         method: 'POST',
-        headers: { Cookie: 'ff_session=bad-token' },
+        headers: { Cookie: 'ff_session=bad-token', 'X-Request-ID': 'logout-all-test-01' },
       }),
       env: { DB: makeDb() as unknown as D1Database } as unknown as LogoutAllContext['env'],
     });
@@ -111,6 +112,7 @@ describe('public account endpoint errors', () => {
     const bodyText = await response.text();
 
     expect(response.status).toBe(401);
+    expect(response.headers.get('X-Request-ID')).toBe('logout-all-test-01');
     expect(bodyText).toContain('"error":"UNAUTH"');
     expect(bodyText).not.toContain('AUTH_CONFIG');
     expect(bodyText).not.toContain('DB_CONFIG');
@@ -121,7 +123,7 @@ describe('public account endpoint errors', () => {
       ...baseContext(),
       request: new Request('https://fitfocus.test/api/account/delete', {
         method: 'POST',
-        headers: { Cookie: 'ff_session=bad-token', 'Content-Type': 'application/json' },
+        headers: { Cookie: 'ff_session=bad-token', 'Content-Type': 'application/json', 'X-Request-ID': 'account-delete-test-01' },
         body: JSON.stringify({ confirm: 'DELETE' }),
       }),
       env: { DB: makeDb() as unknown as D1Database } as unknown as DeleteAccountContext['env'],
@@ -130,12 +132,13 @@ describe('public account endpoint errors', () => {
     const bodyText = await response.text();
 
     expect(response.status).toBe(401);
+    expect(response.headers.get('X-Request-ID')).toBe('account-delete-test-01');
     expect(bodyText).toContain('"error":"UNAUTH"');
     expect(bodyText).not.toContain('AUTH_CONFIG');
     expect(bodyText).not.toContain('DB_CONFIG');
   });
 
-  it('does not expose raw soft-delete failures from account delete', async () => {
+  it('rejects account deletion without session proof before touching account data', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
     const response = await deleteAccount({
@@ -143,6 +146,31 @@ describe('public account endpoint errors', () => {
       request: new Request('https://fitfocus.test/api/account/delete', {
         method: 'POST',
         headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as DeleteAccountContext['env'],
+    });
+
+    expect(response.status).toBe(401);
+    expect(db.runs.some(({ sql }) => sql.includes('deletion_scheduled_at'))).toBe(false);
+    await expect(response.json()).resolves.toMatchObject({ error: 'UNAUTH' });
+  });
+
+  it('does not expose raw soft-delete failures from account delete', async () => {
+    const db = makeDb();
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const session = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
+    const response = await deleteAccount({
+      ...baseContext(),
+      request: new Request('https://fitfocus.test/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-Request-ID': 'account-delete-test-01',
+          'X-FitFocus-State-Account': 'user-1',
+          'X-FitFocus-State-Session': session,
+        },
         body: JSON.stringify({ confirm: 'DELETE' }),
       }),
       env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as DeleteAccountContext['env'],
@@ -156,13 +184,48 @@ describe('public account endpoint errors', () => {
     expect(bodyText).not.toContain('последнего администратора');
   });
 
-  it('does not expose last-admin guard exception text from account delete', async () => {
-    const token = await signJwt({ sub: 'admin-1', sid: 'sid-1' });
+  it('returns scoped confirmation without expiring the shared cookie after account deletion', async () => {
+    const db = makeDb({ softDeleteSuccess: true });
+    const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+    const session = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
     const response = await deleteAccount({
       ...baseContext(),
       request: new Request('https://fitfocus.test/api/account/delete', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-FitFocus-State-Account': 'user-1',
+          'X-FitFocus-State-Session': session,
+        },
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as DeleteAccountContext['env'],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+    expect(response.headers.get('X-FitFocus-Account-Delete-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Account-Delete-Guard')).toBe('1');
+    expect(response.headers.get('X-FitFocus-State-Account')).toBe('user-1');
+    expect(response.headers.get('X-FitFocus-State-Session')).toBe(session);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, scheduled_days: 30 });
+  });
+
+  it('does not expose last-admin guard exception text from account delete', async () => {
+    const token = await signJwt({ sub: 'admin-1', sid: 'sid-1' });
+    const session = await stateSessionId({ sub: 'admin-1', sid: 'sid-1' });
+    const response = await deleteAccount({
+      ...baseContext(),
+      request: new Request('https://fitfocus.test/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-Request-ID': 'account-delete-test-01',
+          'X-FitFocus-State-Account': 'admin-1',
+          'X-FitFocus-State-Session': session,
+        },
         body: JSON.stringify({ confirm: 'DELETE' }),
       }),
       env: { AUTH_JWT_SECRET: SECRET, DB: makeDb({ lastAdmin: true }) as unknown as D1Database } as unknown as DeleteAccountContext['env'],
@@ -173,5 +236,29 @@ describe('public account endpoint errors', () => {
     expect(response.status).toBe(409);
     expect(bodyText).toContain('"error":"ACCOUNT_DELETE_BLOCKED"');
     expect(bodyText).not.toContain('последнего администратора');
+  });
+
+  it('rejects account deletion proof from another login before account side effects', async () => {
+    const db = makeDb();
+    const token = await signJwt({ sub: 'user-b', sid: 'sid-b' });
+    const staleSession = await stateSessionId({ sub: 'user-a', sid: 'sid-a' });
+    const response = await deleteAccount({
+      ...baseContext(),
+      request: new Request('https://fitfocus.test/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-FitFocus-State-Account': 'user-a',
+          'X-FitFocus-State-Session': staleSession,
+        },
+        body: JSON.stringify({ confirm: 'DELETE' }),
+      }),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database } as unknown as DeleteAccountContext['env'],
+    });
+
+    expect(response.status).toBe(401);
+    expect(db.runs.some(({ sql }) => sql.includes('deletion_scheduled_at'))).toBe(false);
+    expect(response.headers.get('X-FitFocus-Account-Delete-Protocol')).toBe('1');
   });
 });

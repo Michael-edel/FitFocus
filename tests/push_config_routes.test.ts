@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { onRequestGet as getPushStatus } from '../functions/api/push/status';
 import { onRequestPost as postPushSubscribe } from '../functions/api/push/subscribe';
 import { onRequestPost as postPushUnsubscribe } from '../functions/api/push/unsubscribe';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type PushStatusContext = Parameters<typeof getPushStatus>[0];
 type PushSubscribeContext = Parameters<typeof postPushSubscribe>[0];
 type PushUnsubscribeContext = Parameters<typeof postPushUnsubscribe>[0];
@@ -101,10 +102,17 @@ function makeDb(options?: {
   };
 }
 
-async function authedRequest(url: string, init: RequestInit = {}) {
+async function authedRequest(url: string, init: RequestInit = {}, includeScope = true) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
   const headers = new Headers(init.headers);
   headers.set('Cookie', `ff_session=${token}`);
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', 'push-route-test-01');
+  if (includeScope) {
+    if (!headers.has('X-FitFocus-State-Account')) headers.set('X-FitFocus-State-Account', 'user-1');
+    if (!headers.has('X-FitFocus-State-Session')) {
+      headers.set('X-FitFocus-State-Session', await stateSessionId({ sub: 'user-1', sid: 'sid-1' }));
+    }
+  }
   return new Request(url, { ...init, headers });
 }
 
@@ -122,6 +130,43 @@ function context(request: Request, db: ReturnType<typeof makeDb>, env: Record<st
 }
 
 describe('push runtime configuration routes', () => {
+  it('rejects unscoped status before reading push subscriptions', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/status', {}, false);
+
+    const response = await getPushStatus(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects unscoped subscribe before reading the body or writing', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{',
+    }, false);
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
+  it('rejects unscoped unsubscribe before reading the body or writing', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/unsubscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{',
+    }, false);
+
+    const response = await postPushUnsubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.allCalls).toHaveLength(0);
+    expect(db.runs).toHaveLength(0);
+  });
+
   it('returns configured status with the public VAPID key', async () => {
     const db = makeDb();
     const request = await authedRequest('https://fitfocus.test/api/push/status', {
@@ -135,6 +180,9 @@ describe('push runtime configuration routes', () => {
     }));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('push-route-test-01');
+    expect(response.headers.get('X-FitFocus-Push-Protocol')).toBe('1');
+    expect(response.headers.get('X-FitFocus-Push-Guard')).toBe('1');
     await expect(response.json()).resolves.toMatchObject({
       configured: true,
       vapid_public_key: 'public-key',
@@ -295,7 +343,7 @@ describe('push runtime configuration routes', () => {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       },
       body: JSON.stringify({
-        endpoint: 'https://push.example',
+        endpoint: 'https://fcm.googleapis.com/fcm/send/test-subscription',
         keys: { p256dh: 'k', auth: 'a' },
         browserLabel: 'Comet',
       }),
@@ -306,6 +354,42 @@ describe('push runtime configuration routes', () => {
     expect(response.status).toBe(200);
     const insertRun = db.runs.find((run) => run.sql.includes('INSERT INTO push_subscriptions'));
     expect(insertRun?.binds).toContain('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 FitFocusBrowserHint/Comet');
+  });
+
+  it('rejects a stale account scope before persisting a push subscription', async () => {
+    const db = makeDb();
+    const staleSession = await stateSessionId({ sub: 'user-2', sid: 'sid-2' });
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-FitFocus-State-Account': 'user-2',
+        'X-FitFocus-State-Session': staleSession,
+      },
+      body: JSON.stringify({ endpoint: 'https://fcm.googleapis.com/fcm/send/test-subscription', keys: { p256dh: 'k', auth: 'a' } }),
+    });
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO push_subscriptions'))).toBe(false);
+  });
+
+  it('rejects subscriptions that target a non-push host', async () => {
+    const db = makeDb();
+    const request = await authedRequest('https://fitfocus.test/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: 'https://127.0.0.1/internal',
+        keys: { p256dh: 'k', auth: 'a' },
+      }),
+    });
+
+    const response = await postPushSubscribe(context(request, db));
+
+    expect(response.status).toBe(400);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO push_subscriptions'))).toBe(false);
   });
 
   it('rejects oversized unsubscribe JSON before deleting', async () => {
@@ -337,5 +421,24 @@ describe('push runtime configuration routes', () => {
     await expect(response.json()).resolves.toMatchObject({ ok: true, removed: 1 });
     const deleteRun = db.runs.find((run) => run.sql.includes('DELETE FROM push_subscriptions'));
     expect(deleteRun?.binds).toEqual(['user-1', 'sub-1']);
+  });
+
+  it('rejects a stale session scope before removing a push subscription', async () => {
+    const db = makeDb();
+    const staleSession = await stateSessionId({ sub: 'user-1', sid: 'sid-stale' });
+    const request = await authedRequest('https://fitfocus.test/api/push/unsubscribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': staleSession,
+      },
+      body: JSON.stringify({ subscriptionId: 'sub-1' }),
+    });
+
+    const response = await postPushUnsubscribe(context(request, db));
+
+    expect(response.status).toBe(401);
+    expect(db.runs.some((run) => run.sql.includes('DELETE FROM push_subscriptions'))).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost as postAdminPushSend } from '../functions/api/admin/push/send';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminPushSendContext = Parameters<typeof postAdminPushSend>[0];
 
 const SECRET = 'unit-test-secret';
@@ -104,11 +105,15 @@ function makeDb(rows: Row[] = []) {
 
 async function adminRequest(body: Record<string, unknown>) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'admin@example.com' });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
   return new Request('https://fitfocus.test/api/admin/push/send', {
     method: 'POST',
     headers: {
       Cookie: `ff_session=${token}`,
+      'X-FitFocus-State-Account': 'admin-1',
+      'X-FitFocus-State-Session': stateSession,
       'Content-Type': 'application/json',
+      'X-Request-ID': 'admin-push-test-01',
     },
     body: JSON.stringify(body),
   });
@@ -223,6 +228,7 @@ describe('/api/admin/push/send', () => {
     const response = await postAdminPushSend(context(request, db));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('admin-push-test-01');
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       dry_run: true,

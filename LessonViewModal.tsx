@@ -7,24 +7,28 @@ type LessonViewModalProps = {
   currentLesson: CourseLesson | null;
   isQuizActive: boolean;
   selectedQuizOption: LessonQuizOption | null;
+  isSaving: boolean;
+  saveError: string | null;
   onClose: () => void;
   setSelectedQuizOption: React.Dispatch<React.SetStateAction<LessonQuizOption | null>>;
-  handleMarkLessonRead: () => void;
+  handleMarkLessonRead: () => void | Promise<void>;
   handleStartLessonQuiz: () => void;
-  handleQuizSubmit: () => void;
+  handleQuizSubmit: () => void | Promise<void>;
 };
 
 export default function LessonViewModal({
   currentLesson,
   isQuizActive,
   selectedQuizOption,
+  isSaving,
+  saveError,
   onClose,
   setSelectedQuizOption,
   handleMarkLessonRead,
   handleStartLessonQuiz,
   handleQuizSubmit,
 }: LessonViewModalProps) {
-  const dismissGestures = useModalDismissGestures(onClose);
+  const dismissGestures = useModalDismissGestures(() => { if (!isSaving) onClose(); });
   if (!currentLesson) return null;
 
   return (
@@ -33,6 +37,7 @@ export default function LessonViewModal({
         <div className="px-5 md:px-8 py-4 border-b border-white/10 flex items-center justify-between gap-4 bg-slate-950/95">
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="flex items-center gap-3 text-slate-300 font-black text-xs uppercase tracking-widest hover:text-indigo-300 transition-colors bg-slate-900 px-5 py-3 rounded-full border border-slate-800"
           >
             <ChevronLeft size={20} /> Назад
@@ -43,6 +48,7 @@ export default function LessonViewModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 md:px-10 py-8 md:py-10">
+          {saveError ? <p role="alert" className="mb-8 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-4 text-left font-bold text-rose-200">{saveError}</p> : null}
           {!isQuizActive ? (
             <div className="space-y-10">
               <header className="space-y-4 text-left">
@@ -67,13 +73,15 @@ export default function LessonViewModal({
 
               <button
                 onClick={handleMarkLessonRead}
+                disabled={isSaving}
                 className="w-full py-5 md:py-6 bg-slate-100 text-slate-950 rounded-[2.5rem] font-black text-lg shadow-2xl shadow-black/50 hover:bg-white transition-all"
               >
-                Прочитано
+                {isSaving ? 'Сохраняем…' : 'Прочитано'}
               </button>
               {currentLesson.quiz ? (
                 <button
                   onClick={handleStartLessonQuiz}
+                  disabled={isSaving}
                   className="w-full py-5 md:py-6 bg-indigo-600/15 text-indigo-200 rounded-[2.5rem] font-black text-lg border border-indigo-500/20 hover:border-indigo-500/35 transition-all"
                 >
                   Пройти тест
@@ -91,6 +99,7 @@ export default function LessonViewModal({
                   <button
                     key={o.id}
                     onClick={() => setSelectedQuizOption(o)}
+                    disabled={isSaving}
                     className={`w-full p-5 md:p-6 rounded-[2rem] border-4 transition-all text-lg md:text-xl font-black ${selectedQuizOption?.id === o.id ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300' : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-400'}`}
                   >
                     {o.text}
@@ -99,10 +108,10 @@ export default function LessonViewModal({
               </div>
               <button
                 onClick={handleQuizSubmit}
-                disabled={!selectedQuizOption}
+                disabled={!selectedQuizOption || isSaving}
                 className="w-full py-5 md:py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black text-lg disabled:opacity-20 transition-all shadow-xl shadow-indigo-900/40"
               >
-                Завершить урок
+                {isSaving ? 'Сохраняем…' : 'Завершить урок'}
               </button>
             </div>
           )}

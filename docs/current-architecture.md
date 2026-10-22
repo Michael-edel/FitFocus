@@ -1,0 +1,161 @@
+# Текущая архитектура FitFocus
+
+Снимок: 09.10.2026, `810adb1` из PR #90. [Область и навигация](README.md).
+Ниже различаются исходная реализация и последующие изменения в PR #93/#94;
+оставшиеся задачи вынесены в [TASKS](../TASKS.md).
+
+Дополнение 12.10.2026, `dac2de2`: [bootstrap/state-hydration](bootstrap-hydration.md)
+используют общий ограниченный transport, свежий `/me` proof, парные scope
+headers и атомарный auth-fence в IDB при применении снимков. Этот компонент
+расширяет гарантии исходного снимка; не подтверждает весь lifecycle,
+runtime legacy или выпуск. Историческое описание ниже сохраняет свою ревизию.
+
+Дополнение 13.10.2026: runtime legacy-импорт и all-client Service Worker fence
+проверены настоящим old/new smoke на одном origin; CI точного smoke SHA `00cd005`
+успешен. Backup v3 всех долговечных IDB stores опубликован в
+[`2aff6c3`](https://github.com/Michael-edel/FitFocus/commit/2aff6c33d638052d9a084902895df822efb269e5).
+Открытые критерии — в [статусе проекта](project-status.md) и [TASKS](../TASKS.md).
+
+## Клиент
+
+React 19, TypeScript, Vite, Tailwind CSS и PWA. Исходники находятся в корне
+и тематических каталогах; каталога `src/` как обязательной границы нет.
+`App.tsx` и `AppWorkspace.tsx` собирают интерфейс и сценарии.
+`features/` уже содержит hooks/API-адаптеры для profile, diary, AI, family,
+settings, recipes и других направлений. `domain/` содержит чистые расчёты;
+`services/` — обращения к сервисам и общие помощники.
+
+Группы props в `AppWorkspace` местами имеют `Record<string, unknown>`.
+Строгая проверка domain/storage выделена в отдельные tsconfig; наличие этих
+проверок не означает strict-режим всего приложения.
+
+## Хранение и синхронизация исходного снимка
+
+```text
+UI / feature hooks
+  → UserStateRepository → IndexedDB values / localStorage
+  → hybrid.ts → Map в памяти + legacy localStorage-очередь → /api/state
+
+Profile hooks → profileSync.ts → отдельная Promise-цепочка → /api/profile
+Вход / восстановление → sessionHydration.ts → облачный снимок → локальные данные
+```
+
+`storage/userStateRepository.ts` даёт типизированный доступ к пользовательским
+снимкам. `storage/indexedUserState.ts` хранит объёмные значения в IDB.
+`storage/hybrid.ts` обслуживает очередь state. Локальная запись и её outbox
+сейчас не составляют одну IDB-транзакцию. Профиль использует отдельный путь;
+утверждать, что все записи уже проходят одну durable queue, нельзя.
+
+Подробнее: [данные](data-model.md), [синхронизация](sync-model.md).
+
+Последующие изменения в PR #93: сначала [шесть ключей repository](runtime-state.md)
+и [HTTP sender](state-sender.md), затем [15 управляемых state-ключей](owned-state-writers.md).
+Они используют атомарную value/outbox-транзакцию. Настройки читаются из IDB;
+managed hydration проверяет протокол, локальную ревизию и очередь.
+Map sender удалён из текущей сборки. На дату этого снимка следующий этап
+[подключает редактор профиля](profile-persistence.md) к общей IDB-outbox
+и sender с явным HTTP dispatch. Следующая [регистрация](registration-persistence.md)
+сохраняет профиль до AI-запроса в эту же outbox без прямого profile PUT;
+runtime legacy-импорт, барьер старых сборок и общая приёмка ещё не завершены.
+
+## Сервер
+
+Cloudflare Pages Functions в `functions/api/`, D1 с binding `DB`.
+`wrangler.toml` описывает существующий binding и `migrations/`;
+отдельную staging-БД этот файл сам по себе не подтверждает.
+Текущий branch-preview smoke и его ограничения описаны в
+[приёмке origin/staging](staging-origin.md); он не доказывает отдельную D1.
+
+Routes вызывают уже выделенные модули `functions/api/_lib/`: profile/state,
+семья и покупки, поддержка, push, billing, OAuth и wearable-сценарии.
+`auth.ts`, access и RBAC проверяют пользователя и доступ; наблюдаемость
+использует `X-Request-ID` и структурированные события в затронутых маршрутах.
+
+Профиль хранится в `user_profiles`; строковые state-снимки — в `user_kv`.
+CAS сравнивает версии. PUT state уже использует условную пакетную запись
+одним SQL с `RETURNING`; DELETE физически удаляет строку и её версию.
+Форматы ответов: [API_CONTRACTS](../API_CONTRACTS.md).
+
+В последующем серверном компоненте `fix/state-generations` физический state
+DELETE заменён на очищенный tombstone с возрастающей версией; добавлена
+миграция 0019 и opt-in чтение поколений. [Контракт и выпуск P0.7](state-generations.md).
+Компонент объединён с клиентской веткой коммитом `93f90c0`. Managed hydration
+читает protocol 2; sender шести ключей проверяет ack и server session.
+Остальные пути ещё ожидаются. Это не подтверждение выпуска.
+
+## Внешние сервисы и выпуск
+
+Есть AI, Google/Apple, Stripe, web push, Huawei Health и отдельный iOS bridge.
+Push вызывает общий `fetchWithTimeout` из `external_fetch.ts`;
+AbortController находится в помощнике. Статическая API-проверка ещё ожидает
+старую реализацию внутри `push.ts` — это P0.1.
+
+PWA настроена на `autoUpdate` и `skipWaiting`. Это не гарантирует обновления
+JS уже открытой вкладки и закрытия её IDB-соединения.
+В исходном снимке `index.tsx` перенаправлял неканонические `*.pages.dev` на
+основной host. Последующий компонент поверх `aefc463` удаляет этот redirect;
+[текущее поведение и отдельная приёмка staging](staging-origin.md).
+
+## Граница текущих гарантий
+
+Ещё не обеспечены общая атомарность данных и очереди, безопасное сохранение
+409-конфликтов, запись во время auth-паузы, защита всех late responses,
+владение очередью аккаунтом и непрерывная версия после delete/recreate.
+Набор unit/E2E не заменяет отдельной проверки этих сценариев и реальных сервисов.
+
+Источники: [дерево проверенной ревизии](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b),
+[storage](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b/storage),
+[серверные модули](https://github.com/Michael-edel/FitFocus/tree/810adb11b01447114de9f240c6e2d520f747470b/functions/api/_lib).
+
+
+## Последующий компонент: личные покупки 4736ff5
+
+Меню и ингредиенты хранятся в profile и доставляются существующей IDB-outbox.
+Принятый сервером profile CAS атомарно обновляет personal_menu_projections
+через SQL triggers. Личное чтение и CSV используют проекцию, пустая генерация
+не поднимает старые данные; отдельный личный items POST отклоняется.
+На этой ревизии семейный путь ещё оставался открытым; семейный CAS
+реализован последующим компонентом `405238b`, описанным ниже.
+[Контракт и приёмка](personal-menu-projection.md), [ADR-007](adr/ADR-007-personal-menu-projection.md).
+
+## Семейные сессии 9c44c21
+
+`useFamilyCloud` получает login guard из hydration, обновляет proof перед
+каждым HTTP и сохраняет принадлежность React-state/setters. `familySession`
+использует bounded transport; `FamilyActionScope` отменяет прежнюю попытку
+того же действия и все попытки при уходе страницы. Сервер проверяет scope
+до family/shopping effects. [Контракт и границы](family-session.md).
+На `9c44c21` отдельный AI-путь и постоянная доставка меню ещё оставались открытыми.
+
+## Семейное меню и обновление PWA
+
+В `405238b` меню, порции и покупки семьи сохраняются одним family/week CAS;
+AI-preview становится намерением `familyMenu` в существующей IDB-outbox.
+IDB v3 и SQL-барьеры миграции 0021 закрывают описанные в
+[контракте](family-menu-state.md) несовместимые старые пути записи.
+Это не завершает runtime legacy-импорт, реальный lifecycle или выпуск.
+
+Компонент `8d32f12` переводит custom SW на явное обновление:
+`waiting` сохраняется до нажатия, уведомление просит сохранить все вкладки,
+`SKIP_WAITING` активирует worker. [Контракт PWA и границы](pwa-updates.md).
+
+В `574de76` регистрация SW отслеживает реальный controller: первое управление
+не перезагружает форму, замена controller перезагружает вкладку один раз.
+Это покрывает и вкладку, впервые установившую PWA; отдельная HTML-регистрация
+отключена. CI этой ревизии прошёл. Подготовка полного сохранённого
+[артефакта отката](release-artifacts.md) остаётся рабочим компонентом:
+целостность архива проверяется отдельно от совместимости и staging.
+
+В `98d4910` удалён безусловный GIS-loader из HTML: клиент уже переходит
+на серверный OAuth start и не использует Google SDK. При загрузке текущего
+клиента запрос к Google не требуется. Локальные native HTTP/real-SW проверки
+auth-shell и forward update прошли по 7/7; реальный OAuth проверяется отдельно.
+Архив `574de76` ещё содержит SDK, поэтому его два полных прогона 26/28
+не считаются приёмкой отката. Новый компонент закрепляет `98d4910`;
+архив собран, локально прошли 28/28 fresh-install/rollback/forward на семи
+конфигурациях без retries. HTTP/D1-переход `bd763ec` → архив `98d4910`
+прошёл 23 запроса; server functions/migrations этих SHA одинаковы.
+CI `5b90249` прошёл HTTP/D1-проверку и сохранил архив; digest и inventory
+скачанного архива проверены. Flaky WebKit fresh install и staging открыты.
+Детали и актуальный CI —
+в [статусе](project-status.md) и [контракте артефакта](release-artifacts.md).

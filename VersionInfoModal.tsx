@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { APP_VERSION_UI_LABEL, BUILD_SHORT_LABEL, versioningLayers, versioningRules } from './versioning';
+import { APP_VERSION_UI_LABEL, BUILD_SHORT_LABEL, isMainBuildBranch, versioningLayers, versioningRules } from './versioning';
 import { formatReleaseTitle, releaseNotes } from './releaseNotes';
+import { BUILD_SOURCE } from './build-info.generated';
 
 type VersionInfoModalProps = {
   open: boolean;
@@ -9,6 +10,7 @@ type VersionInfoModalProps = {
 };
 
 export default function VersionInfoModal({ open, onClose }: VersionInfoModalProps) {
+  const isMainBuild = isMainBuildBranch(BUILD_SOURCE.branch);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const touchLastX = useRef<number | null>(null);
@@ -90,7 +92,9 @@ export default function VersionInfoModal({ open, onClose }: VersionInfoModalProp
                   {BUILD_SHORT_LABEL}
                 </span>
               </div>
-               <p className="mt-2 text-sm font-semibold text-slate-400">Релиз продукта меняется вручную, а сборка main обновляется автоматически на каждый пуш. Ниже отдельно показаны релиз, сборка, API, данные и миграция БД — так проще понять, что изменилось и где возможен конфликт.</p>
+               <p className="mt-2 text-sm font-semibold text-slate-400">{isMainBuild
+                 ? 'Релиз продукта меняется вручную, а сборка main обновляется автоматически на каждый пуш.'
+                 : `Релиз продукта меняется вручную, а preview-сборка ветки ${BUILD_SOURCE.branch} определяется по SHA.`} Ниже отдельно показаны релиз, сборка, API, данные и миграция БД — так проще понять, что изменилось и где возможен конфликт.</p>
             </div>
             <button
               type="button"

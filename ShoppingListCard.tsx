@@ -1,7 +1,12 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import clsx from "clsx";
 import { groupShoppingItemsByDepartment } from "./shoppingDepartments";
 import { isRecord, parseJson } from "./safeJson";
+import { requestFamilyJson } from './services/familySession';
+import { assertReadSession } from './storage/sessionRead';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { buildPersonalShoppingCsv } from './services/shoppingExport';
+import { runShoppingCheckInOrder } from './services/shoppingCheckOrder';
 
 type ShoppingItem = {
   name: string;
@@ -18,6 +23,10 @@ type ShoppingListPayloadItem = {
   display_qty?: unknown;
   displayQty?: unknown;
 };
+
+type ShoppingItemsSnapshot = { scopeKey: string; items: ShoppingItem[] | null };
+type FallbackCheckedSnapshot = { storageKey: string; checked: Record<string, boolean> };
+const EMPTY_FALLBACK_CHECKED: Record<string, boolean> = {};
 
 function formatShoppingQty(grams: number) {
   const rounded = Math.max(0, Math.round(Number(grams || 0)));
@@ -58,70 +67,143 @@ export default function ShoppingListCard({
   title = "Список покупок",
   fallbackList,
   userId,
+  allowCachedUiStateRestore = true,
+  loginGuard,
+  isCurrentSession,
 }: {
   weekStart: string;
   title?: string;
   fallbackList?: string[];
   userId?: string | null;
+  allowCachedUiStateRestore?: boolean;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
 }) {
-  const [items, setItems] = useState<ShoppingItem[] | null>(null);
+  const [itemsSnapshot, setItemsSnapshot] = useState<ShoppingItemsSnapshot | null>(null);
   const [onlyUnchecked, setOnlyUnchecked] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [fallbackChecked, setFallbackChecked] = useState<Record<string, boolean>>({});
+  const [fallbackCheckedSnapshot, setFallbackCheckedSnapshot] = useState<FallbackCheckedSnapshot | null>(null);
+  const [pageGeneration, setPageGeneration] = useState(0);
+  const [csvExporting, setCsvExporting] = useState(false);
+  const [csvExportError, setCsvExportError] = useState<string | null>(null);
+  const activeControllersRef = useRef(new Set<AbortController>());
+  const scopeKey = userId && loginGuard?.accountId === userId && isCurrentSession()
+    ? JSON.stringify([loginGuard.accountId, loginGuard.serverSessionId, loginGuard.sessionEpoch, loginGuard.authFence, weekStart])
+    : null;
+  const scopeKeyRef = useRef(scopeKey);
+  scopeKeyRef.current = scopeKey;
+  const mountedRef = useRef(true);
+  const items = itemsSnapshot?.scopeKey === scopeKey ? itemsSnapshot.items : null;
+  const fallbackStorageKey = userId ? `fitfocus_data_${userId}_shopping_fallback_${weekStart}` : null;
+  const fallbackChecked = allowCachedUiStateRestore && fallbackStorageKey && fallbackCheckedSnapshot?.storageKey === fallbackStorageKey
+    ? fallbackCheckedSnapshot.checked
+    : EMPTY_FALLBACK_CHECKED;
+
+  const requestScoped = useCallback(async (controller: AbortController, url: string, init: RequestInit) => {
+    if (!loginGuard || !userId || loginGuard.accountId !== userId || !isCurrentSession()) {
+      throw new Error('SHOPPING_SESSION_UNAVAILABLE');
+    }
+    activeControllersRef.current.add(controller);
+    try {
+      return await requestFamilyJson({ guard: loginGuard, controller, isCurrentSession }, url, init);
+    } finally {
+      activeControllersRef.current.delete(controller);
+    }
+  }, [isCurrentSession, loginGuard, userId]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const controller of activeControllersRef.current) controller.abort();
+      activeControllersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    for (const controller of activeControllersRef.current) controller.abort();
+    activeControllersRef.current.clear();
+  }, [scopeKey]);
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setPageGeneration((generation) => generation + 1);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
 
   useEffect(() => {
     try {
-      if (!userId) {
-        setFallbackChecked({});
+      if (!allowCachedUiStateRestore || !fallbackStorageKey) {
+        setFallbackCheckedSnapshot(null);
         return;
       }
-      const scopedKey = `fitfocus_data_${userId}_shopping_fallback_${weekStart}`;
-      const raw = localStorage.getItem(scopedKey);
+      const raw = localStorage.getItem(fallbackStorageKey);
       const parsed = raw ? parseJson(raw) : null;
-      setFallbackChecked(
-        isRecord(parsed) && Object.values(parsed).every((value) => typeof value === "boolean")
-          ? parsed
-          : {},
-      );
+      const checked = isRecord(parsed) && Object.values(parsed).every((value) => typeof value === "boolean")
+        ? parsed as Record<string, boolean>
+        : {};
+      setFallbackCheckedSnapshot({ storageKey: fallbackStorageKey, checked });
     } catch {
-      setFallbackChecked({});
+      if (fallbackStorageKey) setFallbackCheckedSnapshot({ storageKey: fallbackStorageKey, checked: {} });
     }
-  }, [userId, weekStart]);
+  }, [allowCachedUiStateRestore, fallbackStorageKey]);
 
   useEffect(() => {
     try {
-      if (!userId) return;
-      const scopedKey = `fitfocus_data_${userId}_shopping_fallback_${weekStart}`;
-      localStorage.setItem(scopedKey, JSON.stringify(fallbackChecked));
+      if (!allowCachedUiStateRestore || !fallbackStorageKey || fallbackCheckedSnapshot?.storageKey !== fallbackStorageKey) return;
+      localStorage.setItem(fallbackStorageKey, JSON.stringify(fallbackCheckedSnapshot.checked));
     } catch {}
-  }, [userId, weekStart, fallbackChecked]);
-
-  const load = useCallback(async () => {
-    if (!weekStart) return;
-    const res = await fetch(`/api/shopping/list?week=${encodeURIComponent(weekStart)}`, { credentials: "include" });
-    if (!res.ok) throw new Error(`shopping_list_http_${res.status}`);
-    const payload: unknown = await res.json().catch(() => null);
-    const data = isRecord(payload) ? payload : {};
-    const normalized = (Array.isArray(data.items) ? data.items : [])
-      .map(normalizeShoppingItem)
-      .filter((item): item is ShoppingItem => item !== null);
-    setItems(normalized);
-  }, [weekStart]);
+  }, [allowCachedUiStateRestore, fallbackCheckedSnapshot, fallbackStorageKey]);
 
   useEffect(() => {
+    if (!scopeKey || !loginGuard || !weekStart) return;
+    const controller = new AbortController();
     let alive = true;
     (async () => {
       try {
-        await load();
+        const { response, body } = await requestScoped(controller,
+          `/api/shopping/list?week=${encodeURIComponent(weekStart)}`, { credentials: 'include' });
+        if (!response.ok) throw new Error(`shopping_list_http_${response.status}`);
+        if (!isRecord(body) || body.week_start !== weekStart || !Array.isArray(body.items)) {
+          throw new Error('shopping_list_response_scope_invalid');
+        }
+        const normalized = body.items
+          .map(normalizeShoppingItem)
+          .filter((item): item is ShoppingItem => item !== null);
+        await assertReadSession(loginGuard, { isCurrentSession, signal: controller.signal });
+        if (!alive || !isCurrentSession()) return;
+        setItemsSnapshot({ scopeKey, items: normalized });
       } catch {
-        if (!alive) return;
-        setItems(null);
+        if (!alive || controller.signal.aborted) return;
+        try {
+          await assertReadSession(loginGuard, { isCurrentSession, signal: controller.signal });
+        } catch {
+          return;
+        }
+        if (!isCurrentSession()) return;
+        setItemsSnapshot({ scopeKey, items: null });
       }
     })();
     return () => {
       alive = false;
+      controller.abort();
     };
-  }, [load]);
+  }, [isCurrentSession, loginGuard, pageGeneration, requestScoped, scopeKey, weekStart]);
+
+  const updateFallbackChecked = useCallback((
+    updater: React.SetStateAction<Record<string, boolean>>,
+  ) => {
+    if (!allowCachedUiStateRestore || !fallbackStorageKey) return;
+    setFallbackCheckedSnapshot((previous) => {
+      const current = previous?.storageKey === fallbackStorageKey
+        ? previous.checked
+        : EMPTY_FALLBACK_CHECKED;
+      const checked = typeof updater === 'function' ? updater(current) : updater;
+      return { storageKey: fallbackStorageKey, checked };
+    });
+  }, [allowCachedUiStateRestore, fallbackStorageKey]);
 
   const groups = useMemo(
     () => groupShoppingItemsByDepartment(items || [], { onlyUnchecked }),
@@ -130,25 +212,46 @@ export default function ShoppingListCard({
 
   const toggleChecked = useCallback(
     async (name: string, checked: boolean) => {
-      // optimistic
-      setItems((prev) =>
-        (prev || []).map((it) => (it.name === name ? { ...it, checked } : it))
-      );
+      const requestScopeKey = scopeKey;
+      const requestGuard = loginGuard;
+      const currentSession = isCurrentSession;
+      if (!requestScopeKey || !requestGuard || requestGuard.accountId !== userId || !currentSession()) return;
+      const updateItem = (nextChecked: boolean, onlyIfCurrentValue?: boolean) => {
+        setItemsSnapshot((previous) => {
+          if (previous?.scopeKey !== requestScopeKey || !previous.items) return previous;
+          return {
+            ...previous,
+            items: previous.items.map((item) => item.name === name
+              && (onlyIfCurrentValue === undefined || item.checked === onlyIfCurrentValue)
+              ? { ...item, checked: nextChecked }
+              : item),
+          };
+        });
+      };
+      updateItem(checked);
+      const controller = new AbortController();
       try {
-        await fetch("/api/shopping/check", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ week_start: weekStart, ingredient_name: name, checked }),
+        await runShoppingCheckInOrder({ accountId: requestGuard.accountId, familyId: null, weekStart, ingredientName: name }, async () => {
+          if (!mountedRef.current || controller.signal.aborted || scopeKeyRef.current !== requestScopeKey || !currentSession()) return;
+          const { response } = await requestScoped(controller, "/api/shopping/check", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ week_start: weekStart, ingredient_name: name, checked }),
+          });
+          if (!response.ok) throw new Error(`shopping_check_http_${response.status}`);
         });
       } catch {
-        // rollback on failure
-        setItems((prev) =>
-          (prev || []).map((it) => (it.name === name ? { ...it, checked: !checked } : it))
-        );
+        if (!mountedRef.current || controller.signal.aborted || scopeKeyRef.current !== requestScopeKey || !currentSession()) return;
+        try {
+          await assertReadSession(requestGuard, { isCurrentSession: currentSession, signal: controller.signal });
+        } catch {
+          return;
+        }
+        updateItem(!checked, checked);
       }
     },
-    [weekStart]
+    [isCurrentSession, loginGuard, requestScoped, scopeKey, userId, weekStart]
   );
 
   const copyText = useCallback(async () => {
@@ -165,6 +268,33 @@ export default function ShoppingListCard({
       // ignore
     }
   }, [groups, fallbackList]);
+
+  const exportCsv = useCallback(async () => {
+    const capturedGuard = loginGuard;
+    const capturedItems = items;
+    const capturedSession = isCurrentSession;
+    if (!scopeKey || !capturedGuard || capturedGuard.accountId !== userId || !capturedItems || !capturedSession()) return;
+    setCsvExporting(true);
+    setCsvExportError(null);
+    try {
+      await assertReadSession(capturedGuard, { isCurrentSession: capturedSession });
+      const csv = buildPersonalShoppingCsv(capturedItems);
+      await assertReadSession(capturedGuard, { isCurrentSession: capturedSession });
+      const objectUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `shopping_${weekStart}.csv`;
+      link.hidden = true;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch {
+      if (capturedSession()) setCsvExportError('Сессия изменилась. Обновите список и повторите экспорт.');
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [isCurrentSession, items, loginGuard, scopeKey, userId, weekStart]);
 
   const fallbackParsed = useMemo(() => (fallbackList || []).map((row) => {
     const parts = String(row || '').split('—');
@@ -203,14 +333,18 @@ export default function ShoppingListCard({
             >
               Скопировать
             </button>
-            <a
-              href={`/api/shopping/export?week=${encodeURIComponent(weekStart)}`}
+            <button
+              type="button"
+              onClick={() => void exportCsv()}
+              disabled={csvExporting || !scopeKey}
               className="px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-200 font-black text-xs hover:bg-slate-900/70"
             >
-              CSV
-            </a>
+              {csvExporting ? 'Подготовка…' : 'CSV'}
+            </button>
           </div>
         </div>
+
+        {csvExportError && <p role="status" className="text-xs text-amber-300">{csvExportError}</p>}
 
         {groups.map((g) => {
           const isCollapsed = Boolean(collapsed[g.department]);
@@ -309,7 +443,7 @@ export default function ShoppingListCard({
                             type="checkbox"
                             className="accent-slate-200"
                             checked={it.checked}
-                            onChange={(e) => setFallbackChecked((prev) => ({ ...prev, [it.name]: e.target.checked }))}
+                            onChange={(e) => updateFallbackChecked((prev) => ({ ...prev, [it.name]: e.target.checked }))}
                           />
                           <span>{it.name}</span>
                         </span>

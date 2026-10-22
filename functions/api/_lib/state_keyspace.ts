@@ -14,6 +14,7 @@ const BLOCKED_USER_STATE_SUFFIXES = [
 
 function isBlockedUserStateKey(userId: string, key: string): boolean {
   const userPrefix = `fitfocus_data_${userId}_`;
+  if (key.startsWith(`${userPrefix}family_menu:`)) return true;
   return key.startsWith(userPrefix) && BLOCKED_USER_STATE_SUFFIXES.some((suffix) => key.endsWith(suffix));
 }
 

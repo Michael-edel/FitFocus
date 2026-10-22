@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestGet as getAdminEvents } from '../functions/api/admin/admin_events';
 import { onRequestGet as getAiLogs } from '../functions/api/admin/ai_logs';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type AdminEventsContext = Parameters<typeof getAdminEvents>[0];
 type AiLogsContext = Parameters<typeof getAiLogs>[0];
 
@@ -77,7 +78,13 @@ function makeDb() {
 
 async function adminRequest(url: string) {
   const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin', email: 'a@example.com' });
-  return new Request(url, { headers: { Cookie: `ff_session=${token}` } });
+  const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
+  return new Request(url, { headers: {
+    Cookie: `ff_session=${token}`,
+    'X-FitFocus-State-Account': 'admin-1',
+    'X-FitFocus-State-Session': stateSession,
+    'X-Request-ID': 'admin-events-test-01',
+  } });
 }
 
 function pagesContext(request: Request, db: ReturnType<typeof makeDb>) {
@@ -101,6 +108,7 @@ describe('admin query params', () => {
     ));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('admin-events-test-01');
     expect(await response.json()).toMatchObject({ limit: 50, offset: 0 });
     const query = db.allCalls.find((call) => call.sql.includes('FROM admin_events e'));
     expect(query?.binds.slice(-2)).toEqual([50, 0]);
@@ -115,6 +123,7 @@ describe('admin query params', () => {
     const invalidResponse = await getAiLogs(invalidContext);
 
     expect(invalidResponse.status).toBe(200);
+    expect(invalidResponse.headers.get('X-Request-ID')).toBe('admin-events-test-01');
     let query = db.allCalls.find((call) => call.sql.includes('FROM ai_events'));
     expect(query?.binds.at(-1)).toBe(50);
 

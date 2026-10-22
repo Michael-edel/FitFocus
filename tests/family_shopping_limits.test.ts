@@ -7,6 +7,7 @@ import { onRequestPost as postFamilyMenu } from '../functions/api/family/menu';
 import { onRequestPatch as patchShoppingBulk } from '../functions/api/shopping/bulk';
 import { onRequestPatch as patchShoppingCheck } from '../functions/api/shopping/check';
 import { onRequestPost as postWeeklyMenuItems } from '../functions/api/weekly_menu/items';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyIndexContext = Parameters<typeof postFamily>[0];
 type FamilyInviteContext = Parameters<typeof postFamilyInvite>[0];
 type FamilyJoinContext = Parameters<typeof postFamilyJoin>[0];
@@ -93,11 +94,13 @@ function makeDb() {
   };
 }
 
-async function authedJsonRequest(url: string, method: string, body: string) {
+async function authedJsonRequest(url: string, method: string, body: string, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   return new Request(url, {
     method,
-    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+    headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+      'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
     body,
   });
 }
@@ -213,6 +216,33 @@ describe('bounded JSON body guards on family and shopping routes', () => {
     expect(db.batches).toHaveLength(0);
   });
 
+  it('rejects a malformed shopping bulk member instead of committing its valid neighbor', async () => {
+    const db = makeDb();
+    const context: ShoppingBulkContext = {
+      request: await authedJsonRequest(
+        'https://fitfocus.test/api/shopping/bulk',
+        'PATCH',
+        JSON.stringify({
+          week_start: '2026-06-22',
+          updates: [
+            { ingredient_name: 'Овсянка', checked: true },
+            null,
+          ],
+        }),
+      ),
+      env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
+      params: {},
+      data: {},
+      waitUntil: () => undefined,
+      next: () => Promise.resolve(new Response(null, { status: 404 })),
+    };
+    const response = await patchShoppingBulk(context);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_ITEM' });
+    expect(db.batches).toHaveLength(0);
+  });
+
   it('rejects oversized shopping check bodies before writes', async () => {
     const db = makeDb();
     const context: ShoppingCheckContext = {
@@ -220,6 +250,7 @@ describe('bounded JSON body guards on family and shopping routes', () => {
         'https://fitfocus.test/api/shopping/check',
         'PATCH',
         JSON.stringify({ week_start: '2026-06-22', ingredient_name: 'x'.repeat(80 * 1024), checked: true }),
+        'shopping-check-request-1',
       ),
       env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
       params: {},
@@ -230,6 +261,7 @@ describe('bounded JSON body guards on family and shopping routes', () => {
     const response = await patchShoppingCheck(context);
 
     expect(response.status).toBe(413);
+    expect(response.headers.get('X-Request-ID')).toBe('shopping-check-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'PAYLOAD_TOO_LARGE' });
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO shopping_checked'))).toBe(false);
   });

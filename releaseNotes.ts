@@ -1,4 +1,9 @@
-import { APP_VERSION_STRING, BUILD_VERSION_LABEL } from './versioning';
+import {
+  APP_VERSION_STRING,
+  BUILD_VERSION_LABEL,
+  formatBuildSequenceLabel,
+  isMainBuildBranch,
+} from './versioning';
 import { BUILD_SOURCE } from './build-info.generated';
 
 export type ReleaseNoteGroup = {
@@ -209,7 +214,8 @@ function formatBuildHistoryLine(build: BuildHistoryItem): string {
 }
 
 function mergeRecentBuildHistory(limit = 12): readonly BuildHistoryItem[] {
-  const merged = [...(BUILD_SOURCE.recentBuilds || []), ...fallbackMainBuildHistory];
+  const fallbackHistory = isMainBuildBranch(BUILD_SOURCE.branch) ? fallbackMainBuildHistory : [];
+  const merged = [...(BUILD_SOURCE.recentBuilds || []), ...fallbackHistory];
   const deduped = new Map<string, BuildHistoryItem>();
 
   for (const build of merged) {
@@ -231,34 +237,49 @@ const mergedRecentBuilds = mergeRecentBuildHistory();
 const topBuild = mergedRecentBuilds[0];
 const buildShortSha = topBuild?.shortSha || BUILD_SOURCE.shortSha;
 const buildCommittedAt = topBuild?.committedAt || BUILD_SOURCE.builtAt;
+const isMainBuild = isMainBuildBranch(BUILD_SOURCE.branch);
+const currentBranchName = BUILD_SOURCE.branch || 'unknown';
+const currentBuildIdentity = {
+  branch: currentBranchName,
+  sequence: isMainBuild && BUILD_SOURCE.commitCount > 0 ? BUILD_SOURCE.commitCount : null,
+  shortSha: buildShortSha,
+};
+const currentBuildSequenceLabel = formatBuildSequenceLabel(currentBuildIdentity);
+const buildHistoryTitle = isMainBuild
+  ? 'Последние main-сборки'
+  : `Последние сборки ветки ${currentBranchName}`;
 
 const currentBuildReleaseNote: ReleaseNote = {
   version: APP_VERSION_STRING,
-  label: 'main',
+  label: isMainBuild ? 'main' : `ветка ${currentBranchName}`,
   date: new Date(buildCommittedAt).toLocaleDateString('ru-RU'),
-  summary: String(BUILD_SOURCE.branch) === 'main'
+  summary: isMainBuild
     ? 'Сборка main обновляется автоматически при каждом пуше. Релизная версия продукта меняется отдельно, а ниже показаны номер текущей сборки, SHA, последние изменения и схема версионирования.'
-    : `Автоматическая сборка ветки ${BUILD_SOURCE.branch}.`,
+    : `Preview ветки ${currentBranchName}; точную ревизию определяет SHA ${buildShortSha}.`,
   isCurrent: true,
   groups: [
     {
       title: 'Как читать номера',
       items: [
         `Версия приложения: ${APP_VERSION_STRING} — это номер релиза, он меняется только при осознанном выпуске новой версии.`,
-        `Сборка main: ${BUILD_SOURCE.commitCount > 0 ? `№${BUILD_SOURCE.commitCount}` : buildShortSha} — это номер текущего пуша/деплоя; он увеличивается на 1 при каждом новом коммите в main.`,
+        isMainBuild
+          ? `${currentBuildSequenceLabel}: это номер текущего пуша/деплоя; он увеличивается на 1 при каждом новом коммите в main.`
+          : `${currentBuildSequenceLabel}: preview-сборка определяется веткой и SHA, а не номером main-сборки.`,
         'API, данные и миграции версионируются отдельно, чтобы можно было обновлять приложение без поломки старых клиентов и базы.',
       ],
     },
     {
       title: 'Что изменилось',
       items: [
-        'Каждый новый пуш в main получает отдельную сборку с собственным SHA и временем публикации.',
+        isMainBuild
+          ? 'Каждый новый пуш в main получает отдельную сборку с собственным SHA и временем публикации.'
+          : `Эта preview-сборка принадлежит ветке ${currentBranchName}; она не является сборкой main.`,
         'История последних деплоев показывается ниже отдельным списком и больше не затирает релизные карточки от 19.06 и прошлых дат.',
         'Подписи и краткие описания текущих изменений выводятся на русском, чтобы тестерам не приходилось расшифровывать subject коммитов вручную.',
       ],
     },
     {
-      title: 'Последние main-сборки',
+      title: buildHistoryTitle,
       items: mergedRecentBuilds.length
         ? mergedRecentBuilds.map((build) => formatBuildHistoryLine(build))
         : BUILD_SOURCE.recentCommits.length
@@ -279,7 +300,7 @@ const currentBuildReleaseNote: ReleaseNote = {
         `Ветка: ${BUILD_SOURCE.branch}`,
         `Текущий SHA: ${buildShortSha}`,
         `Время сборки: ${new Date(BUILD_SOURCE.builtAt).toLocaleString('ru-RU')}`,
-        `Показано последних main-сборок: ${mergedRecentBuilds.length}`,
+        `Показано ${isMainBuild ? 'main-сборок' : `сборок ветки ${currentBranchName}`}: ${mergedRecentBuilds.length}`,
       ],
     },
   ],

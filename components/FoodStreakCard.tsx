@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Flame, Sparkles } from 'lucide-react';
 import type { FoodItem } from '../types';
-import { calculateFoodStreak, trackFoodStreakMilestone } from '../analytics/foodStreak';
+import { calculateFoodStreak } from '../analytics/foodStreak';
 
 type FoodStreakCardProps = {
-  userId?: string;
   foodDiary: FoodItem[];
 };
 
@@ -40,16 +39,9 @@ function pickFoodStreakCopy(streak: number) {
   };
 }
 
-export default function FoodStreakCard({ userId, foodDiary }: FoodStreakCardProps) {
+export default function FoodStreakCard({ foodDiary }: FoodStreakCardProps) {
   const streakState = useMemo(() => calculateFoodStreak(foodDiary), [foodDiary]);
   const copy = useMemo(() => pickFoodStreakCopy(streakState.streak), [streakState.streak]);
-
-  useEffect(() => {
-    if (!userId) return;
-    if (streakState.streak >= 1) trackFoodStreakMilestone(userId, 'started', streakState.streak);
-    if (streakState.streak >= 3) trackFoodStreakMilestone(userId, '3_days', streakState.streak);
-    if (streakState.streak >= 7) trackFoodStreakMilestone(userId, '7_days', streakState.streak);
-  }, [streakState.streak, userId]);
 
   return (
     <div className="min-w-0 rounded-[1.5rem] border border-slate-800 bg-slate-950/50 p-4 relative overflow-hidden min-h-[172px]">

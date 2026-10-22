@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useState } from 'react';
 import { MealType } from './types';
 import type { FoodCorrectionDraft } from './foodCorrection';
 
@@ -6,7 +7,7 @@ type FoodEditModalProps = {
   draft: FoodCorrectionDraft;
   onChange: (next: FoodCorrectionDraft) => void;
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => Promise<boolean>;
 };
 
 const toLocalDateTimeInput = (iso: string) => {
@@ -18,6 +19,23 @@ const toLocalDateTimeInput = (iso: string) => {
 const fromLocalDateTimeInput = (value: string) => new Date(value).toISOString();
 
 export default function FoodEditModal({ draft, onChange, onClose, onSave }: FoodEditModalProps) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const saveChanges = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const saved = await onSave();
+      if (!saved) setSaveError('Не удалось сохранить изменения. Черновик оставлен; повторите попытку.');
+    } catch {
+      setSaveError('Не удалось сохранить изменения. Черновик оставлен; повторите попытку.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-slate-950/95 border border-slate-800 shadow-2xl p-6">
@@ -26,7 +44,7 @@ export default function FoodEditModal({ draft, onChange, onClose, onSave }: Food
             <div className="text-lg font-bold text-white">Корректировать блюдо</div>
             <div className="text-xs text-slate-500 font-bold mt-1">Исправьте распознавание, КБЖУ, состав и приём пищи.</div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-800/60">
+          <button onClick={onClose} disabled={saving} className="p-2 rounded-xl hover:bg-slate-800/60 disabled:opacity-50">
             <X className="w-5 h-5 text-slate-200" />
           </button>
         </div>
@@ -90,9 +108,10 @@ export default function FoodEditModal({ draft, onChange, onClose, onSave }: Food
             <textarea value={draft.notesText} onChange={(event) => onChange({ ...draft, notesText: event.target.value })} className="w-full min-h-[86px] rounded-2xl bg-slate-900/60 border border-slate-800 px-4 py-3 text-slate-100 outline-none focus:ring-2 focus:ring-violet-600/40 text-sm" placeholder={'Фарш уточнён вручную: свинина + говядина.\nСоус уточнён по фото упаковки.'} />
           </div>
 
+          {saveError && <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200">{saveError}</div>}
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-2xl bg-slate-800/60 text-slate-100 border border-slate-700 hover:bg-slate-700/60">Отмена</button>
-            <button onClick={onSave} className="px-4 py-2 rounded-2xl bg-violet-600 text-white hover:bg-violet-500">Сохранить</button>
+            <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-2xl bg-slate-800/60 text-slate-100 border border-slate-700 hover:bg-slate-700/60 disabled:opacity-50">Отмена</button>
+            <button onClick={() => void saveChanges()} disabled={saving} className="px-4 py-2 rounded-2xl bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50">{saving ? 'Сохраняем…' : 'Сохранить'}</button>
           </div>
         </div>
       </div>

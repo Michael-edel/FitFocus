@@ -1,13 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const npmCommand = process.env.npm_execpath
+  ? `${JSON.stringify(process.execPath)} ${JSON.stringify(process.env.npm_execpath)}`
+  : 'npm';
+
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['staging/**'],
+  globalSetup: './e2e/support/preparePwaFixture.ts',
   timeout: 45_000,
   expect: {
     timeout: 10_000,
   },
   fullyParallel: true,
-  retries: process.env.CI ? 1 : 0,
+  // A retry can hide a flaky acceptance test; require every CI project to pass first try.
+  retries: 0,
   reporter: process.env.CI
     ? [['github'], ['html', { open: 'never' }]]
     : [['list'], ['html', { open: 'never' }]],
@@ -18,7 +25,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 4173',
+    command: `${npmCommand} run build && ${npmCommand} run preview -- --host 127.0.0.1 --port 4173`,
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

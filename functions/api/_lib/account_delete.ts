@@ -1,3 +1,4 @@
+import { familyMenuStateReady } from './family_menu_state';
 // Account deletion helpers (B2C-safe): soft delete + scheduled hard delete
 // NOTE: D1/SQLite. Use db.batch for atomic-ish multi-statement operations.
 
@@ -112,6 +113,7 @@ export async function deleteUserAccountAndAllData(
   logAsAdminId?: string,
   options: DeleteUserAccountOptions = {},
 ): Promise<DeleteUserResult> {
+  const hasFamilyMenuGenerations = await familyMenuStateReady(db);
   const stmts: ReturnType<D1Database["prepare"]>[] = [];
 
   const isActiveAdmin = await db
@@ -207,6 +209,7 @@ export async function deleteUserAccountAndAllData(
       db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(ownedFam.id),
       db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(ownedFam.id),
       db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(ownedFam.id),
+      ...(hasFamilyMenuGenerations ? [db.prepare("DELETE FROM family_menu_generations WHERE family_id = ?").bind(ownedFam.id)] : []),
       db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(ownedFam.id),
       db.prepare("DELETE FROM shopping_checked WHERE family_id = ? OR scope_id = ?").bind(ownedFam.id, `family:${ownedFam.id}`),
       db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(ownedFam.id),
@@ -239,7 +242,9 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM recipes WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE created_by_user_id = ?)").bind(userId),
     db.prepare("DELETE FROM weekly_menus WHERE created_by_user_id = ?").bind(userId),
+    ...(hasFamilyMenuGenerations ? [db.prepare("DELETE FROM family_menu_generations WHERE created_by_user_id = ?").bind(userId)] : []),
     db.prepare("DELETE FROM weekly_menu_items WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM personal_menu_projections WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM shopping_checked WHERE scope_id = ? OR scope_id = ?").bind(`personal:${userId}`, userId),
     db.prepare("DELETE FROM family_invites WHERE created_by_user_id = ? OR used_by_user_id = ?").bind(userId, userId),
     db.prepare("DELETE FROM weekly_menu_portions WHERE user_id = ?").bind(userId),
@@ -275,7 +280,19 @@ export async function deleteUserAccountAndAllData(
   }
 }
 
+/** Stores a compact account-delete audit event without allowing audit failures to affect deletion. */
+export async function logSelfServiceAccountDeletion(db: D1Database, userId: string, latencyMs: number): Promise<void> {
+  try {
+    await db.prepare(
+      'INSERT INTO ai_events (id, user_id, ts, feature, status, latency_ms, safe_mode, request_json, response_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(crypto.randomUUID(), userId, Date.now(), 'account_delete', 200, Math.max(0, latencyMs), 0, null, null, null).run();
+  } catch {
+    // Audit persistence cannot change the result of account deletion.
+  }
+}
+
 export async function softDeleteAccount(db: D1Database, userId: string): Promise<void> {
+  const hasFamilyMenuGenerations = await familyMenuStateReady(db);
   const now = new Date().toISOString();
 
   const updateResult = await db.prepare(`
@@ -332,6 +349,7 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
       db.prepare("DELETE FROM family_menus WHERE family_id = ?").bind(fam.id),
       db.prepare("DELETE FROM weekly_menu_portions WHERE weekly_menu_id IN (SELECT id FROM weekly_menus WHERE family_id = ?)").bind(fam.id),
       db.prepare("DELETE FROM weekly_menus WHERE family_id = ?").bind(fam.id),
+      ...(hasFamilyMenuGenerations ? [db.prepare("DELETE FROM family_menu_generations WHERE family_id = ?").bind(fam.id)] : []),
       db.prepare("DELETE FROM weekly_menu_items WHERE family_id = ?").bind(fam.id),
       db.prepare("DELETE FROM family_invites WHERE family_id = ?").bind(fam.id),
       db.prepare("DELETE FROM family_members WHERE family_id = ?").bind(fam.id),

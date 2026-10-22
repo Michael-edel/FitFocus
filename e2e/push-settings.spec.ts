@@ -1,8 +1,14 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from './support/mockTest';
 import { mockApp, openApp } from './support/appHarness';
 
 test.describe('push settings across target platforms', () => {
   test('renders correct push behavior for desktop, Android, iPhone Safari and iPhone PWA', async ({ page }, testInfo) => {
+    const runtimeErrors: string[] = [];
+    page.on('pageerror', (error) => runtimeErrors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(message.text());
+    });
     const projectName = testInfo.project.name;
     const isIphoneSafari = projectName === 'iphone-safari';
     const isIphonePwa = projectName === 'iphone-pwa';
@@ -11,6 +17,7 @@ test.describe('push settings across target platforms', () => {
 
     await mockApp(page, {
       session: 'app',
+      acknowledgeStateWrites: true,
       push: {
         supported: !isIphoneSafari,
         standalone: isStandalone,
@@ -29,6 +36,7 @@ test.describe('push settings across target platforms', () => {
     if (isIphoneSafari) {
       await expect(deviceCard).toContainText('iPhone');
       await expect(page.getByRole('button', { name: 'Включить push' })).toBeDisabled();
+      expect(runtimeErrors).toEqual([]);
       return;
     }
 
@@ -46,5 +54,6 @@ test.describe('push settings across target platforms', () => {
 
     await page.getByRole('button', { name: 'Отправить тест' }).click();
     await expect(page.getByText('Тест отправлен: 1 уведомлений.')).toBeVisible();
+    expect(runtimeErrors).toEqual([]);
   });
 });

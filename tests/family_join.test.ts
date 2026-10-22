@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPost } from '../functions/api/family/join';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyJoinContext = Parameters<typeof onRequestPost>[0];
 type FamilyJoinBody = { familyId?: string; alreadyMember?: boolean; error?: { code?: string } };
 
@@ -84,12 +85,14 @@ function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: nu
   };
 }
 
-async function postJoin(db: ReturnType<typeof makeDb>) {
+async function postJoin(db: ReturnType<typeof makeDb>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyJoinContext = {
     request: new Request('https://fitfocus.test/api/family/join', {
       method: 'POST',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify({ code: 'joinme' }),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -104,9 +107,10 @@ async function postJoin(db: ReturnType<typeof makeDb>) {
 describe('/api/family/join', () => {
   it('claims an invite with a conditional update before inserting the member', async () => {
     const db = makeDb();
-    const response = await postJoin(db);
+    const response = await postJoin(db, 'family-join-request-1');
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('X-Request-ID')).toBe('family-join-request-1');
     const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-1');
     expect(db.runs.some((run) => run.sql.includes('WHERE code = ? AND used_by_user_id IS NULL'))).toBe(true);

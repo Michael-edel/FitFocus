@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 import { cleanupDeletedAccounts, normalizeCleanupRequestLimit } from '../functions/api/_lib/account_cleanup';
 import { onRequestPost } from '../functions/api/internal/cleanup_deleted';
 import { onRequestPost as onAdminCleanupPost } from '../functions/api/admin/cleanup_deleted';
@@ -146,7 +147,7 @@ describe('cleanupDeletedAccounts', () => {
     const context: ScheduledCleanupContext = {
       request: new Request('https://fitfocus.test/api/internal/cleanup_deleted', {
         method: 'POST',
-        headers: { Authorization: 'Bearer cron-secret' },
+        headers: { Authorization: 'Bearer cron-secret', 'X-Request-ID': 'scheduled-cleanup-test-01' },
         body: JSON.stringify({ limit: 10 }),
       }),
       env: { DB: makeDb() as unknown as D1Database, CRON_SECRET: 'cron-secret' },
@@ -158,6 +159,7 @@ describe('cleanupDeletedAccounts', () => {
     const response = await onRequestPost(context);
 
     expect(response.status).toBe(500);
+    expect(response.headers.get('X-Request-ID')).toBe('scheduled-cleanup-test-01');
     const body = await response.json() as CleanupBody;
     expect(body.failed).toBe(1);
     expect(body.failures[0].error).toBe('SUPPORT_ATTACHMENTS_DELETE_UNAVAILABLE');
@@ -247,10 +249,16 @@ describe('cleanupDeletedAccounts', () => {
   it('rejects oversized admin cleanup bodies before running cleanup', async () => {
     const db = makeDb();
     const token = await signJwt({ sub: 'admin-1', sid: 'sid-admin' });
+    const stateSession = await stateSessionId({ sub: 'admin-1', sid: 'sid-admin' });
     const context: AdminCleanupContext = {
       request: new Request('https://fitfocus.test/api/admin/cleanup_deleted', {
         method: 'POST',
-        headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Cookie: `ff_session=${token}`,
+          'Content-Type': 'application/json',
+          'X-FitFocus-State-Account': 'admin-1',
+          'X-FitFocus-State-Session': stateSession,
+        },
         body: JSON.stringify({ limit: 10, payload: 'x'.repeat(80 * 1024) }),
       }),
       env: { DB: db as unknown as D1Database, AUTH_JWT_SECRET: SECRET },

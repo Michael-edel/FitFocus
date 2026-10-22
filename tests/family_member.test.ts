@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { onRequestPatch } from '../functions/api/family/member';
+import { stateSessionId } from '../functions/api/_lib/state_session';
 type FamilyMemberContext = Parameters<typeof onRequestPatch>[0];
 
 const SECRET = 'unit-test-secret';
@@ -30,7 +31,7 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { updateChanges?: number } = {}) {
+function makeDb(options: { updateChanges?: number; memberExists?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   return {
     runs,
@@ -45,7 +46,9 @@ function makeDb(options: { updateChanges?: number } = {}) {
         async first() {
           if (sql.includes('FROM sessions')) return { id: 'sid-1', revoked: 0, expires_at: NOW + 3600 };
           if (sql.includes('FROM users WHERE id = ? LIMIT 1')) return { is_active: 1, deleted_at: null };
-          if (sql.includes('JOIN family_members')) return { id: 'family-1', owner_user_id: 'owner-1', role: 'member' };
+          if (sql.includes('JOIN family_members')) return options.memberExists === false
+            ? null
+            : { id: String(this.binds[0] || 'family-1'), owner_user_id: 'owner-1', role: 'member' };
           return null;
         },
         async all() {
@@ -65,12 +68,14 @@ function makeDb(options: { updateChanges?: number } = {}) {
   };
 }
 
-async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, unknown>) {
+async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, unknown>, requestId?: string) {
   const token = await signJwt({ sub: 'user-1', sid: 'sid-1' });
+  const sessionProof = await stateSessionId({ sub: 'user-1', sid: 'sid-1' });
   const context: FamilyMemberContext = {
     request: new Request('https://fitfocus.test/api/family/member', {
       method: 'PATCH',
-      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json' },
+      headers: { Cookie: `ff_session=${token}`, 'Content-Type': 'application/json', 'X-FitFocus-State-Account': 'user-1',
+        'X-FitFocus-State-Session': sessionProof, ...(requestId ? { 'X-Request-ID': requestId } : {}) },
       body: JSON.stringify(body),
     }),
     env: { AUTH_JWT_SECRET: SECRET, DB: db as unknown as D1Database },
@@ -84,20 +89,48 @@ async function patchMember(db: ReturnType<typeof makeDb>, body: Record<string, u
 
 describe('/api/family/member', () => {
   it('rejects invalid goal values', async () => {
-    const response = await patchMember(makeDb(), { goal: 'bulk' });
+    const response = await patchMember(makeDb(), { familyId: 'family-1', goal: 'bulk' }, 'family-member-request-1');
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Request-ID')).toBe('family-member-request-1');
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_GOAL' });
   });
 
   it('rejects invalid numeric ranges', async () => {
-    const response = await patchMember(makeDb(), { age: 500 });
+    const response = await patchMember(makeDb(), { familyId: 'family-1', age: 500 });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_AGE' });
   });
 
-  it('returns 404 when the active family member row is not updated', async () => {
-    const response = await patchMember(makeDb({ updateChanges: 0 }), { goal: 'LOSS' });
+  it('updates only the explicitly targeted family membership', async () => {
+    const db = makeDb();
+    const response = await patchMember(db, { familyId: 'family-2', goal: 'LOSS' });
+
+    expect(response.status).toBe(200);
+    const update = db.runs.find(run => run.sql.includes('UPDATE family_members'));
+    expect(update?.sql).toContain('EXISTS (SELECT 1 FROM families');
+    expect(update?.binds).toContain('family-2');
+    expect(update?.binds.slice(-3)).toEqual(['family-2', 'user-1', 'family-2']);
+  });
+
+  it('returns 404 when the targeted family member row is not updated', async () => {
+    const response = await patchMember(makeDb({ updateChanges: 0 }), { familyId: 'family-1', goal: 'LOSS' });
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({ error: 'NOT_FOUND' });
+  });
+
+  it('rejects a missing family target before checking membership or updating', async () => {
+    const db = makeDb();
+    const response = await patchMember(db, { goal: 'LOSS' });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: 'BAD_TARGET' });
+    expect(db.runs.some(run => run.sql.includes('UPDATE family_members'))).toBe(false);
+  });
+
+  it('rejects a family target the caller does not belong to', async () => {
+    const db = makeDb({ memberExists: false });
+    const response = await patchMember(db, { familyId: 'family-other', goal: 'LOSS' });
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: 'NOT_IN_FAMILY' });
+    expect(db.runs.some(run => run.sql.includes('UPDATE family_members'))).toBe(false);
   });
 });

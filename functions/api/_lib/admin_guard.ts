@@ -6,7 +6,7 @@
 // Always verifies admin role against DB (user_roles) using the session JWT `sub`.
 
 import type { SessionUser } from "./auth";
-import { requireUser } from "./auth";
+import { assertScopedStateRequestScope, requireScopedStateUser } from "./state_session";
 import { touchAdminSession } from "./admin_sessions";
 
 type EnvLike = { DB?: D1Database; AUTH_JWT_SECRET?: string };
@@ -36,7 +36,7 @@ export async function requireAdminRequest(
   if (a instanceof Request) {
     const request = a;
     const env = (b || {}) as EnvLike;
-    const user = await requireUser(request, env);
+    const user = await requireScopedStateUser(request, env);
     const db = env.DB;
     if (!db) throw new Error("DB_CONFIG");
 
@@ -57,6 +57,7 @@ export async function requireAdminRequest(
   const request: RequestLike = b instanceof Request ? b : undefined;
   const db = c;
 
+  if (request) await assertScopedStateRequestScope(user, request);
   if (!db) throw new Error("DB_CONFIG");
   if (!(await isAdmin(db, user.sub))) forbidden();
 

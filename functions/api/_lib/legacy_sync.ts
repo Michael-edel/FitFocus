@@ -1,6 +1,7 @@
 import { loadActivePlanByEmail } from "./plans";
 import { nowMs } from "./db";
 import { isJsonObject, safeJsonParse } from "./json";
+import { normalizeProfileRecord } from './profile_contract';
 
 export async function loadLegacyProfileByEmail(
   db: D1Database,
@@ -23,7 +24,7 @@ export async function loadLegacyProfileByEmail(
     if (!row?.profile_json || !row.user_id) return null;
     const parsed = safeJsonParse(String(row.profile_json));
     return isJsonObject(parsed)
-      ? { userId: row.user_id, profile: parsed, version: Number(row.version || 1) }
+      ? { userId: row.user_id, profile: normalizeProfileRecord(parsed), version: Number(row.version || 1) }
       : null;
   } catch {
     return null;
@@ -58,23 +59,23 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
   try {
     const legacyItems = await db
       .prepare(
-        `SELECT k, v, version, updated_at
+        `SELECT k, v, version, updated_at, deleted_at
          FROM user_kv
-         WHERE user_id = ? AND k LIKE ?`
+         WHERE user_id = ? AND substr(k, 1, length(?)) = ?`
       )
-      .bind(fromUserId, `${oldPrefix}%`)
-      .all<{ k: string; v: string; version?: number; updated_at?: number }>();
+      .bind(fromUserId, oldPrefix, oldPrefix)
+      .all<{ k: string; v: string; version?: number; updated_at?: number; deleted_at?: number | null }>();
 
     const statements: D1PreparedStatement[] = [];
     for (const item of legacyItems.results || []) {
-      if (!item?.k) continue;
-      const nextKey = item.k.startsWith(oldPrefix) ? `${newPrefix}${item.k.slice(oldPrefix.length)}` : item.k;
+      if (typeof item?.k !== 'string' || !item.k.startsWith(oldPrefix)) continue;
+      const nextKey = `${newPrefix}${item.k.slice(oldPrefix.length)}`;
       statements.push(
         db.prepare(
-          `INSERT INTO user_kv (user_id, k, v, updated_at, version)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(user_id, k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at, version = excluded.version`
-        ).bind(toUserId, nextKey, item.v, item.updated_at ?? now, item.version ?? 1)
+          `INSERT INTO user_kv (user_id, k, v, updated_at, version, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, k) DO NOTHING`
+        ).bind(toUserId, nextKey, item.deleted_at == null ? item.v : '', item.updated_at ?? now, item.version ?? 1, item.deleted_at ?? null)
       );
     }
     if (statements.length) {
@@ -122,18 +123,21 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
 
 export async function migrateLegacyAccountByEmail(
   db: D1Database,
-  user: { sub: string; email?: string; name?: string; picture?: string },
+  user: { sub: string; email?: string; emailVerified?: boolean; name?: string; picture?: string },
 ): Promise<Record<string, unknown> | null> {
+  // Email-based ownership transfer is allowed only when the identity provider
+  // verified this email in the current signed session.
+  if (!user.emailVerified) return null;
   const legacy = await loadLegacyProfileByEmail(db, user.email || "");
   if (!legacy || legacy.userId === user.sub) return null;
 
   await migrateLegacyStateToCurrentUser(db, legacy.userId, user.sub);
   const serverPlan = await loadActivePlanByEmail(db, user.email || "");
-  const migratedProfile = withProtectedFields(user, {
+  const migratedProfile = withProtectedFields(user, normalizeProfileRecord({
     ...legacy.profile,
     plan: serverPlan,
     version: legacy.version,
-  });
+  }));
 
   const t = nowMs();
   await db

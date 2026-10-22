@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+import clsx from 'clsx';
 import { ShieldCheck, ToggleLeft, ToggleRight, Users, KeyRound, Activity, RefreshCcw, Search, Trash2, ChevronRight, Clock3, BadgeInfo, LifeBuoy, ImageUp, Video, Mic, Paperclip, Send, Filter } from "lucide-react";
 import { parseJson } from "./safeJson";
+import type { OutboxReadGuard } from "./storage/durableOutbox";
+import { prepareAdminSession, requestAdminResponse, type AdminSession } from "./services/adminSession";
 
 const DEFAULT_AI_INPUT_COST_PER_1M = "0.20";
 const DEFAULT_AI_OUTPUT_COST_PER_1M = "1.20";
@@ -122,6 +125,13 @@ type Stats = {
     ai_avg_latency_ms?: number;
     meals_logged: number;
   };
+  alerts?: Array<{
+    code: 'ai_error_rate' | 'ai_latency';
+    severity: 'warning' | 'critical';
+    message: string;
+    value: number;
+    threshold: number;
+  }>;
 };
 
 
@@ -277,6 +287,50 @@ type SupportMessageRow = {
   created_at: number;
   attachments?: SupportAttachment[];
 };
+
+function AdminSupportAttachmentPreview({ attachment, session }: { attachment: SupportAttachment; session: AdminSession | null }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    setFailed(false);
+
+    if (!attachment.data_url.startsWith('/api/support/attachment')) {
+      setSrc(attachment.data_url);
+      return () => { active = false; };
+    }
+
+    setSrc(null);
+    if (!session) {
+      setFailed(true);
+      return () => { active = false; };
+    }
+
+    void requestAdminResponse(session, attachment.data_url, {}, 'Support-Attachment')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('SUPPORT_ATTACHMENT_FAILED');
+        const blob = await response.blob();
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => { if (active) setFailed(true); });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.data_url, session]);
+
+  if (failed) return <div className="mt-2 text-sm font-semibold text-amber-300">Не удалось загрузить вложение.</div>;
+  if (!src) return <div className="mt-2 text-sm font-semibold text-slate-500">Загружаем вложение…</div>;
+  if (attachment.kind === 'photo') return <img src={src} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />;
+  if (attachment.kind === 'video') return <video className="mt-2 w-full rounded-2xl" controls src={src} />;
+  if (attachment.kind === 'voice') return <audio className="mt-2 w-full" controls src={src} />;
+  return null;
+}
 
 type UserDetail = {
   user: {
@@ -552,9 +606,27 @@ function formatDuration(seconds: number) {
   return `${mins} мин`;
 }
 
-export default function AdminScreen() {
+type AdminScreenProps = { loginGuard: OutboxReadGuard | null; isCurrentSession: () => boolean };
+
+export default function AdminScreen({ loginGuard, isCurrentSession }: AdminScreenProps) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [adminSession, setAdminSession] = useState<AdminSession | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setAdminSession(null);
+    if (!loginGuard) return () => controller.abort();
+    void prepareAdminSession(loginGuard, controller, isCurrentSession)
+      .then((session) => { if (!controller.signal.aborted) setAdminSession(session); })
+      .catch((error) => { if (!controller.signal.aborted) setErr(errorMessage(error, "Не удалось проверить сессию администратора")); });
+    return () => controller.abort();
+  }, [loginGuard, isCurrentSession]);
+
+  const adminRequest = (url: string, init: RequestInit = {}) => {
+    if (!adminSession) throw new Error("LOGIN_SESSION_CHANGED");
+    return requestAdminResponse(adminSession, url, init);
+  };
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [aiCost, setAiCost] = useState<AiCost | null>(null);
@@ -642,7 +714,7 @@ export default function AdminScreen() {
       const qs = new URLSearchParams();
       qs.set('limit', String(aiLogLimit));
       if (aiLogFeature) qs.set('feature', aiLogFeature);
-      const r = await fetch(`/api/admin/ai_logs?${qs.toString()}`, { credentials: 'include' });
+      const r = await adminRequest(`/api/admin/ai_logs?${qs.toString()}`, { credentials: 'include' });
       if (r.ok) {
         const j = await readJsonRecord(r);
         setAiLogs(Array.isArray(j.logs) ? j.logs.filter(isAiLog) : []);
@@ -658,7 +730,7 @@ export default function AdminScreen() {
       if (adminEventAction.trim()) qs.set('action', adminEventAction.trim());
       if (adminEventFrom) qs.set('from', adminEventFrom);
       if (adminEventTo) qs.set('to', adminEventTo);
-      const r = await fetch(`/api/admin/admin_events?${qs.toString()}`, { credentials: 'include' });
+      const r = await adminRequest(`/api/admin/admin_events?${qs.toString()}`, { credentials: 'include' });
       if (r.ok) {
         const payload: unknown = await r.json().catch(() => null);
         setAdminEvents(normalizeAdminEvents(payload));
@@ -668,7 +740,7 @@ export default function AdminScreen() {
 
   const loadInvites = async () => {
     try {
-      const r = await fetch("/api/admin/invites?limit=100", { credentials: "include" });
+      const r = await adminRequest("/api/admin/invites?limit=100", { credentials: "include" });
       if (r.ok) {
         const j = await readJsonRecord(r);
         setInvites(Array.isArray(j.invites) ? j.invites.filter(isInviteRow) : []);
@@ -694,7 +766,7 @@ export default function AdminScreen() {
       const qs = new URLSearchParams();
       qs.set("limit", String(limit));
       if (supportStatusFilter !== "all") qs.set("status", supportStatusFilter);
-      const r = await fetch(`/api/support/feedback?${qs.toString()}`, { credentials: "include" });
+      const r = await adminRequest(`/api/support/feedback?${qs.toString()}`, { credentials: "include" });
       if (!r.ok) return;
       const j = await readJsonRecord(r);
       setSupportTickets(Array.isArray(j.tickets) ? j.tickets.filter(isSupportTicketRow) : []);
@@ -704,7 +776,7 @@ export default function AdminScreen() {
   const loadSupportTicketDetail = async (ticketId: string) => {
     if (!ticketId) return;
     try {
-      const r = await fetch(`/api/support/feedback?id=${encodeURIComponent(ticketId)}`, { credentials: "include" });
+      const r = await adminRequest(`/api/support/feedback?id=${encodeURIComponent(ticketId)}`, { credentials: "include" });
       if (!r.ok) return;
       const j = await readJsonRecord(r);
       setSelectedSupportTicket(isSupportTicketRow(j.ticket) ? j.ticket : null);
@@ -725,7 +797,7 @@ export default function AdminScreen() {
     setSupportTicketSaving(true);
     setErr(null);
     try {
-      const r = await fetch("/api/support/feedback", {
+      const r = await adminRequest("/api/support/feedback", {
         method: "PATCH",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -751,7 +823,7 @@ export default function AdminScreen() {
     }
   };
 
-  const exportAdminEventsCsv = () => {
+  const exportAdminEventsCsv = async () => {
     const qs = new URLSearchParams();
     qs.set('limit', '500');
     qs.set('format', 'csv');
@@ -759,7 +831,18 @@ export default function AdminScreen() {
     if (adminEventAction.trim()) qs.set('action', adminEventAction.trim());
     if (adminEventFrom) qs.set('from', adminEventFrom);
     if (adminEventTo) qs.set('to', adminEventTo);
-    window.open(`/api/admin/admin_events?${qs.toString()}`, '_blank');
+    try {
+      const response = await adminRequest(`/api/admin/admin_events?${qs.toString()}`);
+      if (!response.ok) throw new Error('Не удалось скачать журнал действий');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = 'admin_events.csv';
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setErr(errorMessage(error, 'Не удалось скачать журнал действий'));
+    }
   };
 
   const normalizeIdList = (value: string) =>
@@ -800,7 +883,7 @@ export default function AdminScreen() {
     setPushSendBusy(true);
     setPushSendError(null);
     try {
-      const response = await fetch("/api/admin/push/send", {
+      const response = await adminRequest("/api/admin/push/send", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -827,12 +910,12 @@ export default function AdminScreen() {
     setLoading(true); setErr(null);
     try {
       const [s, f, a, c, st, i] = await Promise.all([
-        fetch("/api/admin/stats", { credentials: "include" }),
-        fetch("/api/admin/feature_flags", { credentials: "include" }),
-        fetch("/api/admin/admins", { credentials: "include" }),
-        fetch("/api/admin/ai-cost", { credentials: "include" }),
-        fetch("/api/admin/settings", { credentials: "include" }),
-        fetch("/api/admin/invites?limit=100", { credentials: "include" }),
+        adminRequest("/api/admin/stats", { credentials: "include" }),
+        adminRequest("/api/admin/feature_flags", { credentials: "include" }),
+        adminRequest("/api/admin/admins", { credentials: "include" }),
+        adminRequest("/api/admin/ai-cost", { credentials: "include" }),
+        adminRequest("/api/admin/settings", { credentials: "include" }),
+        adminRequest("/api/admin/invites?limit=100", { credentials: "include" }),
       ]);
       if (!s.ok) throw new Error("Нет доступа к /api/admin/stats (нужна роль admin)");
       if (!a.ok) throw new Error("Нет доступа к /api/admin/admins (нужна роль admin)");
@@ -868,7 +951,7 @@ export default function AdminScreen() {
     }
   };
 
-  useEffect(() => { void loadAll(); }, []);
+  useEffect(() => { if (adminSession) void loadAll(); }, [adminSession]);
 
   const loadUsers = async (options?: { silent?: boolean }) => {
     const silent = Boolean(options?.silent);
@@ -885,7 +968,7 @@ export default function AdminScreen() {
       qs.set("glucose", glucoseFilter);
       qs.set("measurements", measurementFilter);
       qs.set("limit", String(userListLimit));
-      const r = await fetch(`/api/admin/users?${qs.toString()}`, { credentials: "include" });
+      const r = await adminRequest(`/api/admin/users?${qs.toString()}`, { credentials: "include" });
       if (!r.ok) throw new Error("Список пользователей недоступен (нужна роль admin)");
       const j = await readJsonRecord(r);
       setUsers(Array.isArray(j.users) ? j.users.filter(isUserRow) : []);
@@ -906,7 +989,7 @@ export default function AdminScreen() {
     setRoles([]);
     setSessions([]);
     try {
-      const rr = await fetch(`/api/admin/user_detail?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
+      const rr = await adminRequest(`/api/admin/user_detail?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
       if (!rr.ok) throw new Error("Нет доступа к карточке пользователя");
       const rj = await readJsonRecord(rr);
       if (!isUserDetail(rj)) throw new Error("Сервер вернул некорректную карточку пользователя");
@@ -926,7 +1009,7 @@ export default function AdminScreen() {
     setLoading(true);
     setErr(null);
     try {
-      const r = await fetch("/api/admin/subscription", {
+      const r = await adminRequest("/api/admin/subscription", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -947,7 +1030,7 @@ export default function AdminScreen() {
     if (!d) return;
     setLoading(true); setErr(null);
     try {
-      const r = await fetch("/api/admin/feature_flags", {
+      const r = await adminRequest("/api/admin/feature_flags", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -974,7 +1057,7 @@ export default function AdminScreen() {
     if (typeof value !== "string") return;
     setLoading(true); setErr(null);
     try {
-      const r = await fetch("/api/admin/settings", {
+      const r = await adminRequest("/api/admin/settings", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -1007,7 +1090,7 @@ export default function AdminScreen() {
     if (!selectedUserId) return;
     setLoading(true); setErr(null);
     try {
-      const r = await fetch("/api/admin/user_roles", {
+      const r = await adminRequest("/api/admin/user_roles", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -1026,7 +1109,7 @@ export default function AdminScreen() {
     if (!selectedUserId) return;
     setLoading(true); setErr(null);
     try {
-      const r = await fetch("/api/admin/sessions", {
+      const r = await adminRequest("/api/admin/sessions", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -1044,7 +1127,7 @@ export default function AdminScreen() {
   const logoutAll = async () => {
     setLoading(true); setErr(null);
     try {
-      const r = await fetch("/api/logout_all", { method: "POST", credentials: "include" });
+      const r = await adminRequest("/api/logout_all", { method: "POST", credentials: "include" });
       if (!r.ok) throw new Error("Не удалось выйти со всех устройств");
       await loadAll();
     } catch (error) {
@@ -1065,7 +1148,7 @@ export default function AdminScreen() {
     setInviteActionMsg(null);
     setCreatedInviteCodes([]);
     try {
-      const r = await fetch("/api/admin/invites", {
+      const r = await adminRequest("/api/admin/invites", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -1098,7 +1181,7 @@ export default function AdminScreen() {
     setErr(null);
     setInviteActionMsg(null);
     try {
-      const r = await fetch("/api/admin/invites", {
+      const r = await adminRequest("/api/admin/invites", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -2017,14 +2100,8 @@ export default function AdminScreen() {
                         <span className="truncate">{attachment.name}</span>
                       </div>
                       <div className="mt-1 text-slate-500 text-sm font-semibold">{attachment.mime} · {attachment.size} bytes</div>
-                      {attachment.kind === "photo" && (
-                        <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-64 w-full rounded-2xl object-cover" />
-                      )}
-                      {attachment.kind === "video" && (
-                        <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />
-                      )}
-                      {attachment.kind === "voice" && (
-                        <audio className="mt-2 w-full" controls src={attachment.data_url} />
+                      {attachment.kind !== "file" && (
+                        <AdminSupportAttachmentPreview attachment={attachment} session={adminSession} />
                       )}
                     </div>
                   ))}
@@ -2072,9 +2149,9 @@ export default function AdminScreen() {
                                 {attachment.kind === "file" && <Paperclip className="h-4 w-4 text-slate-300" />}
                                 <span className="truncate">{attachment.name}</span>
                               </div>
-                              {attachment.kind === "photo" && <img src={attachment.data_url} alt={attachment.name} className="mt-2 max-h-56 w-full rounded-2xl object-cover" />}
-                              {attachment.kind === "video" && <video className="mt-2 w-full rounded-2xl" controls src={attachment.data_url} />}
-                              {attachment.kind === "voice" && <audio className="mt-2 w-full" controls src={attachment.data_url} />}
+                              {attachment.kind !== "file" && (
+                                <AdminSupportAttachmentPreview attachment={attachment} session={adminSession} />
+                              )}
                             </div>
                           ))}
                         </div>
@@ -2278,6 +2355,21 @@ export default function AdminScreen() {
             <div className="text-3xl font-black text-slate-100 mt-1">{stats?.today?.ai_event_avg_latency_ms ?? stats?.today?.ai_avg_latency_ms ?? 0} ms</div>
           </div>
         </div>
+
+        {(stats?.alerts || []).length > 0 && (
+          <div className="mt-4 space-y-2" role="status" aria-live="polite">
+            {stats?.alerts?.map((alert) => (
+              <div key={alert.code} className={clsx(
+                'rounded-2xl border px-4 py-3 font-semibold',
+                alert.severity === 'critical'
+                  ? 'border-rose-500/60 bg-rose-950/40 text-rose-100'
+                  : 'border-amber-500/60 bg-amber-950/40 text-amber-100',
+              )}>
+                {alert.message}: {alert.value}{alert.code === 'ai_error_rate' ? '%' : ' мс'}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-3 mt-5 flex-wrap">
           <div className="text-slate-300 font-semibold">Фильтр feature:</div>

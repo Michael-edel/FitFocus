@@ -2,7 +2,10 @@ import React from 'react';
 import { CheckCircle2, ImageUp, LifeBuoy, Loader2, Mic, Paperclip, Send, Square, Trash2, Video } from 'lucide-react';
 import type { UserProfile } from './types';
 import { BUILD_SHORT_LABEL } from './versioning';
-import { isRecord } from './safeJson';
+import { isRecord, responseErrorMessage } from './safeJson';
+import type { OutboxReadGuard } from './storage/durableOutbox';
+import { SessionReadError } from './storage/sessionRead';
+import { prepareSupportSession, requestSupportAttachmentBlob, requestSupportJson, supportSessionErrorMessage } from './services/supportSession';
 
 type AttachmentDraft = {
   file: File;
@@ -48,8 +51,57 @@ type SupportTicket = {
   messages?: SupportMessage[];
 };
 
+async function hydrateSupportTicketAttachments(
+  ticket: SupportTicket,
+  fetchAttachment: (url: string) => Promise<Blob>,
+  signal: AbortSignal,
+): Promise<{ ticket: SupportTicket; objectUrls: string[] }> {
+  const objectUrls: string[] = [];
+  const hydrateAttachment = async (attachment: SupportAttachment): Promise<SupportAttachment> => {
+    if (!attachment.data_url?.startsWith('/api/support/attachment')) return attachment;
+    try {
+      if (signal.aborted) throw new Error('STATE_REQUEST_ABORTED');
+      const blob = await fetchAttachment(attachment.data_url);
+      if (signal.aborted) throw new Error('STATE_REQUEST_ABORTED');
+      const dataUrl = URL.createObjectURL(blob);
+      objectUrls.push(dataUrl);
+      return { ...attachment, data_url: dataUrl };
+    } catch (error) {
+      if (signal.aborted || error instanceof SessionReadError) throw error;
+      return { ...attachment, data_url: undefined };
+    }
+  };
+
+  try {
+    const attachments = ticket.attachments
+      ? await Promise.all(ticket.attachments.map(hydrateAttachment))
+      : undefined;
+    const messages = ticket.messages
+      ? await Promise.all(ticket.messages.map(async (message) => ({
+        ...message,
+        ...(message.attachments
+          ? { attachments: await Promise.all(message.attachments.map(hydrateAttachment)) }
+          : {}),
+      })))
+      : undefined;
+    return {
+      ticket: {
+        ...ticket,
+        ...(attachments ? { attachments } : {}),
+        ...(messages ? { messages } : {}),
+      },
+      objectUrls,
+    };
+  } catch (error) {
+    objectUrls.forEach(URL.revokeObjectURL);
+    throw error;
+  }
+}
+
 type Props = {
   currentUser?: UserProfile | null;
+  loginGuard: OutboxReadGuard | null;
+  isCurrentSession: () => boolean;
 };
 
 const CATEGORY_OPTIONS = [
@@ -156,10 +208,6 @@ function isSupportTicket(value: unknown): value is SupportTicket {
     && typeof value.attachment_count === 'number';
 }
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
-}
-
 function supportSubmitErrorMessage(status: number, payload: unknown) {
   const body = objectPayload(payload);
   const code = String(body.code || body.error || '');
@@ -237,7 +285,7 @@ async function compressImageAttachment(file: File): Promise<File> {
   return new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
 }
 
-export default function SupportScreen({ currentUser }: Props) {
+export default function SupportScreen({ currentUser, loginGuard, isCurrentSession }: Props) {
   const [category, setCategory] = React.useState<(typeof CATEGORY_OPTIONS)[number]>('Ошибка');
   const [section, setSection] = React.useState<(typeof SECTION_OPTIONS)[number]>('Обзор');
   const [subject, setSubject] = React.useState('');
@@ -265,35 +313,117 @@ export default function SupportScreen({ currentUser }: Props) {
   const chunksRef = React.useRef<BlobPart[]>([]);
   const streamRef = React.useRef<MediaStream | null>(null);
   const timerRef = React.useRef<number | null>(null);
+  const selectedTicketIdRef = React.useRef<string | null>(selectedTicketId);
+  selectedTicketIdRef.current = selectedTicketId;
+  const requestsRef = React.useRef<Record<'tickets' | 'detail' | 'submit' | 'reply', AbortController | null>>({
+    tickets: null, detail: null, submit: null, reply: null,
+  });
+  const previewUrlsRef = React.useRef(new Set<string>());
+  const ticketAttachmentUrlsRef = React.useRef(new Set<string>());
+  const componentControllerRef = React.useRef(new AbortController());
+
+  const supportIdentityIsCurrent = React.useCallback(() => Boolean(
+    currentUser?.id && loginGuard && loginGuard.accountId === currentUser.id && isCurrentSession(),
+  ), [currentUser?.id, isCurrentSession, loginGuard]);
+
+  const prepareCurrentSupportSession = React.useCallback(async (controller: AbortController) => {
+    if (!loginGuard || !supportIdentityIsCurrent()) throw new SessionReadError('session');
+    return prepareSupportSession(loginGuard, controller, isCurrentSession);
+  }, [isCurrentSession, loginGuard, supportIdentityIsCurrent]);
+
+  const beginSupportRequest = React.useCallback((kind: keyof typeof requestsRef.current) => {
+    requestsRef.current[kind]?.abort();
+    const controller = new AbortController();
+    requestsRef.current[kind] = controller;
+    return controller;
+  }, []);
+
+  const finishSupportRequest = React.useCallback((kind: keyof typeof requestsRef.current, controller: AbortController) => {
+    if (requestsRef.current[kind] === controller) requestsRef.current[kind] = null;
+  }, []);
+
+  const createPreviewUrl = React.useCallback((blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    previewUrlsRef.current.add(url);
+    return url;
+  }, []);
+
+  const revokePreviewUrl = React.useCallback((url: string) => {
+    URL.revokeObjectURL(url);
+    previewUrlsRef.current.delete(url);
+  }, []);
+
+  const clearTicketAttachmentUrls = React.useCallback(() => {
+    ticketAttachmentUrlsRef.current.forEach(URL.revokeObjectURL);
+    ticketAttachmentUrlsRef.current.clear();
+  }, []);
 
   React.useEffect(() => {
     if (currentUser?.email) setContact(currentUser.email);
   }, [currentUser?.email]);
 
   const loadMyTickets = React.useCallback(async (preserveSelection = true) => {
+    const controller = beginSupportRequest('tickets');
     setLoadingTickets(true);
     try {
-      const response = await fetch('/api/support/feedback/my', { credentials: 'include' });
-      if (!response.ok) return;
-      const json: unknown = await response.json().catch(() => null);
-      const nextTickets = isRecord(json) && Array.isArray(json.tickets)
-        ? json.tickets.filter(isSupportTicket)
-        : [];
+      const session = await prepareCurrentSupportSession(controller);
+      const { response, body } = await requestSupportJson(session, '/api/support/feedback/my', { method: 'GET' });
+      if (!response.ok) throw new Error(responseErrorMessage(body, 'Не удалось загрузить обращения.'));
+      const nextTickets = Array.isArray(body?.tickets) ? body.tickets.filter(isSupportTicket) : [];
+      if (controller.signal.aborted || !supportIdentityIsCurrent()) return;
+      const requestedSelection = preserveSelection ? selectedTicketIdRef.current : null;
+      const nextSelectedId = requestedSelection && nextTickets.some(ticket => ticket.id === requestedSelection)
+        ? requestedSelection
+        : (nextTickets[0]?.id || null);
       setTickets(nextTickets);
-      const nextSelectedId = preserveSelection ? (selectedTicketId || nextTickets[0]?.id || null) : (nextTickets[0]?.id || null);
+      if (selectedTicketIdRef.current !== nextSelectedId) setSelectedTicket(null);
       setSelectedTicketId(nextSelectedId);
+    } catch (requestError: unknown) {
+      if (!controller.signal.aborted && supportIdentityIsCurrent()) {
+        setError(supportSessionErrorMessage(requestError, 'Не удалось загрузить обращения.'));
+      }
     } finally {
-      setLoadingTickets(false);
+      if (requestsRef.current.tickets === controller) setLoadingTickets(false);
+      finishSupportRequest('tickets', controller);
     }
-  }, [selectedTicketId]);
+  }, [beginSupportRequest, finishSupportRequest, prepareCurrentSupportSession, supportIdentityIsCurrent]);
 
   const loadMyTicketDetail = React.useCallback(async (ticketId: string) => {
     if (!ticketId) return;
-    const response = await fetch(`/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`, { credentials: 'include' });
-    if (!response.ok) return;
-    const json: unknown = await response.json().catch(() => null);
-    setSelectedTicket(isRecord(json) && isSupportTicket(json.ticket) ? json.ticket : null);
-  }, []);
+    const controller = beginSupportRequest('detail');
+    try {
+      const session = await prepareCurrentSupportSession(controller);
+      const { response, body } = await requestSupportJson(
+        session,
+        `/api/support/feedback/my?id=${encodeURIComponent(ticketId)}`,
+        { method: 'GET' },
+      );
+      if (!response.ok) throw new Error(responseErrorMessage(body, 'Не удалось загрузить обращение.'));
+      if (!isRecord(body) || !isSupportTicket(body.ticket)) {
+        clearTicketAttachmentUrls();
+        setSelectedTicket(null);
+        return;
+      }
+      const hydrated = await hydrateSupportTicketAttachments(
+        body.ticket,
+        (url) => requestSupportAttachmentBlob(session, url),
+        controller.signal,
+      );
+      if (controller.signal.aborted || selectedTicketIdRef.current !== ticketId || !supportIdentityIsCurrent()) {
+        hydrated.objectUrls.forEach(URL.revokeObjectURL);
+        return;
+      }
+      clearTicketAttachmentUrls();
+      hydrated.objectUrls.forEach((url) => ticketAttachmentUrlsRef.current.add(url));
+      setSelectedTicket(hydrated.ticket);
+    } catch (requestError: unknown) {
+      if (!controller.signal.aborted && supportIdentityIsCurrent()) {
+        setError(supportSessionErrorMessage(requestError, 'Не удалось загрузить обращение.'));
+      }
+    } finally {
+      finishSupportRequest('detail', controller);
+    }
+  }, [beginSupportRequest, clearTicketAttachmentUrls, finishSupportRequest, prepareCurrentSupportSession, supportIdentityIsCurrent]);
 
   React.useEffect(() => {
     void loadMyTickets(false);
@@ -301,21 +431,34 @@ export default function SupportScreen({ currentUser }: Props) {
 
   React.useEffect(() => {
     if (!selectedTicketId) {
+      requestsRef.current.detail?.abort();
+      clearTicketAttachmentUrls();
       setSelectedTicket(null);
       return;
     }
+    clearTicketAttachmentUrls();
+    setSelectedTicket(null);
     void loadMyTicketDetail(selectedTicketId);
-  }, [loadMyTicketDetail, selectedTicketId]);
+  }, [clearTicketAttachmentUrls, loadMyTicketDetail, selectedTicketId]);
 
   React.useEffect(() => {
     return () => {
+      componentControllerRef.current.abort();
+      for (const kind of ['tickets', 'detail', 'submit', 'reply'] as const) requestsRef.current[kind]?.abort();
       if (timerRef.current) window.clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      previewUrlsRef.current.clear();
+      ticketAttachmentUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      ticketAttachmentUrlsRef.current.clear();
     };
   }, []);
 
   const resetVoice = React.useCallback(() => {
-    setVoiceAttachment(null);
+    setVoiceAttachment((previous) => {
+      if (previous?.previewUrl) revokePreviewUrl(previous.previewUrl);
+      return null;
+    });
     setVoiceSeconds(0);
     setVoiceRecording(false);
     if (timerRef.current) {
@@ -326,9 +469,10 @@ export default function SupportScreen({ currentUser }: Props) {
     streamRef.current = null;
     mediaRecorderRef.current = null;
     chunksRef.current = [];
-  }, []);
+  }, [revokePreviewUrl]);
 
   const startVoiceRecording = React.useCallback(async () => {
+    const lifecycleSignal = componentControllerRef.current.signal;
     setError(null);
     setSuccess(null);
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -337,6 +481,10 @@ export default function SupportScreen({ currentUser }: Props) {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (lifecycleSignal.aborted) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const candidates = [
         'audio/webm;codecs=opus',
@@ -350,12 +498,13 @@ export default function SupportScreen({ currentUser }: Props) {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
+        if (lifecycleSignal.aborted) return;
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
         const file = new File([blob], `fitfocus-voice-${Date.now()}.${ext}`, { type: blob.type || 'audio/webm', lastModified: Date.now() });
-        const previewUrl = URL.createObjectURL(blob);
+        const previewUrl = createPreviewUrl(blob);
         setVoiceAttachment((prev) => {
-          if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+          if (prev?.previewUrl) revokePreviewUrl(prev.previewUrl);
           return { file, kind: 'audio', previewUrl };
         });
       };
@@ -365,10 +514,12 @@ export default function SupportScreen({ currentUser }: Props) {
       setVoiceSeconds(0);
       timerRef.current = window.setInterval(() => setVoiceSeconds((prev) => prev + 1), 1000);
     } catch (e: unknown) {
-      setError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Нужно разрешить доступ к микрофону.' : 'Не удалось начать запись голоса.');
-      resetVoice();
+      if (!lifecycleSignal.aborted) {
+        setError(e instanceof DOMException && e.name === 'NotAllowedError' ? 'Нужно разрешить доступ к микрофону.' : 'Не удалось начать запись голоса.');
+        resetVoice();
+      }
     }
-  }, [resetVoice]);
+  }, [createPreviewUrl, resetVoice, revokePreviewUrl]);
 
   const stopVoiceRecording = React.useCallback(() => {
     const recorder = mediaRecorderRef.current;
@@ -388,6 +539,7 @@ export default function SupportScreen({ currentUser }: Props) {
   }, [resetVoice]);
 
   const addFiles = React.useCallback(async (files: FileList | File[]) => {
+    const lifecycleSignal = componentControllerRef.current.signal;
     setError(null);
     setSuccess(null);
     const picked = Array.from(files);
@@ -397,62 +549,59 @@ export default function SupportScreen({ currentUser }: Props) {
       return;
     }
 
-    const next: AttachmentDraft[] = [];
+    const preparedFiles: Array<{ file: File; kind: AttachmentDraft['kind'] }> = [];
     for (const file of picked) {
       if (file.size > 2 * 1024 * 1024) {
         setError(`Файл "${file.name}" слишком большой. Для теста лучше до 2 MB.`);
         return;
       }
       const prepared = await compressImageAttachment(file);
-      const kind = fileKind(prepared);
-      next.push({
-        file: prepared,
-        kind,
-        previewUrl: URL.createObjectURL(prepared),
-      });
+      if (lifecycleSignal.aborted) return;
+      preparedFiles.push({ file: prepared, kind: fileKind(prepared) });
     }
-
+    if (lifecycleSignal.aborted) return;
+    const next = preparedFiles.map(({ file, kind }) => ({ file, kind, previewUrl: createPreviewUrl(file) }));
     setAttachments((prev) => [...prev, ...next]);
-  }, [attachments.length, voiceAttachment]);
+  }, [attachments.length, createPreviewUrl, voiceAttachment]);
 
   const removeAttachment = React.useCallback((index: number) => {
     setAttachments((prev) => {
       const item = prev[index];
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      if (item?.previewUrl) revokePreviewUrl(item.previewUrl);
       return prev.filter((_, i) => i !== index);
     });
-  }, []);
+  }, [revokePreviewUrl]);
 
   const addReplyFiles = React.useCallback(async (files: FileList | File[]) => {
+    const lifecycleSignal = componentControllerRef.current.signal;
     const picked = Array.from(files);
     if (picked.length === 0) return;
     if (replyAttachments.length + picked.length > 3) {
       setError('К ответу можно прикрепить не больше 3 файлов.');
       return;
     }
-    const next: AttachmentDraft[] = [];
+    const preparedFiles: Array<{ file: File; kind: AttachmentDraft['kind'] }> = [];
     for (const file of picked) {
       if (file.size > 2 * 1024 * 1024) {
         setError(`Файл "${file.name}" слишком большой. Для теста лучше до 2 MB.`);
         return;
       }
       const prepared = await compressImageAttachment(file);
-      next.push({
-        file: prepared,
-        kind: fileKind(prepared),
-        previewUrl: URL.createObjectURL(prepared),
-      });
+      if (lifecycleSignal.aborted) return;
+      preparedFiles.push({ file: prepared, kind: fileKind(prepared) });
     }
+    if (lifecycleSignal.aborted) return;
+    const next = preparedFiles.map(({ file, kind }) => ({ file, kind, previewUrl: createPreviewUrl(file) }));
     setReplyAttachments((prev) => [...prev, ...next]);
-  }, [replyAttachments.length]);
+  }, [createPreviewUrl, replyAttachments.length]);
 
   const removeReplyAttachment = React.useCallback((index: number) => {
     setReplyAttachments((prev) => {
       const item = prev[index];
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      if (item?.previewUrl) revokePreviewUrl(item.previewUrl);
       return prev.filter((_, i) => i !== index);
     });
-  }, []);
+  }, [revokePreviewUrl]);
 
   const onSubmit = React.useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
@@ -483,8 +632,10 @@ export default function SupportScreen({ currentUser }: Props) {
       return;
     }
 
+    const controller = beginSupportRequest('submit');
     setSending(true);
     try {
+      const session = await prepareCurrentSupportSession(controller);
       const form = new FormData();
       form.set('category', category);
       form.set('section', section);
@@ -496,19 +647,14 @@ export default function SupportScreen({ currentUser }: Props) {
       form.set('contact', contact.trim());
       form.set('app_version', BUILD_SHORT_LABEL);
       form.set('system_context', buildSupportSystemContext());
-      fileList.forEach((item) => {
-        form.append('attachments', item.file, item.file.name);
-      });
+      fileList.forEach((item) => form.append('attachments', item.file, item.file.name));
 
-      const response = await fetch('/api/support/feedback', {
+      const { response, body } = await requestSupportJson(session, '/api/support/feedback', {
         method: 'POST',
-        credentials: 'include',
         body: form,
       });
-      const json: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(supportSubmitErrorMessage(response.status, json));
-      }
+      if (!response.ok) throw new Error(supportSubmitErrorMessage(response.status, body));
+      if (controller.signal.aborted || !supportIdentityIsCurrent()) return;
 
       setSuccess('Обращение отправлено. Оно появится в админке и будет доступно для проверки.');
       setCategory('Ошибка');
@@ -519,18 +665,22 @@ export default function SupportScreen({ currentUser }: Props) {
       setDevice(detectDeviceLabel());
       setBrowser(detectBrowserLabel());
       setContact(currentUser?.email || '');
-      attachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+      attachments.forEach((item) => item.previewUrl && revokePreviewUrl(item.previewUrl));
       setAttachments([]);
-      if (voiceAttachment?.previewUrl) URL.revokeObjectURL(voiceAttachment.previewUrl);
+      if (voiceAttachment?.previewUrl) revokePreviewUrl(voiceAttachment.previewUrl);
       setVoiceAttachment(null);
       setVoiceSeconds(0);
       await loadMyTickets(false);
     } catch (e: unknown) {
-      setError(errorMessage(e, 'Не удалось отправить обращение. Проверьте обязательные поля и попробуйте ещё раз.'));
+      if (!controller.signal.aborted && supportIdentityIsCurrent()) {
+        setError(supportSessionErrorMessage(e, 'Не удалось отправить обращение. Проверьте обязательные поля и попробуйте ещё раз.'));
+      }
     } finally {
-      setSending(false);
+      if (requestsRef.current.submit === controller) setSending(false);
+      finishSupportRequest('submit', controller);
     }
-  }, [attachments, browser, category, contact, currentUser?.email, device, loadMyTickets, message, section, steps, subject, voiceAttachment]);
+  }, [attachments, beginSupportRequest, browser, category, contact, currentUser?.email, device, finishSupportRequest,
+    loadMyTickets, message, prepareCurrentSupportSession, revokePreviewUrl, section, steps, subject, supportIdentityIsCurrent, voiceAttachment]);
 
   const submitReply = React.useCallback(async () => {
     if (!selectedTicketId) return;
@@ -538,33 +688,36 @@ export default function SupportScreen({ currentUser }: Props) {
       setError('Добавьте текст ответа или файл.');
       return;
     }
+    const controller = beginSupportRequest('reply');
     setReplySending(true);
     setError(null);
     try {
+      const session = await prepareCurrentSupportSession(controller);
       const form = new FormData();
       form.set('ticket_id', selectedTicketId);
       form.set('message', replyMessage.trim());
       replyAttachments.forEach((item) => form.append('attachments', item.file, item.file.name));
-      const response = await fetch('/api/support/feedback/my', {
+      const { response, body } = await requestSupportJson(session, '/api/support/feedback/my', {
         method: 'POST',
-        credentials: 'include',
         body: form,
       });
-      const json: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(supportReplyErrorMessage(response.status, json));
-      }
-      setSelectedTicket(isRecord(json) && isSupportTicket(json.ticket) ? json.ticket : null);
+      if (!response.ok) throw new Error(supportReplyErrorMessage(response.status, body));
+      if (controller.signal.aborted || selectedTicketIdRef.current !== selectedTicketId || !supportIdentityIsCurrent()) return;
       setReplyMessage('');
-      replyAttachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+      replyAttachments.forEach((item) => item.previewUrl && revokePreviewUrl(item.previewUrl));
       setReplyAttachments([]);
+      await loadMyTicketDetail(selectedTicketId);
       await loadMyTickets();
     } catch (e: unknown) {
-      setError(errorMessage(e, 'Не удалось отправить ответ. Проверьте поля и попробуйте ещё раз.'));
+      if (!controller.signal.aborted && supportIdentityIsCurrent()) {
+        setError(supportSessionErrorMessage(e, 'Не удалось отправить ответ. Проверьте поля и попробуйте ещё раз.'));
+      }
     } finally {
-      setReplySending(false);
+      if (requestsRef.current.reply === controller) setReplySending(false);
+      finishSupportRequest('reply', controller);
     }
-  }, [loadMyTickets, replyAttachments, replyMessage, selectedTicketId]);
+  }, [beginSupportRequest, finishSupportRequest, loadMyTicketDetail, loadMyTickets, prepareCurrentSupportSession, replyAttachments,
+    replyMessage, revokePreviewUrl, selectedTicketId, supportIdentityIsCurrent]);
 
   const audioPreview = voiceAttachment?.previewUrl || null;
 
@@ -738,7 +891,7 @@ export default function SupportScreen({ currentUser }: Props) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (voiceAttachment.previewUrl) URL.revokeObjectURL(voiceAttachment.previewUrl);
+                      if (voiceAttachment.previewUrl) revokePreviewUrl(voiceAttachment.previewUrl);
                       resetVoice();
                     }}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2 text-slate-200 font-bold"

@@ -6,10 +6,14 @@
  * поэтому мы просто ничего не делаем.
  */
 import { isRecord } from './safeJson';
+import { registerPwaUpdates } from './services/pwaRegistration';
+import { respondToLegacyWriterFence } from './storage/legacyWriterFence';
+import { assertPushSession, prepareActivePushSession, requestPushJson } from './services/pushSession';
 
 let pwaInitPromise: Promise<void> | null = null;
 let pushRecoveryListenerInstalled = false;
 let pushRecoveryInFlight: Promise<void> | null = null;
+let legacyWriterFenceListenerInstalled = false;
 
 export function ensurePWAStarted() {
   if (!pwaInitPromise) {
@@ -31,20 +35,19 @@ async function recoverPushSubscription(): Promise<void> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  const statusResponse = await fetch('/api/push/status', {
-    credentials: 'include',
-    cache: 'no-store',
+  const session = await prepareActivePushSession();
+  if (!session) return;
+  const { response: statusResponse, body: statusRecord } = await requestPushJson(session, '/api/push/status', {
     headers: { Accept: 'application/json' },
   });
-  if (!statusResponse.ok) return;
-  const status: unknown = await statusResponse.json().catch(() => null);
-  if (!isRecord(status)) return;
-  const statusRecord = status;
+  if (!statusResponse.ok || !isRecord(statusRecord)) return;
   const publicKey = typeof statusRecord.vapid_public_key === 'string' ? statusRecord.vapid_public_key.trim() : '';
   if (!publicKey || statusRecord.configured !== true) return;
 
   const registration = await navigator.serviceWorker.ready;
+  await assertPushSession(session);
   let subscription = await registration.pushManager.getSubscription();
+  await assertPushSession(session);
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -52,9 +55,9 @@ async function recoverPushSubscription(): Promise<void> {
     });
   }
 
-  await fetch('/api/push/subscribe', {
+  await assertPushSession(session);
+  await requestPushJson(session, '/api/push/subscribe', {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ subscription: subscription.toJSON() }),
   });
@@ -76,11 +79,20 @@ export function installPushSubscriptionRecovery(): void {
   });
 }
 
+function installLegacyWriterFenceResponder(): void {
+  if (legacyWriterFenceListenerInstalled || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  legacyWriterFenceListenerInstalled = true;
+  navigator.serviceWorker.addEventListener('message', (event: MessageEvent<unknown>) => {
+    respondToLegacyWriterFence(event, __FITFOCUS_BUILD_ID__);
+  });
+}
+
 async function initPWA() {
   const env = import.meta.env;
   if (!env) return;
 
   installPushSubscriptionRecovery();
+  installLegacyWriterFenceResponder();
 
   try {
     const storedBuildId = localStorage.getItem('fitfocus.build.id');
@@ -99,31 +111,9 @@ async function initPWA() {
   } catch {}
 
   try {
-    const mod = await import('virtual:pwa-register');
-    type RegisterSw = (options: {
-      immediate: boolean;
-      onNeedRefresh: () => void;
-      onRegisteredSW: (swScriptUrl: string, registration?: ServiceWorkerRegistration) => void;
-      onRegisterError: (error: unknown) => void;
-    }) => (reloadPage?: boolean) => Promise<void>;
-    const registerSW = mod.registerSW as RegisterSw;
-    let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
-    updateSW = registerSW({
-      immediate: true,
-      onNeedRefresh() {
-        void updateSW?.(true);
-      },
-      onRegisteredSW(_swScriptUrl: string, registration?: ServiceWorkerRegistration) {
-        // Показываем новую сборку при следующем обновлении, не оставляя старые чанки висеть.
-        if (registration) {
-          void registration.update?.();
-        }
-      },
-      onRegisterError(error: unknown) {
-        console.error('SW registration error', error);
-      },
-    });
-
+    if (!env.PROD || !('serviceWorker' in navigator)) return;
+    const scriptURL = new URL('sw.js', new URL(env.BASE_URL, window.location.href)).href;
+    await registerPwaUpdates(navigator.serviceWorker, scriptURL, () => window.location.reload());
   } catch (e) {
     // В dev-среде без плагина или при проблемах с билдом — не валим приложение.
     console.warn('PWA registration skipped:', e);

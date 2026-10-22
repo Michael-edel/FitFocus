@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { base64UrlEncode, signState, verifyState } from '../functions/api/auth/_oauth';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { base64UrlEncode, fetchOAuthProvider, signState, verifyState } from '../functions/api/auth/_oauth';
 
 const SECRET = 'unit-test-secret';
 const NOW_MS = 1_700_000_000_000;
@@ -25,5 +25,30 @@ describe('verifyState', () => {
     await expect(verifyState(`${state.slice(0, -1)}x`, SECRET, { expectedNonce: 'nonce-1', nowMs: NOW_MS })).resolves.toBeNull();
     await expect(verifyState('not-base64.signature', SECRET, { expectedNonce: 'nonce-1', nowMs: NOW_MS })).resolves.toBeNull();
     await expect(verifyState(`${state}.extra`, SECRET, { expectedNonce: 'nonce-1', nowMs: NOW_MS })).resolves.toBeNull();
+  });
+
+  it('rejects a signed state when the expected nonce cookie is missing', async () => {
+    const state = await makeState({ r: '/dashboard' });
+
+    await expect(verifyState(state, SECRET, { expectedNonce: null, nowMs: NOW_MS })).resolves.toBeNull();
+  });
+});
+
+
+describe('fetchOAuthProvider', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('aborts a stalled provider request after the bounded timeout', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    })));
+    const pending = fetchOAuthProvider('https://provider.test/token');
+    const outcome = pending.then(() => 'resolved', (error: Error) => error.message);
+    await vi.advanceTimersByTimeAsync(12_000);
+    await expect(outcome).resolves.toBe('aborted');
   });
 });

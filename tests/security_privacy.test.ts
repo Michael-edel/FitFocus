@@ -42,7 +42,10 @@ describe('security and privacy baseline', () => {
   });
 
   it('does not export push subscription credentials or broad support rows', () => {
-    const exportRoute = read('functions/api/export.ts');
+    const exportRoute = [
+      read('functions/api/export.ts'),
+      read('functions/api/_lib/user_data_export.ts'),
+    ].join('\n');
 
     expect(exportRoute).toContain('FROM push_subscriptions');
     expect(exportRoute).not.toContain('endpoint, p256dh, auth');
@@ -58,9 +61,9 @@ describe('security and privacy baseline', () => {
   });
 
   it('does not return upstream OAuth error details to clients', () => {
-    const googleAuth = read('functions/api/auth/google.ts');
-    const googleCallback = read('functions/api/auth/google/callback.ts');
-    const appleCallback = read('functions/api/auth/apple/callback.ts');
+    const googleAuth = [read('functions/api/auth/google.ts'), read('functions/api/_lib/google_identity_handler.ts')].join('\\n');
+    const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
+    const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
 
     expect(googleAuth).not.toContain('details:');
     expect(googleAuth).not.toContain('aud: info.aud');
@@ -76,15 +79,15 @@ describe('security and privacy baseline', () => {
     const huaweiStart = read('functions/api/wearable/huawei/start.ts');
     const checkout = read('functions/api/billing/checkout.ts');
     const webhook = read('functions/api/billing/webhook.ts');
-    const supportAdmin = read('functions/api/support/feedback.ts');
-    const supportMy = read('functions/api/support/feedback/my.ts');
-    const googleStart = read('functions/api/auth/google/start.ts');
-    const googleCallback = read('functions/api/auth/google/callback.ts');
-    const googleAuth = read('functions/api/auth/google.ts');
-    const appleStart = read('functions/api/auth/apple/start.ts');
-    const appleCallback = read('functions/api/auth/apple/callback.ts');
+    const supportAdmin = [read('functions/api/support/feedback.ts'), read('functions/api/_lib/support_feedback_handler.ts')].join('\\n');
+    const supportMy = [read('functions/api/support/feedback/my.ts'), read('functions/api/_lib/support_feedback_my_handler.ts')].join('\\n');
+    const googleStart = [read('functions/api/auth/google/start.ts'), read('functions/api/auth/_oauth_start.ts')].join('\\n');
+    const googleCallback = [read('functions/api/auth/google/callback.ts'), read('functions/api/_lib/google_oauth_callback.ts')].join('\\n');
+    const googleAuth = [read('functions/api/auth/google.ts'), read('functions/api/_lib/google_identity_handler.ts')].join('\\n');
+    const appleStart = [read('functions/api/auth/apple/start.ts'), read('functions/api/auth/_oauth_start.ts')].join('\\n');
+    const appleCallback = [read('functions/api/auth/apple/callback.ts'), read('functions/api/_lib/apple_oauth_callback.ts')].join('\\n');
     const authLib = read('functions/api/_lib/auth.ts');
-    const aiRoute = read('functions/api/ai.ts');
+    const aiRoute = [read('functions/api/ai.ts'), read('functions/api/_lib/ai_request_handler.ts')].join('\\n');
     const logoutAll = read('functions/api/logout_all.ts');
     const accountDelete = read('functions/api/account/delete.ts');
     const accountDeleteLib = read('functions/api/_lib/account_delete.ts');

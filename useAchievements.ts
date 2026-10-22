@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AchievementDefinition } from './achievements/catalog';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AchievementEvaluationContext } from './achievements/engine';
-import { isRecord, parseJson, responseErrorMessage } from './safeJson';
+import { AchievementClient, emptyAchievements } from './features/achievements/achievementClient';
+import type { OutboxReadGuard } from './storage/durableOutbox';
 
 export type UnlockedAchievement = {
   key: string;
@@ -31,257 +31,43 @@ export type AchievementCheckReason =
 type UseAchievementsParams = {
   userId?: string | null;
   getContext?: () => AchievementEvaluationContext;
+  isCurrentSession: () => boolean;
+  loginGuard: OutboxReadGuard | null;
 };
 
-const COUNTER_PREFIX = 'fitfocus.achievements.counters.v1:';
-const CHECK_THROTTLE_MS = 500;
-const MAX_PENDING_CHECKS = 5;
-
-type PendingAchievementCheck = {
-  reason: AchievementCheckReason;
-  contextPatch: AchievementEvaluationContext;
-  resolvers: Array<(value: AchievementDefinition[]) => void>;
-};
-
-function isAchievementDefinition(value: unknown): value is AchievementDefinition {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.key === 'string' &&
-    typeof value.tier === 'string' &&
-    typeof value.category === 'string' &&
-    typeof value.title === 'string' &&
-    typeof value.description === 'string'
-  );
-}
-
-function toUnlockedAchievement(value: unknown): UnlockedAchievement | null {
-  if (!isRecord(value) || typeof value.key !== 'string') return null;
-  const unlockedAt = Number(value.unlocked_at);
-  if (!Number.isFinite(unlockedAt)) return null;
-  return {
-    key: value.key,
-    unlocked_at: unlockedAt,
-    tier: typeof value.tier === 'string' ? value.tier : '',
-    source: typeof value.source === 'string' ? value.source : null,
-    created_at: Number.isFinite(Number(value.created_at)) ? Number(value.created_at) : undefined,
-  };
-}
-
-function readCounters(userId: string): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(`${COUNTER_PREFIX}${userId}`);
-    const parsed = raw ? parseJson(raw) : null;
-    if (!isRecord(parsed)) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
-    ) as Record<string, number>;
-  } catch {
-    return {};
-  }
-}
-
-function writeCounters(userId: string, counters: Record<string, number>) {
-  try {
-    localStorage.setItem(`${COUNTER_PREFIX}${userId}`, JSON.stringify(counters));
-  } catch {
-    // best effort only
-  }
-}
-
-function incrementCounter(userId: string, key: string): number {
-  const counters = readCounters(userId);
-  const next = Number(counters[key] || 0) + 1;
-  counters[key] = next;
-  writeCounters(userId, counters);
-  return next;
-}
-
-export function useAchievements({ userId, getContext }: UseAchievementsParams) {
-  const [enabled, setEnabled] = useState(true);
-  const [catalog, setCatalog] = useState<AchievementDefinition[]>([]);
-  const [unlocked, setUnlocked] = useState<UnlockedAchievement[]>([]);
-  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementDefinition[]>([]);
-  const [loading, setLoading] = useState(false);
-  const lastCheckAtRef = useRef(0);
-  const throttledTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingChecksRef = useRef<PendingAchievementCheck[]>([]);
-
-  const unlockedKeys = useMemo(() => new Set(unlocked.map((item) => item.key)), [unlocked]);
-
-  const loadAchievements = useCallback(async () => {
-    if (!userId) {
-      setEnabled(true);
-      setCatalog([]);
-      setUnlocked([]);
-      setNewlyUnlocked([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch('/api/achievements', { credentials: 'include' });
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(responseErrorMessage(data, 'ACHIEVEMENTS_LOAD_FAILED'));
-      const nextEnabled = !isRecord(data) || data.enabled !== false;
-      setEnabled(nextEnabled);
-      if (!nextEnabled) {
-        setCatalog([]);
-        setUnlocked([]);
-        setNewlyUnlocked([]);
-        return;
-      }
-      setCatalog(isRecord(data) && Array.isArray(data.catalog) ? data.catalog.filter(isAchievementDefinition) : []);
-      setUnlocked(isRecord(data) && Array.isArray(data.unlocked) ? data.unlocked.map(toUnlockedAchievement).filter((item): item is UnlockedAchievement => item !== null) : []);
-    } catch {
-      setEnabled(true);
-      setCatalog([]);
-      setUnlocked([]);
-      setNewlyUnlocked([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void loadAchievements();
-  }, [loadAchievements]);
-
-  useEffect(() => {
-    return () => {
-      if (throttledTimerRef.current) {
-        clearTimeout(throttledTimerRef.current);
-      }
-      if (pendingChecksRef.current.length) {
-        for (const pending of pendingChecksRef.current) {
-          for (const resolve of pending.resolvers) resolve([]);
-        }
-        pendingChecksRef.current = [];
-      }
-    };
-  }, []);
-
-  const runAchievementCheck = useCallback(async (reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
-    if (!userId || !enabled) return [];
-    const baseContext = getContext?.() || {};
-    const countersPatch: AchievementEvaluationContext = {};
-    if (reason === 'ai_photo_success') {
-      countersPatch.aiPhotoCount = incrementCounter(userId, 'aiPhotoCount');
-      countersPatch.hasAiPhoto = true;
-    }
-    if (reason === 'wis_share_success') {
-      countersPatch.wisShareCount = incrementCounter(userId, 'wisShareCount');
-    }
-    if (reason === 'pdf_report_generated') {
-      countersPatch.pdfReportCount = incrementCounter(userId, 'pdfReportCount');
-    }
-    const context: AchievementEvaluationContext = {
-      ...baseContext,
-      ...countersPatch,
-      ...contextPatch,
-      source: reason,
-    };
-
-    try {
-      const res = await fetch('/api/achievements/check', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context }),
-      });
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok) return [];
-      if (isRecord(data) && data.enabled === false) {
-        setEnabled(false);
-        setCatalog([]);
-        setUnlocked([]);
-        setNewlyUnlocked([]);
-        return [];
-      }
-      const nextCatalog = isRecord(data) && Array.isArray(data.catalog)
-        ? data.catalog.filter(isAchievementDefinition)
-        : catalog;
-      const rawNewlyUnlocked = isRecord(data) && Array.isArray(data.newlyUnlocked) ? data.newlyUnlocked : [];
-      const nextUnlocked = rawNewlyUnlocked
-        .map((item) => toUnlockedAchievement(item))
-        .filter((item): item is UnlockedAchievement => item !== null);
-      const nextDefinitions = rawNewlyUnlocked.filter(isAchievementDefinition);
-      setCatalog(nextCatalog);
-      if (nextUnlocked.length) {
-        setUnlocked((prev) => {
-          const seen = new Set(prev.map((item) => item.key));
-          const additions = nextUnlocked
-            .filter((item) => !seen.has(item.key));
-          return [...additions, ...prev];
-        });
-        setNewlyUnlocked((prev) => [...prev, ...nextDefinitions]);
-      }
-      return nextDefinitions;
-    } catch {
-      return [];
-    }
-  }, [catalog, enabled, getContext, userId]);
-
-  const flushPendingChecks = useCallback(async () => {
-    throttledTimerRef.current = null;
-    const queue = pendingChecksRef.current.splice(0, pendingChecksRef.current.length);
-    if (!queue.length) return;
-    lastCheckAtRef.current = Date.now();
-    for (const pending of queue) {
-      try {
-        const result = await runAchievementCheck(pending.reason, pending.contextPatch);
-        for (const resolve of pending.resolvers) resolve(result);
-      } catch {
-        for (const resolve of pending.resolvers) resolve([]);
-      }
-    }
-  }, [runAchievementCheck]);
-
-  const checkAchievements = useCallback((reason: AchievementCheckReason, contextPatch: AchievementEvaluationContext = {}) => {
-    if (!userId || !enabled) return Promise.resolve([]);
-    const now = Date.now();
-    const elapsed = now - lastCheckAtRef.current;
-    if (elapsed >= CHECK_THROTTLE_MS && !throttledTimerRef.current) {
-      lastCheckAtRef.current = now;
-      return runAchievementCheck(reason, contextPatch);
-    }
-
-    return new Promise<AchievementDefinition[]>((resolve) => {
-      const queue = pendingChecksRef.current;
-      const existing = queue.find((item) => item.reason === reason);
-      if (existing) {
-        existing.contextPatch = contextPatch;
-        existing.resolvers.push(resolve);
-      } else {
-        if (queue.length >= MAX_PENDING_CHECKS) {
-          const dropped = queue.shift();
-          if (dropped) {
-            for (const droppedResolve of dropped.resolvers) droppedResolve([]);
-          }
-        }
-        queue.push({ reason, contextPatch, resolvers: [resolve] });
-      }
-
-      if (!throttledTimerRef.current) {
-        const delay = Math.max(0, CHECK_THROTTLE_MS - elapsed);
-        throttledTimerRef.current = setTimeout(() => {
-          void flushPendingChecks();
-        }, delay);
-      }
+export function useAchievements({ userId, getContext, isCurrentSession, loginGuard }: UseAchievementsParams) {
+  const contextRef = useRef(getContext); contextRef.current = getContext;
+  const [pageLifetime, setPageLifetime] = useState(0);
+  const [status, setStatus] = useState<{ client: AchievementClient | null; value: ReturnType<typeof emptyAchievements> }>(() => ({ client: null, value: emptyAchievements() }));
+  const client = useMemo(() => {
+    if (!userId || loginGuard?.accountId !== userId) return null;
+    const owner: AchievementClient = new AchievementClient({
+      accountId: userId, loginGuard, isCurrentSession,
+      getContext: () => contextRef.current?.() ?? {},
+      onChange: value => setStatus({ client: owner, value }),
     });
-  }, [enabled, flushPendingChecks, runAchievementCheck, userId]);
+    return owner;
+  }, [userId, isCurrentSession, loginGuard, pageLifetime]);
 
-  const dismissAchievementToast = useCallback(() => {
-    setNewlyUnlocked((prev) => prev.slice(1));
-  }, []);
+  useLayoutEffect(() => {
+    client?.activate(); void client?.load();
+    const hide = () => client?.invalidate();
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted && isCurrentSession()) setPageLifetime(previous => previous + 1);
+    };
+    window.addEventListener('pagehide', hide); window.addEventListener('pageshow', show);
+    return () => {
+      client?.invalidate(); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', show);
+    };
+  }, [client, isCurrentSession]);
 
-  return {
-    enabled,
-    catalog,
-    unlocked,
-    unlockedKeys,
-    newlyUnlocked,
-    loading,
-    loadAchievements,
-    checkAchievements,
-    dismissAchievementToast,
-  };
+  const value = status.client === client ? status.value : emptyAchievements();
+  const unlockedKeys = useMemo(() => new Set(value.unlocked.map(item => item.key)), [value.unlocked]);
+  // Capture this exact client; an old producer cannot address the next login's queue through a ref.
+  const loadAchievements = useCallback(() => client?.load() ?? Promise.resolve(), [client]);
+  const checkAchievements = useCallback((reason: AchievementCheckReason, patch: AchievementEvaluationContext = {}) =>
+    client?.check(reason, patch) ?? Promise.resolve([]), [client]);
+  const dismissAchievementToast = useCallback(() => client?.dismissToast(), [client]);
+
+  return { ...value, unlockedKeys, loadAchievements, checkAchievements, dismissAchievementToast };
 }

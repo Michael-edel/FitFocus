@@ -1,7 +1,9 @@
 import { STORAGE_KEYS } from "./keys";
 import { isRecord, parseJson } from '../safeJson';
+import { clearIndexedUserStateForUser } from './indexedUserState';
+import { legacyRecordMayBelongToAccount } from './legacyQueue';
+import { USER_STATE_KEYS } from './userStateRepository';
 
-type KVItem = { key: string; value: string; baseVersion?: number };
 type ProfileLike = {
   id: string;
   googleSub?: string;
@@ -22,32 +24,7 @@ function isProfileLike(value: unknown): value is ProfileLike {
   return isRecord(value) && typeof value.id === 'string' && value.id.trim().length > 0;
 }
 
-type RemoteStateItem = {
-  key: string;
-  value: string;
-  version?: number;
-};
-
-type PendingRemoteKVOperation =
-  | { type: 'put'; key: string; value: string; baseVersion?: number; retryCount?: number }
-  | { type: 'delete'; key: string; baseVersion?: number; retryCount?: number };
-
-const REMOTE_STATE_PREFIXES = [
-  STORAGE_KEYS.dataPrefix,
-  "ff_gemini_cooldown_until",
-  "ff_ai_last_status_v1",
-  "ff_ai_last_action_v1",
-  "ff_ai_feature_lastcall_v1:",
-];
-
-const __pendingRemoteKVOperations = new Map<string, PendingRemoteKVOperation>();
-let __remoteKVTimer: number | null = null;
-let __remoteKVSyncing = false;
-let __remoteAuthBlockedUntil = 0;
-const REMOTE_AUTH_BACKOFF_MS = 30_000;
-const REMOTE_SYNC_DELAY_MS = 400;
-const REMOTE_SYNC_RETRY_DELAY_MS = 2_000;
-const MAX_REMOTE_SYNC_RETRIES = 3;
+export const REMOTE_KV_OUTBOX_STORAGE_KEY = 'fitfocus.remote-kv-outbox.v1';
 
 const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.nutrition.selected-day.v1:',
@@ -66,41 +43,114 @@ const USER_SCOPED_KEY_PREFIXES = [
   'fitfocus.achievements.counters.v1:',
 ];
 
+const DATA_KEY_SUFFIXES = [
+  ...USER_STATE_KEYS,
+  'profile',
+  'all_users',
+  'sync',
+  'ai_gemini_cooldown_until',
+  'ai_last_status_v1',
+  'ai_last_action_v1',
+].sort((left, right) => right.length - left.length);
+
+const DATA_KEY_DYNAMIC_SUFFIXES = [
+  '_ai_cache_v1:',
+  '_ai_feature_lastcall_v1:',
+  '_family_menu:',
+  '_shopping_fallback_',
+] as const;
+
+const RETIRED_LOCAL_TELEMETRY_KEYS = new Set([
+  'fitfocus.analytics.onboarding.v1',
+  'fitfocus.analytics.wis_share.v1',
+  'fitfocus.analytics.food_streak.v1',
+]);
+const RETIRED_LOCAL_TELEMETRY_PREFIXES = ['fitfocus.analytics.sent.v1:'];
+
+/** Removes unused, unscoped health-event logs written by older builds. */
+export function clearRetiredLocalTelemetry(): number {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && (RETIRED_LOCAL_TELEMETRY_KEYS.has(key)
+        || RETIRED_LOCAL_TELEMETRY_PREFIXES.some((prefix) => key.startsWith(prefix)))) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) localStorage.removeItem(key);
+    return keys.length;
+  } catch {
+    return 0;
+  }
+}
+
 function isLocalUserKey(key: string, userId: string): boolean {
+  // These retired unowned logs can contain health data but have no safe account
+  // mapping. Since the app no longer reads them, purge them during any account deletion.
+  if (RETIRED_LOCAL_TELEMETRY_KEYS.has(key)) return true;
   const dataPrefix = `${STORAGE_KEYS.dataPrefix}${userId}_`;
   if (key.startsWith(dataPrefix)) return true;
-  if (key.startsWith(`ff_last_weekly_ai_attempt_${userId}`)) return true;
-  if (key.startsWith(`ff_weekly_ai_inflight_${userId}`)) return true;
-  if (key.startsWith(`ff_dev_plan_override_scope_${userId}`)) return true;
-  return USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`);
+  if (key === `ff_last_weekly_ai_attempt_${userId}`) return true;
+  if (key === `ff_weekly_ai_inflight_${userId}`) return true;
+  if (key === `ff_dev_plan_override_scope_${userId}`) return true;
+  if (USER_SCOPED_KEY_PREFIXES.some((prefix) => key === `${prefix}${userId}`)) return true;
+  try {
+    return key === `${STORAGE_KEYS.recipeUsagePrefix}${encodeURIComponent(userId)}`;
+  } catch {
+    return false;
+  }
 }
 
-export function shouldMirrorKey(key: string): boolean {
-  if (key.endsWith('__ffv')) return false;
-  if (key.endsWith('_all_users')) return false;
-  return REMOTE_STATE_PREFIXES.some((prefix) => key.startsWith(prefix));
+/** Returns the owner of known account-scoped keys included in portable backups. */
+export function localUserIdFromStorageKey(rawKey: string): string | null {
+  const key = rawKey.endsWith('__ffv') ? rawKey.slice(0, -'__ffv'.length) : rawKey;
+
+  if (key.startsWith(STORAGE_KEYS.dataPrefix)) {
+    const dataKey = key.slice(STORAGE_KEYS.dataPrefix.length);
+    for (const suffix of DATA_KEY_SUFFIXES) {
+      if (dataKey.endsWith(`_${suffix}`)) {
+        const accountId = dataKey.slice(0, -suffix.length - 1);
+        return accountId || null;
+      }
+    }
+    const dynamicSuffixIndex = DATA_KEY_DYNAMIC_SUFFIXES
+      .map((suffix) => dataKey.lastIndexOf(suffix))
+      .reduce((latest, index) => Math.max(latest, index), -1);
+    if (dynamicSuffixIndex > 0) return dataKey.slice(0, dynamicSuffixIndex) || null;
+    return null;
+  }
+
+  for (const prefix of USER_SCOPED_KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length) || null;
+  }
+
+  for (const prefix of [
+    'ff_last_weekly_ai_attempt_',
+    'ff_weekly_ai_inflight_',
+    'ff_dev_plan_override_scope_',
+  ]) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length) || null;
+  }
+
+  if (key.startsWith(STORAGE_KEYS.recipeUsagePrefix)) {
+    try { return decodeURIComponent(key.slice(STORAGE_KEYS.recipeUsagePrefix.length)) || null; }
+    catch { return null; }
+  }
+
+  return null;
 }
 
-function isRemoteAuthBlocked(): boolean {
-  return Date.now() < __remoteAuthBlockedUntil;
-}
+/** Automatic mirroring is retired; all synchronized edits require an explicit account editor. */
+export function shouldMirrorKey(_key: string): boolean { return false; }
 
-function blockRemoteSyncAfterAuthFailure() {
-  __remoteAuthBlockedUntil = Date.now() + REMOTE_AUTH_BACKOFF_MS;
+function requireLocalOnlyKey(key: string): void {
+  if (key.startsWith(STORAGE_KEYS.dataPrefix) && !key.endsWith('_all_users')) throw new Error('OWNED_STATE_REPOSITORY_REQUIRED');
+  if (key === REMOTE_KV_OUTBOX_STORAGE_KEY) throw new Error('LEGACY_SOURCE_READ_ONLY');
 }
 
 function versionMetaKey(key: string) {
   return `${key}__ffv`;
-}
-
-function getStoredVersion(key: string): number | undefined {
-  try {
-    const raw = localStorage.getItem(versionMetaKey(key));
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function setStoredVersion(key: string, version?: number) {
@@ -115,158 +165,10 @@ function setStoredVersion(key: string, version?: number) {
   }
 }
 
-async function applyRemoteKVConflict(key: string, serverValue: string, version?: number) {
-  try {
-    localStorage.setItem(key, serverValue);
-    setStoredVersion(key, version);
-  } catch {
-    // ignore
-  }
-}
-
-function isRemoteStateItem(value: unknown): value is RemoteStateItem {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Record<string, unknown>;
-  if (typeof candidate.key !== "string") return false;
-  if (typeof candidate.value !== "string") return false;
-  if ("version" in candidate && candidate.version !== undefined && typeof candidate.version !== "number") {
-    return false;
-  }
-  return true;
-}
-
-function scheduleRemoteKVSync(delay = REMOTE_SYNC_DELAY_MS): void {
-  if (__remoteKVTimer != null || __remoteKVSyncing) return;
-  __remoteKVTimer = window.setTimeout(() => {
-    __remoteKVTimer = null;
-    void flushRemoteKVOperations();
-  }, delay);
-}
-
-function requeueAfterTransientFailure(operation: PendingRemoteKVOperation): boolean {
-  if (__pendingRemoteKVOperations.has(operation.key)) return false;
-  const retryCount = (operation.retryCount ?? 0) + 1;
-  if (retryCount > MAX_REMOTE_SYNC_RETRIES) return false;
-  __pendingRemoteKVOperations.set(operation.key, { ...operation, retryCount });
-  return true;
-}
-
-async function flushRemoteKVOperations(): Promise<void> {
-  if (__remoteKVSyncing) return;
-  __remoteKVSyncing = true;
-  let retryPending = false;
-  try {
-    while (__pendingRemoteKVOperations.size > 0 && !retryPending) {
-      const batch = [...__pendingRemoteKVOperations.values()];
-      __pendingRemoteKVOperations.clear();
-
-      for (const operation of batch) {
-        try {
-          if (operation.type === 'put') {
-            const response = await fetch('/api/state', {
-              method: 'PUT',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                key: operation.key,
-                value: operation.value,
-                baseVersion: operation.baseVersion ?? 0,
-              }),
-            });
-            const rawPayload: unknown = await response.json().catch(() => null);
-            const payload = isRecord(rawPayload) ? rawPayload : {};
-            if (response.ok) {
-              const serverItem = Array.isArray(payload?.items)
-                ? payload.items.find((entry: unknown) => isRemoteStateItem(entry) && entry.key === operation.key) ?? null
-                : null;
-              if (typeof serverItem?.version === 'number') {
-                setStoredVersion(operation.key, serverItem.version);
-              }
-              continue;
-            }
-            if (response.status === 401 || response.status === 403) {
-              blockRemoteSyncAfterAuthFailure();
-              return;
-            }
-            if (response.status === 429 || response.status >= 500) {
-              retryPending = requeueAfterTransientFailure(operation) || retryPending;
-              continue;
-            }
-            if (response.status === 409 && payload?.key) {
-              const serverVersion = typeof payload.version === 'number' ? payload.version : undefined;
-              const currentValue = localStorage.getItem(operation.key);
-              if (typeof currentValue === 'string' && currentValue === operation.value && serverVersion) {
-                setStoredVersion(operation.key, serverVersion);
-                continue;
-              }
-              if (typeof payload.value === 'string' && payload.key === operation.key) {
-                await applyRemoteKVConflict(operation.key, payload.value, serverVersion);
-              }
-            }
-            continue;
-          }
-
-          const deleteParams = new URLSearchParams({
-            key: operation.key,
-            baseVersion: String(operation.baseVersion ?? 0),
-          });
-          const response = await fetch(`/api/state?${deleteParams}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          });
-          if (response.status === 401 || response.status === 403) {
-            blockRemoteSyncAfterAuthFailure();
-            return;
-          }
-          if (response.status === 409) {
-            const rawPayload: unknown = await response.json().catch(() => null);
-            const payload = isRecord(rawPayload) ? rawPayload : {};
-            if (typeof payload?.key === 'string' && typeof payload?.value === 'string') {
-              await applyRemoteKVConflict(
-                payload.key,
-                payload.value,
-                typeof payload.version === 'number' ? payload.version : undefined,
-              );
-            }
-            continue;
-          }
-          if (response.status === 429 || response.status >= 500) {
-            retryPending = requeueAfterTransientFailure(operation) || retryPending;
-          }
-        } catch {
-          retryPending = requeueAfterTransientFailure(operation) || retryPending;
-        }
-      }
-    }
-  } finally {
-    __remoteKVSyncing = false;
-    if (__pendingRemoteKVOperations.size > 0) {
-      scheduleRemoteKVSync(retryPending ? REMOTE_SYNC_RETRY_DELAY_MS : REMOTE_SYNC_DELAY_MS);
-    }
-  }
-}
-
-function enqueueRemoteKVWrite(key: string, value: string) {
-  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  __pendingRemoteKVOperations.set(key, {
-    type: 'put',
-    key,
-    value,
-    baseVersion: getStoredVersion(key),
-  });
-  scheduleRemoteKVSync();
-}
-
-function enqueueRemoteKVDelete(key: string, baseVersion?: number) {
-  if (!shouldMirrorKey(key) || isRemoteAuthBlocked()) return;
-  __pendingRemoteKVOperations.set(key, { type: 'delete', key, baseVersion });
-  scheduleRemoteKVSync();
-}
-
 export function safeSetItem(key: string, value: string) {
+  requireLocalOnlyKey(key);
   try {
     localStorage.setItem(key, value);
-    enqueueRemoteKVWrite(key, value);
   } catch (e) {
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
       console.warn('LocalStorage quota exceeded. Consider clearing old data.');
@@ -277,70 +179,118 @@ export function safeSetItem(key: string, value: string) {
 }
 
 export function safeRemoveItem(key: string) {
+  requireLocalOnlyKey(key);
   try {
-    const baseVersion = getStoredVersion(key);
     localStorage.removeItem(key);
     localStorage.removeItem(versionMetaKey(key));
-    enqueueRemoteKVDelete(key, baseVersion);
   } catch {
     // ignore
   }
 }
 
-/** Remove only browser-local data owned by one account; never enqueue remote deletes. */
-export function clearLocalUserData(userId: string | null | undefined): number {
-  const normalizedUserId = String(userId || '').trim();
-  if (!normalizedUserId) return 0;
+export type LocalUserDataCleanupResult = {
+  complete: boolean;
+  localStorageKeysRemoved: number;
+  localStorageCleared: boolean;
+  indexedDbCleared: boolean;
+  legacyEvidenceRetained: boolean;
+};
 
-  const keysToRemove: string[] = [];
+const INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS = 5_000;
+
+function legacyQueueMayContainAccount(raw: string | null, accountId: string): boolean {
+  if (raw === null) return false;
+  const records = parseJson(raw);
+  if (!Array.isArray(records)) return true;
+  return records.some((record) => legacyRecordMayBelongToAccount(record, accountId));
+}
+
+function clearAccountScopedLocalStorage(userId: string, removed: Set<string>): boolean {
   try {
+    const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
       if (!key) continue;
       const baseKey = key.endsWith('__ffv') ? key.slice(0, -'__ffv'.length) : key;
-      if (isLocalUserKey(baseKey, normalizedUserId)) keysToRemove.push(key);
+      if (isLocalUserKey(baseKey, userId)) keysToRemove.push(key);
     }
 
+    const selectedKeys = new Set(keysToRemove);
     for (const key of keysToRemove) {
       localStorage.removeItem(key);
-      if (!key.endsWith('__ffv')) localStorage.removeItem(versionMetaKey(key));
+      removed.add(key);
+      if (!key.endsWith('__ffv')) {
+        const versionKey = versionMetaKey(key);
+        if (selectedKeys.has(versionKey)) {
+          localStorage.removeItem(versionKey);
+          removed.add(versionKey);
+        }
+      }
     }
+    return true;
   } catch {
-    // Best effort: storage can be unavailable or quota-restricted in private mode.
+    return false;
   }
-  return keysToRemove.length;
+}
+
+/**
+ * Clears local account-owned data after server deletion. Global legacy migration
+ * evidence is preserved if it cannot be separated safely from other accounts.
+ */
+export async function clearLocalUserData(userId: string | null | undefined): Promise<LocalUserDataCleanupResult> {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return {
+    complete: false, localStorageKeysRemoved: 0, localStorageCleared: false,
+    indexedDbCleared: false, legacyEvidenceRetained: false,
+  };
+
+  const removed = new Set<string>();
+  let localStorageCleared = clearAccountScopedLocalStorage(normalizedUserId, removed);
+  let legacyEvidenceRetained = false;
+
+  try {
+    legacyEvidenceRetained = legacyQueueMayContainAccount(localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY), normalizedUserId);
+  } catch {
+    legacyEvidenceRetained = true;
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const durableCleanup = clearIndexedUserStateForUser(normalizedUserId);
+  void durableCleanup.then(() => {
+    if (!clearAccountScopedLocalStorage(normalizedUserId, removed)) localStorageCleared = false;
+  }).catch(() => { /* The synchronous cleanup result below reports failure. */ });
+  const durable = await Promise.race([
+    durableCleanup,
+    new Promise<{ cleared: false; legacyEvidenceRetained: true }>((resolve) => {
+      timeoutId = setTimeout(() => resolve({ cleared: false, legacyEvidenceRetained: true }), INDEXED_ACCOUNT_CLEANUP_TIMEOUT_MS);
+    }),
+  ]);
+  if (timeoutId !== undefined) clearTimeout(timeoutId);
+  if (!clearAccountScopedLocalStorage(normalizedUserId, removed)) localStorageCleared = false;
+  legacyEvidenceRetained ||= durable.legacyEvidenceRetained;
+  // A legacy bundle in another tab can still append to the global source while
+  // IndexedDB cleanup is pending. Recheck at the end so `complete` describes the
+  // evidence that exists when this cleanup finishes, not only its starting snapshot.
+  try {
+    legacyEvidenceRetained ||= legacyQueueMayContainAccount(
+      localStorage.getItem(REMOTE_KV_OUTBOX_STORAGE_KEY),
+      normalizedUserId,
+    );
+  } catch {
+    legacyEvidenceRetained = true;
+  }
+  const indexedDbCleared = durable.cleared;
+  return {
+    complete: localStorageCleared && indexedDbCleared && !legacyEvidenceRetained,
+    localStorageKeysRemoved: removed.size,
+    localStorageCleared,
+    indexedDbCleared,
+    legacyEvidenceRetained,
+  };
 }
 
 export function allUsersStorageKey(userId?: string | null) {
   return `${STORAGE_KEYS.dataPrefix}${userId || 'unknown'}_all_users`;
-}
-
-export function renameLocalStoragePrefix(oldPrefix: string, newPrefix: string) {
-  if (!oldPrefix || !newPrefix || oldPrefix === newPrefix) return;
-  const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i += 1) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(oldPrefix)) {
-      keys.push(key);
-    }
-  }
-  for (const key of keys) {
-    const nextKey = newPrefix + key.slice(oldPrefix.length);
-    try {
-      const value = localStorage.getItem(key);
-      if (value !== null) {
-        localStorage.setItem(nextKey, value);
-      }
-      const version = localStorage.getItem(`${key}__ffv`);
-      if (version !== null) {
-        localStorage.setItem(`${nextKey}__ffv`, version);
-        localStorage.removeItem(`${key}__ffv`);
-      }
-      localStorage.removeItem(key);
-    } catch {
-      // Best-effort migration only.
-    }
-  }
 }
 
 export function persistAllUsersSnapshot(ownerUserId: string | null | undefined, next: unknown[]) {
@@ -434,43 +384,6 @@ export function normalizeUserProfiles<T extends ProfileLike>(profiles: T[]): T[]
     .map((entry) => entry.profile);
 }
 
-export function collectLocalStateItems(userId: string): KVItem[] {
-  const items: KVItem[] = [];
-  for (let i = 0; i < localStorage.length; i += 1) {
-    const key = localStorage.key(i);
-    if (!key) continue;
-    if (!shouldMirrorKey(key)) continue;
-    if (
-      !key.startsWith(STORAGE_KEYS.dataPrefix) &&
-      key !== 'ff_gemini_cooldown_until' &&
-      key !== 'ff_ai_last_status_v1' &&
-      key !== 'ff_ai_last_action_v1' &&
-      !key.startsWith('ff_ai_feature_lastcall_v1:')
-    ) {
-      continue;
-    }
-    if (key.startsWith(STORAGE_KEYS.dataPrefix) && !key.startsWith(`${STORAGE_KEYS.dataPrefix}${userId}_`)) continue;
-    const value = localStorage.getItem(key);
-    if (typeof value === 'string') items.push({ key, value, baseVersion: getStoredVersion(key) });
-  }
-  return items;
-}
-
 export function rememberRemoteStateVersion(key: string, version?: number) {
   setStoredVersion(key, version);
-}
-
-export function applyRemoteStateItems(input: unknown) {
-  if (!Array.isArray(input)) return;
-  for (const item of input) {
-    if (!isRemoteStateItem(item)) continue;
-    try {
-      localStorage.setItem(item.key, item.value);
-      if (typeof item.version === 'number') {
-        setStoredVersion(item.key, item.version);
-      }
-    } catch {
-      // Best-effort hydration only.
-    }
-  }
 }
