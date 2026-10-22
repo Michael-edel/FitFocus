@@ -1,5 +1,5 @@
-import { calculateTDEE } from './profileMath';
-import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
+import { DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
+import { registrationError, registrationRisk } from './registrationValidation';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
@@ -80,19 +80,13 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     return;
   }
 
-  try {
-    const tdee = calculateTDEE({ ...deps.regData, adaptationMultiplier: 1.0 });
-    if (isFinite(tdee)) {
-      const limit = deps.regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
-      const val = deps.regData.goal === Goal.LOSS ? Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT) : Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS);
-      const isAggressive = (deps.regData.goal === Goal.LOSS && val > limit) || (deps.regData.goal === Goal.GAIN && val > limit);
-      const ack = deps.regData.riskAckLoss || deps.regData.riskAckGain;
-      if (isAggressive && !ack) {
-        deps.setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
-        return;
-      }
-    }
-  } catch {}
+  const invalid = registrationError(deps.regData);
+  if (invalid) { deps.setPlanError(invalid); return; }
+  const risk = registrationRisk(deps.regData);
+  if (risk && !risk.acknowledged) {
+    deps.setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
+    return;
+  }
 
   deps.setPlanError(null);
 

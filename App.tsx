@@ -138,6 +138,7 @@ import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
+import { useRegistrationDraft } from './features/auth/useRegistrationDraft';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
@@ -726,8 +727,13 @@ const App: React.FC = () => {
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
   const registrationScope = googleMe?.sub ? `registration:${googleMe.sub}` : null;
-  const { value: regData, setValue: setRegData } = useAccountScopedUiState(
-    registrationScope,
+  const registrationGuard = registrationSessionGuardRef.current;
+  const registrationDraftScope = authState === 'register'
+    && isRegistrationSessionReady(googleMe?.sub, registrationSessionState)
+    && registrationGuard?.identity === googleMe?.sub && !registrationGuard?.invalid
+    && registrationGuard?.sessionKey ? `registration:${registrationGuard.sessionKey}` : null;
+  const { value: regData, setValue: setRegData } = useRegistrationDraft(
+    registrationDraftScope,
     INITIAL_REGISTRATION_DATA,
   );
 
@@ -1965,6 +1971,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         activationTotalMs={ACTIVATION_TOTAL_MS}
         handleActivateWithTransition={handleActivateWithTransition}
         onOpenVersionInfo={() => setVersionInfoOpen(true)}
+        onClearPlanError={() => setPlanError(null)}
       />
     </React.Suspense>
   );

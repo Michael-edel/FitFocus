@@ -1,0 +1,46 @@
+{
+  "supplemental": true,
+  "personaRuns": false,
+  "results": [
+    {
+      "case": "functional",
+      "pass": true,
+      "viewport": "375x812",
+      "checks": [
+        "CTA visible initially",
+        "age999 blocked before AI/profile",
+        "BackForward draft",
+        "goal-risk control",
+        "edited inputs revoke consent",
+        "reload requires reconfirmation",
+        "plan saved afterreload"
+      ],
+      "mutationCounts": {
+        "profile": 0,
+        "ai": 2
+      }
+    },
+    {
+      "case": "before-network",
+      "pass": true,
+      "viewport": "375x812",
+      "latencyMs": 400,
+      "downloadBitsPerSecond": 500000,
+      "uploadBitsPerSecond": 500000,
+      "kpiTop": 977,
+      "serviceWorkers": "blocked",
+      "realProviderCalls": false
+    },
+    {
+      "case": "after-network",
+      "pass": true,
+      "viewport": "375x812",
+      "latencyMs": 400,
+      "downloadBitsPerSecond": 500000,
+      "uploadBitsPerSecond": 500000,
+      "kpiTop": 370.5,
+      "serviceWorkers": "blocked",
+      "realProviderCalls": false
+    }
+  ]
+}

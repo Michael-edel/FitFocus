@@ -1,0 +1,26 @@
+{
+  "baselineSha": "5ee93b0ea05faa5a3cf827ee80e6d51cdc017946",
+  "environment": "local isolated SQLite/auth/AI fixtures; no production bindings",
+  "validRuns": [
+    { "persona": "impatient", "report": "before-impatient-report.md", "success": true, "clicksToPlanIncludingFixture": 3, "clicksWithPersistenceIncludingFixture": 4, "fixtureClicks": 1, "inputs": 0, "scrolls": 1, "wouldReturn": true },
+    { "persona": "skeptic", "report": "before-skeptic-report.md", "success": false, "productClicks": 1, "reason": "Voluntary refusal before login over price and legal/operator transparency", "wouldReturn": false, "changesAllowed": false },
+    { "persona": "mobile", "report": "before-mobile-report.md", "success": true, "viewport": "375x812", "clicksToPlanIncludingFixture": 4, "clicksWithPersistenceIncludingFixture": 5, "inputs": 4, "scrollsTotal": 6, "wouldReturn": true },
+    { "persona": "stress", "report": "before-stress-report.md", "success": true, "clickAttemptsToPlanIncludingFixture": 7, "clickAttemptsWithPersistenceIncludingFixture": 9, "inputs": 7, "back": 1, "forward": 1, "wouldReturn": false }
+  ],
+  "excludedInvalidRuns": ["impatient appended an email to fixture default", "mobile misunderstood fixture login"],
+  "confirmedNonlegalIssues": [
+    { "id": "age-validation", "evidence": "Age999 passes UI age>0 check and starts activation; negative TDEE triggers misleading risk guard", "action": "Shared finite integer age1..130 validation before activation/profile/AI; inline field help" },
+    { "id": "risk-control", "evidence": "Risk acknowledgement required with no reachable checkbox or intensity control", "action": "Expose bounded intensity and goal-specific acknowledgement; preserve medical limits" },
+    { "id": "draft-navigation", "evidence": "Unsaved age reset to25 after Back/Forward", "action": "Session-only draft scoped to verified account/session; do not persist risk acknowledgements" },
+    { "id": "mobile-information-order", "evidence": "Long form and actions push creation/KPI below first screen", "action": "Minimal mobile sticky creation control and earlier daily KPI; retain information and desktop layout" }
+  ],
+  "unconfirmedOrExcluded": [
+    "Brief blank KPI frame: no proven hiding state or measured delay; do not claim a fixed rendering defect",
+    "Expected nonpositive-field rejection and disabled button are not defects",
+    "AITOPIA element ownership unconfirmed; extension UI is not a product defect",
+    "Tester premature tab close and locator/fill errors are procedural, not product defects"
+  ],
+  "reportOnlyNoEdits": ["Price discovery and subscription disclosure", "Terms link discovery", "Privacy operator details and external contact", "Privacy wording/retention/AI processing questions"],
+  "limitations": { "realGoogle": false, "realGeminiQuality": false, "realCloudSync": false, "StripeSandboxConfigured": false, "slow3GSupportedByBrowserMCP": false, "screenshots": "CUA image outputs only; no JPEG files exported; no invented image paths" },
+  "retest": { "portsReserved": [4261,4262,4263,4264], "personasStartedByThisTask": false, "owner": "parent creates four fresh blind Browser MCP tasks sequentially after the bounded fix" }
+}

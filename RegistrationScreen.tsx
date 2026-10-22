@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Sparkles } from 'lucide-react';
 import { Gender, Goal, ActivityLevel, type TariffPlan } from './types';
+import { registrationError, registrationErrors, registrationRisk, REGISTRATION_MIN_AGE, REGISTRATION_MAX_AGE } from './registrationValidation';
+import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from './constants';
 
 type ActivationStep = {
   title: string;
@@ -50,6 +52,7 @@ type RegistrationScreenProps = {
   activationTotalMs: number;
   handleActivateWithTransition: () => void;
   onOpenVersionInfo: () => void;
+  onClearPlanError?: () => void;
 };
 
 const activityOptions: Array<{ value: ActivityLevel; label: string; note: string }> = [
@@ -86,22 +89,19 @@ export default function RegistrationScreen({
   activationTotalMs,
   handleActivateWithTransition,
   onOpenVersionInfo,
+  onClearPlanError,
 }: RegistrationScreenProps) {
-  const regAnthroError = useMemo(() => {
-    const weight = Number(regData.weight) || 0;
-    const height = Number(regData.height) || 0;
-    if (weight > 0 && (weight < 25 || weight > 350)) return 'Вес должен быть в диапазоне 25–350 кг.';
-    if (height > 0 && (height < 120 || height > 230)) return 'Рост должен быть в диапазоне 120–230 см.';
-    if (weight > 0 && height > 0) {
-      const bmi = weight / Math.pow(height / 100, 2);
-      if (bmi < 12 || bmi > 60) return 'Проверьте сочетание веса и роста: оно выглядит нереалистично.';
-    }
-    return null;
-  }, [regData.height, regData.weight]);
-
-  const regStep1Valid = Boolean(Number(regData.weight) > 0 && Number(regData.height) > 0 && Number(regData.age) > 0 && regData.activityLevel && !regAnthroError);
+  const errors = registrationErrors(regData);
+  const risk = registrationRisk(regData);
+  const regAnthroError = errors.anthro;
+  const regStep1Valid = !registrationError(regData) && (!risk || risk.acknowledged);
+  const setInput = (update: (previous: RegistrationData) => RegistrationData) => {
+    onClearPlanError?.();
+    setRegData(previous => ({ ...update(previous), riskAckLoss: false, riskAckGain: false }));
+  };
 
   const onCreatePlan = () => {
+    if (!regStep1Valid || isActivatingPlan) return;
     handleActivateWithTransition();
   };
 
@@ -224,9 +224,12 @@ export default function RegistrationScreen({
                         min={25}
                         max={350}
                         inputMode="numeric"
+                        aria-label="Вес (кг)"
+                        aria-invalid={!!errors.weight}
+                        aria-describedby="registration-weight-help"
                         value={regData.weight || ''}
-                        onChange={(e) => setRegData((prev) => {
-                          const weight = Math.max(0, Number(e.target.value) || 0);
+                        onChange={(e) => setInput((prev) => {
+                          const weight = Number(e.target.value);
                           const prevSuggested = deriveSuggestedTargetWeight(prev.weight, prev.goal);
                           const nextSuggested = deriveSuggestedTargetWeight(weight, prev.goal);
                           const shouldUpdateTarget = !prev.targetWeight || prev.targetWeight === prevSuggested;
@@ -238,6 +241,7 @@ export default function RegistrationScreen({
                         })}
                         className={numberInputClassName}
                       />
+                      <p id="registration-weight-help" className={errors.weight ? 'text-xs text-amber-200' : 'text-xs text-slate-400'}>{errors.weight ?? 'От 25 до 350 кг.'}</p>
                     </label>
                     <label className="space-y-1">
                       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Рост (см)</div>
@@ -246,20 +250,31 @@ export default function RegistrationScreen({
                         min={120}
                         max={230}
                         inputMode="numeric"
+                        aria-label="Рост (см)"
+                        aria-invalid={!!errors.height}
+                        aria-describedby="registration-height-help"
                         value={regData.height || ''}
-                        onChange={(e) => setRegData((prev) => ({ ...prev, height: Math.max(0, Number(e.target.value) || 0) }))}
+                        onChange={(e) => setInput((prev) => ({ ...prev, height: Number(e.target.value) }))}
                         className={numberInputClassName}
                       />
+                      <p id="registration-height-help" className={errors.height ? 'text-xs text-amber-200' : 'text-xs text-slate-400'}>{errors.height ?? 'От 120 до 230 см.'}</p>
                     </label>
                     <label className="space-y-1">
                       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Возраст</div>
                       <input
                         type="number"
+                        min={REGISTRATION_MIN_AGE}
+                        max={REGISTRATION_MAX_AGE}
+                        step={1}
                         inputMode="numeric"
+                        aria-label="Возраст"
+                        aria-invalid={!!errors.age}
+                        aria-describedby="registration-age-help"
                         value={regData.age || ''}
-                        onChange={(e) => setRegData((prev) => ({ ...prev, age: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))}
+                        onChange={(e) => setInput((prev) => ({ ...prev, age: Number(e.target.value) }))}
                         className={numberInputClassName}
                       />
+                      <p id="registration-age-help" role={errors.age ? 'alert' : undefined} className={errors.age ? 'text-xs text-amber-200' : 'text-xs text-slate-400'}>{errors.age ?? 'Полных лет: от 1 до 130.'}</p>
                     </label>
                   </div>
 
@@ -270,7 +285,7 @@ export default function RegistrationScreen({
                         <button
                           key={g.id}
                           type="button"
-                          onClick={() => setRegData((prev) => ({ ...prev, gender: g.id }))}
+                          onClick={() => setInput((prev) => ({ ...prev, gender: g.id }))}
                           className={clsx(
                             'w-full p-4 text-center rounded-[1.25rem] border text-xs font-black transition-all',
                             regData.gender === g.id
@@ -291,7 +306,7 @@ export default function RegistrationScreen({
                         <button
                           key={goal.value}
                           type="button"
-                          onClick={() => setRegData((prev) => {
+                          onClick={() => setInput((prev) => {
                             const prevSuggested = deriveSuggestedTargetWeight(prev.weight, prev.goal);
                             const nextSuggested = deriveSuggestedTargetWeight(prev.weight, goal.value);
                             const shouldUpdateTarget = !prev.targetWeight || prev.targetWeight === prevSuggested;
@@ -329,7 +344,7 @@ export default function RegistrationScreen({
                       step="0.1"
                       inputMode="decimal"
                       value={regData.targetWeight || ''}
-                      onChange={(e) => setRegData((prev) => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
+                      onChange={(e) => setInput((prev) => ({ ...prev, targetWeight: Math.max(0, Number(e.target.value) || 0) }))}
                       className={numberInputClassName}
                     />
                     <div className="text-[11px] font-semibold text-slate-500">
@@ -344,7 +359,7 @@ export default function RegistrationScreen({
                         <button
                           key={activity.label}
                           type="button"
-                          onClick={() => setRegData((prev) => ({ ...prev, activityLevel: activity.value }))}
+                          onClick={() => setInput((prev) => ({ ...prev, activityLevel: activity.value }))}
                           className={clsx(
                             'w-full p-3.5 rounded-[1.25rem] border text-left transition-all',
                             regData.activityLevel === activity.value
@@ -365,6 +380,26 @@ export default function RegistrationScreen({
                       ))}
                     </div>
                   </div>
+                  {regData.goal !== Goal.MAINTAIN && (
+                    <div className="space-y-2">
+                      <label className="block space-y-1">
+                        <span className="text-xs font-bold text-slate-300">{regData.goal === Goal.LOSS ? 'Дефицит' : 'Профицит'} (ккал/день)</span>
+                        <input type="number" min={regData.goal === Goal.LOSS ? MIN_DEFICIT : MIN_SURPLUS} max={regData.goal === Goal.LOSS ? MAX_DEFICIT : MAX_SURPLUS} step={50}
+                          aria-invalid={!!errors.offset} aria-describedby="registration-intensity-help"
+                          value={regData.goal === Goal.LOSS ? regData.lossDeficit ?? DEFAULT_DEFICIT : regData.gainSurplus ?? DEFAULT_SURPLUS}
+                          onChange={e => setInput(previous => ({ ...previous, [previous.goal === Goal.LOSS ? 'lossDeficit' : 'gainSurplus']: Number(e.target.value) }))}
+                          className={numberInputClassName} />
+                      </label>
+                      <p id="registration-intensity-help" className="text-xs text-slate-400">{errors.offset ?? (risk ? 'Для этой интенсивности нужно подтвердить риски. Можно уменьшить значение.' : 'Интенсивность можно изменить до создания плана.')}</p>
+                      {risk && (
+                        <label className="flex items-start gap-3 rounded-xl border border-amber-500/30 p-3 text-sm text-amber-100">
+                          <input type="checkbox" checked={risk.acknowledged} className="mt-1 h-4 w-4"
+                            onChange={e => { const checked = e.target.checked; onClearPlanError?.(); setRegData(previous => previous === regData ? ({ ...previous, riskAckLoss: previous.goal === Goal.LOSS && checked, riskAckGain: previous.goal === Goal.GAIN && checked }) : previous); }} />
+                          <span>Я понимаю риски выбранной интенсивности: {risk.amount} ккал/день.</span>
+                        </label>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {regAnthroError && (
@@ -381,6 +416,8 @@ export default function RegistrationScreen({
                   </div>
                 )}
 
+                <div className="sticky bottom-0 z-20 bg-slate-900/95 py-3 md:static md:bg-transparent">
+                {!regStep1Valid && <p className="mb-2 text-xs text-amber-200" aria-live="polite">{registrationError(regData) ? 'Проверьте выделенные поля перед созданием плана.' : 'Подтвердите риски или уменьшите интенсивность.'}</p>}
                 <button
                   type="button"
                   onClick={onCreatePlan}
@@ -394,6 +431,7 @@ export default function RegistrationScreen({
                 >
                   Создать AI-план
                 </button>
+                </div>
               </div>
 
               <div className="space-y-4">

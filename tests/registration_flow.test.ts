@@ -65,6 +65,37 @@ beforeEach(async () => {
 afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('durable registration', () => {
+  it.each([999, 131, 0, -1, NaN, Infinity, 32.5])('rejects invalid age %s before any profile, invite or AI work', async age => {
+    const d = deps(); d.regData.age = age; d.requireInvite = true;
+    await runRegistrationFlow(d);
+    expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('возраст'));
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+    expect(d.getProfileWriteGuard).not.toHaveBeenCalled();
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+    expect((await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value).toBeNull();
+  });
+  it('does not accept acknowledgement of another goal as loss-risk consent', async () => {
+    const d = deps();
+    await runRegistrationFlow({ ...d, regData: { ...d.regData, lossDeficit: 1000, riskAckGain: true } });
+    expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('Я понимаю риски'));
+    expect(d.getProfileWriteGuard).not.toHaveBeenCalled();
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+  });
+  it('preserves medical restrictions in the initial profile and AI input', async () => {
+    const d = deps(); const restriction = 'SYNTHETIC_TEST_RESTRICTION';
+    d.generatePersonalPlan.mockImplementation(async user => {
+      expect(user.medicalRestrictions).toBe(restriction);
+      const saved = await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`);
+      expect(JSON.parse(saved.value!).medicalRestrictions).toBe(restriction);
+      return undefined;
+    });
+    await runRegistrationFlow({ ...d, regData: { ...d.regData, medicalRestrictions: restriction } });
+    expect(d.generatePersonalPlan).toHaveBeenCalledTimes(1);
+    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ medicalRestrictions: restriction }), expect.any(Object));
+  });
   it('does not save a profile or start AI when the registration session is not current', async () => {
     const d = deps();
     d.isCurrentSession = () => false;
