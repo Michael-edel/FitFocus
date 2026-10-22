@@ -1,11 +1,11 @@
-import { calculateTDEE } from './profileMath';
-import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS } from './constants';
+import { DEFAULT_DEFICIT, DEFAULT_SURPLUS } from './constants';
+import { registrationError, registrationRisk, resolveTargetWeight } from './registrationValidation';
 import { buildFallbackAiPlan } from './aiPlanFallback';
 import { toLocalDayKey } from './dateUtils';
 import { clearOAuthContinuationState } from './authSession';
 import { UserStateRepository } from './storage/userStateRepository';
 import { createProfileIntent } from './storage/profileState';
-import { Goal, type UserProfile } from './types';
+import { type UserProfile } from './types';
 import { isRecord } from './safeJson';
 import { assertAiSession, prepareAiSession, type AiSession } from './services/aiSession';
 import { isOutboxWriteSessionChanged, type OutboxLocalCommitGuard, type OutboxReadGuard } from './storage/durableOutbox';
@@ -37,14 +37,6 @@ type RegDataLike = {
   riskAckLoss?: boolean;
   riskAckGain?: boolean;
 };
-
-function deriveTargetWeight(weight: number, goal: UserProfile['goal']): number {
-  const baseWeight = Number.isFinite(weight) && weight > 0 ? weight : 0;
-  if (!baseWeight) return 0;
-  if (goal === Goal.LOSS) return Number(Math.max(40, baseWeight * 0.9).toFixed(1));
-  if (goal === Goal.GAIN) return Number(Math.max(baseWeight + 1, baseWeight * 1.05).toFixed(1));
-  return Number(baseWeight.toFixed(1));
-}
 
 type RegisterFlowDeps = {
   regData: RegDataLike;
@@ -80,19 +72,13 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     return;
   }
 
-  try {
-    const tdee = calculateTDEE({ ...deps.regData, adaptationMultiplier: 1.0 });
-    if (isFinite(tdee)) {
-      const limit = deps.regData.goal === Goal.LOSS ? Math.min(AGGRESSIVE_DEFICIT, Math.round(tdee * 0.3)) : AGGRESSIVE_SURPLUS;
-      const val = deps.regData.goal === Goal.LOSS ? Number(deps.regData.lossDeficit ?? DEFAULT_DEFICIT) : Number(deps.regData.gainSurplus ?? DEFAULT_SURPLUS);
-      const isAggressive = (deps.regData.goal === Goal.LOSS && val > limit) || (deps.regData.goal === Goal.GAIN && val > limit);
-      const ack = deps.regData.riskAckLoss || deps.regData.riskAckGain;
-      if (isAggressive && !ack) {
-        deps.setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
-        return;
-      }
-    }
-  } catch {}
+  const invalid = registrationError(deps.regData);
+  if (invalid) { deps.setPlanError(invalid); return; }
+  const risk = registrationRisk(deps.regData);
+  if (risk && !risk.acknowledged) {
+    deps.setPlanError('Для выбранной интенсивности требуется подтверждение «Я понимаю риски».');
+    return;
+  }
 
   deps.setPlanError(null);
 
@@ -114,9 +100,7 @@ export async function runRegistrationFlow(deps: RegisterFlowDeps): Promise<void>
     age: Math.max(0, Math.floor(deps.regData.age || 0)),
     activityLevel: deps.regData.activityLevel,
     goal: deps.regData.goal,
-    targetWeight: Number(deps.regData.targetWeight) > 0
-      ? Number(Number(deps.regData.targetWeight).toFixed(1))
-      : deriveTargetWeight(deps.regData.weight, deps.regData.goal),
+    targetWeight: resolveTargetWeight(deps.regData),
     adaptationMultiplier: 1.0,
     familyMembers: [],
     exclusions: '',

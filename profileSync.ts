@@ -21,7 +21,7 @@ type ProfileSyncDeps = {
     options?: { durable?: boolean },
   ) => Promise<OutboxOperation | null>;
   loginGuard?: OutboxReadGuard | null;
-  applyRemoteProfile: (user: UserProfile) => void;
+  applyRemoteProfile: (user: UserProfile, readGuard: OutboxReadGuard) => void;
   syncStateImpl?: (accountId: string) => Promise<boolean>;
 };
 
@@ -127,7 +127,7 @@ export async function reloadUserFromCloud(deps: ProfileReloadDeps): Promise<void
     if (!owns(current, deps) || revision !== deps.profileEditRevisionRef.current) return;
     deps.setLoginReadGuard(refreshed.readGuard);
     // Replace only the profile editor, synchronously; no disabled edit window during state rehydration.
-    deps.applyRemoteProfile(profile);
+    deps.applyRemoteProfile(profile, refreshed.readGuard);
   } catch (error) {
     if (!owns(current, deps) || revision !== deps.profileEditRevisionRef.current) return;
     deps.setProfileSyncState('error');

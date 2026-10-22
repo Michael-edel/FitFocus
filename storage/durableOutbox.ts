@@ -110,6 +110,8 @@ export type OutboxWrite = {
   accountId: string; writerId: string; intent: OutboxIntent; expectedRevision: number;
   resource?: 'profile' | 'familyMenu';
   baseVersion: number; parentOpId?: string;
+  /** Exact loaded profile bytes, allowing only that unchanged revision's completed ACK. */
+  observedValue?: string;
   conflictReason?: 'editor-not-loaded' | 'legacy-writer-local-only';
   /** Generated results require the captured proof; ordinary offline edits omit it. */
   readGuard?: OutboxReadGuard;
@@ -203,11 +205,26 @@ export function writeOutboxInTransaction(
       && meta.acknowledgedOpId === input.parentOpId && meta.acknowledgedWriterId === input.writerId
       && meta.acknowledgedRevision === input.expectedRevision;
     let reason = context.conflictReason;
+    let baseVersion = input.baseVersion;
     if (!reason && (input.expectedRevision ?? (context.legacy ? meta.valueRevision : -1)) !== meta.valueRevision) reason = 'local-revision-conflict';
     else if (!reason && input.parentOpId && !acknowledgedParent && (!parent || parent.opId !== head?.opId || parent.accountId !== input.accountId
       || parent.key !== input.intent.key || parent.resource !== input.resource || parent.writerId !== input.writerId || !['pending', 'sending'].includes(parent.status))) reason = 'invalid-parent';
     else if (!reason && head && !parent) reason = 'independent-snapshot';
-    else if (!reason && !input.parentOpId && input.baseVersion !== meta.confirmedVersion) reason = 'base-version-conflict';
+    else if (!reason && !input.parentOpId && input.baseVersion !== meta.confirmedVersion) {
+      // A newly mounted profile editor may read the registration value before its
+      // sender ACK. The ACK changes only the confirmed version, not the value it
+      // displayed. Recognize that exact transition atomically; never adopt another
+      // value, revision, head, conflict or a remote hydration as an editor's base.
+      const acknowledgedObservation = input.resource === 'profile'
+        && typeof input.observedValue === 'string' && existingValue?.value === input.observedValue
+        && !meta.headOpId && keyOperations.length === 0
+        && typeof meta.acknowledgedOpId === 'string' && meta.acknowledgedOpId.length > 0
+        && typeof meta.acknowledgedWriterId === 'string' && meta.acknowledgedWriterId.length > 0
+        && meta.acknowledgedRevision === input.expectedRevision && meta.acknowledgedRevision === meta.valueRevision
+        && finiteInteger(meta.confirmedVersion) && input.baseVersion < meta.confirmedVersion;
+      if (acknowledgedObservation) baseVersion = meta.confirmedVersion;
+      else reason = 'base-version-conflict';
+    }
     if (!reason && context.legacy && existingValue
       && (input.intent.type === 'delete' || existingValue.value !== input.intent.value)) reason = 'legacy-local-value-conflict';
 
@@ -215,7 +232,7 @@ export function writeOutboxInTransaction(
     const operation: OutboxOperation = {
       ...input.intent, opId: context.opId, accountId: input.accountId, writerId: input.writerId,
       ...(input.resource ? { resource: input.resource } : {}),
-      revision: meta.lastRevision + 1, baseVersion: !reason && input.parentOpId ? parent?.baseVersion ?? meta.confirmedVersion : input.baseVersion,
+      revision: meta.lastRevision + 1, baseVersion: !reason && input.parentOpId ? parent?.baseVersion ?? meta.confirmedVersion : baseVersion,
       status: reason ? 'conflicted' : 'pending', retryCount: context.legacy?.retryCount ?? 0, nextAttemptAtMs: context.nowMs,
       createdAtMs: context.nowMs, updatedAtMs: context.nowMs,
       ...(input.parentOpId ? { parentOpId: input.parentOpId } : {}), ...(reason ? { reason } : {}),

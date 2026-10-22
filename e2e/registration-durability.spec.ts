@@ -75,6 +75,39 @@ async function setup(page: Page, options: { holdAi?: boolean } = {}) {
   return { errors, requests, aiStarted, aiFinished, releaseHeldAi: () => releaseHeldAi() };
 }
 
+test('target validation blocks impossible loss targets and the create action does not overlap goal choices', async ({ page }, info) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const { errors, requests } = await setup(page);
+  await openApp(page, '/?auth=google');
+  const create = page.getByRole('button', { name: 'Создать AI-план', exact: true });
+  await expect(create).toBeVisible();
+  await page.getByRole('spinbutton', { name: 'Вес (кг)', exact: true }).fill('80');
+  await page.getByRole('spinbutton', { name: 'Рост (см)', exact: true }).fill('180');
+  const target = page.getByRole('spinbutton', { name: 'Целевой вес (кг)', exact: true });
+  await target.fill('999');
+  await expect(target).toHaveValue('999');
+  await expect(target).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#registration-target-weight-help')).toContainText('от 25 до 350');
+  await expect(create).toBeDisabled();
+  await target.fill('85');
+  await expect(page.locator('#registration-target-weight-help')).toContainText('меньше текущего');
+  await expect(create).toBeDisabled();
+  expect(requests).toEqual({ ai: 0, profile: 0 });
+  expect((await saved(page)).value).toBeNull();
+  expect((await saved(page)).operations).toEqual([]);
+  await target.fill('75'); await expect(create).toBeEnabled();
+  const lastGoal = page.getByRole('button', { name: /Набор.*Выбрать/ });
+  await lastGoal.scrollIntoViewIfNeeded();
+  const goalBox = await lastGoal.boundingBox(); const createBox = await create.boundingBox();
+  expect(goalBox).not.toBeNull(); expect(createBox).not.toBeNull();
+  expect(createBox!.y).toBeGreaterThanOrEqual(goalBox!.y + goalBox!.height);
+  expect(await create.locator('..').evaluate(node => getComputedStyle(node).position)).toBe('static');
+  await page.screenshot({ path: info.outputPath('pass2-goal-choices-375.png') });
+  await create.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('pass2-create-375.png') });
+  expect(errors).toEqual([]);
+});
+
 test('registration is durable before AI and reload restores it without an OAuth marker during auth pause', async ({ page }, info) => {
   const { errors, requests } = await setup(page);
   await openApp(page, '/?auth=google#plan'); await expect(page).toHaveTitle(/FitFocus/);

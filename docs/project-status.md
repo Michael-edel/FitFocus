@@ -1,4 +1,89 @@
+## PR98 profile refresh notice follow-up, 22 October 2026
+
+Head8964f134 CI39746942675 completed/failure:1608unit passed, audit0,
+guards/3types/build success; browser1657passed/71skipped/1failed desktop
+Chromium notice after a successful profile GET. Rollback/CAS skipped.
+Local trace proves a renewed session epoch rejected the success callback's
+old scoped setter. The fix publishes against the freshly validated guard
+after the UI scope commits, consumes mismatches once, and preserves stale
+callback rejection. Independent source/dependency/fixture review: no findings.
+Local1608unit/226files, all3types, guards, audit0; final35browser cases passed
+across7profiles without retries. Full exact-head CI is pending after push;
+evidence is recorded in the separate
+[regression report](../qa/first-users/profile-refresh-notice-regression-2026-10-22.md).
+Production DB postchecks and a green exact-head full CI remain release gates.
+
+## PR98 full CI follow-up, 22 October 2026 08:09 UTC
+
+Head9c3a200 CI39738443471 failed:1608unit passed, audit0, guards/3types/build
+success; browser1652passed/71skipped/6failed. All6 are one quota-failure Save
+assertion matching2alerts. Test-only correction requires both specific alerts;
+all negative persistence assertions remain. Independent review no findings.
+Local35-case matrix:35/35 passed across7profiles, retries0; all3 types passed.
+New exact-head full CI is pending after the follow-up push. Rollback/CAS in
+this failed run was skipped. Runtime code remains7716774; no release yet.
+
+## Final second-pass local verification, 22 October 2026
+
+`qa/first-users-20261022`: 1608/1608 unit tests in226files, all3 TypeScript
+checks; schema/privacy/auth/API/admin guards; audit0. Targeted browser matrix:
+28/28 across7profiles, retries0. Firefox double-Save repeat10/10 before the
+additional clean-cache assertion; final matrix includes that assertion and a
+restored dirty-cache variant. Independent source/test review: no findings.
+Full exact-head remote CI and production DB postchecks remain prerequisites.
+
 # Текущее состояние FitFocus
+
+## Второй проход первых пользователей, 22.10.2026 — в рабочей ветке
+
+Локальная ветка `qa/first-users-20261022` основана на PR97
+`8ae1195b06a104c5b862bb03d93851d6851be517`; первый проход зафиксирован
+в `272e7ef335af37af8028728bd827cae6cb5437ea`. Исторические четыре baseline
+и четыре слепых retest сохранены. Пользователь отдельно разрешил второй
+проход и публикацию после успешных проверок, без обхода protections.
+
+Исправляются цель999кг при похудении, first-save ACK race и повторный Save,
+перекрытие формы sticky-кнопкой. Локальные1598unit/225файлов, три TypeScript,
+schema/privacy/auth/API/admin guards и audit0 прошли на изменениях до commit;
+независимый source review без замечаний. Browser regression, точный новый SHA,
+его полный CI и выпуск фиксируются отдельно; CI97 относится только к8ae1195.
+
+Production binding подтверждён отдельной браузерной задачей: DB`fitfocus-dev`,
+ID`061ae786-9341-4bd7-8efe-025dd1bac6d5`. Колонка0019 уже добавлена;
+повторный ALTER/общий runner запрещён. Журнал0019 и migrations0020/0021
+отдельно согласованы, выполняются единственным браузерным исполнителем
+после нового bookmark/preflight. До его postchecks не объявлять схему готовой.
+Сведения старого диагностического снимка ниже являются историческими.
+
+## Main после PR #96, 22.10.2026
+
+Пользователь слил PR #96 в 03:29:37 UTC. Merge/main SHA:
+`5ee93b0ea05faa5a3cf827ee80e6d51cdc017946`. Production
+`https://fitfocus.pages.dev` возвращает JS-артефакт
+`/assets/index-Dwjd8kTg.js` с этим SHA; Cloudflare check сообщает success.
+Это не подтверждает работоспособность входа: пользователь наблюдает
+`GET /api/bootstrap` HTTP 500.
+
+[CI нового main](https://github.com/Michael-edel/FitFocus/actions/runs/39717155497)
+завершился failure на npm audit: две moderate advisory Vitest/mocker.
+Unit, typecheck, build, browser и rollback в этом прогоне skipped.
+Предыдущий успешный CI 39605805770 проверял head PR `801ab3d9`, не новый main.
+
+В рабочей ветке `fix/vitest-audit-20261022` коммит `7686836` обновляет
+только Vitest и семь связанных пакетов до 4.1.12. npm ci, audit (0 findings),
+1506 unit / 219 файлов, три typecheck и production build прошли; независимый Sol-review без
+замечаний. Публикация этой рабочей ветки и её точный CI фиксируются в PR.
+
+Для bootstrap 500 локально воспроизведены ошибки схемы до migrations
+`0011_sync_versions.sql` и `0019_state_tombstones.sql`; после них тестовый
+bootstrap возвращает 200. Production-схема не прочитана: Wrangler не
+аутентифицирован, Browser/CUA инструменты в подзадаче не экспонированы.
+Это гипотеза, а не установленная production-причина. Нужен
+[read-only осмотр D1](bootstrap-hydration.md#диагностика-bootstrap-500-без-записи).
+Production migrations, данные, настройки, credentials и auth restrictions
+в ходе диагностики не изменялись.
+
+Ниже сохранён исторический статус интеграционной ветки.
 
 Сверено: 21.10.2026. Функции описаны в [PRODUCT](../PRODUCT.md), план — в
 [`TASKS.md`](../TASKS.md), подробные ревизии и проверки — в

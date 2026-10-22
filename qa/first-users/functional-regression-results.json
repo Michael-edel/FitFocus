@@ -1,0 +1,18 @@
+{
+  "case": "functional",
+  "pass": true,
+  "viewport": "375x812",
+  "checks": [
+    "CTA visible initially",
+    "age999 blocked before AI/profile",
+    "BackForward draft",
+    "goal-risk control",
+    "edited inputs revoke consent",
+    "reload requires reconfirmation",
+    "plan saved afterreload"
+  ],
+  "mutationCounts": {
+    "profile": 0,
+    "ai": 2
+  }
+}

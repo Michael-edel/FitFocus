@@ -99,7 +99,9 @@ describe('durable profile actions', () => {
     });
     d.applyRemoteProfile.mockImplementation(() => { d.isCurrentSession.mockReturnValue(false); });
     await reloadUserFromCloud(d);
-    expect(d.applyRemoteProfile).toHaveBeenCalledWith({ ...profile, version: 3 });
+    expect(d.applyRemoteProfile).toHaveBeenCalledWith({ ...profile, version: 3 }, {
+      accountId: profile.id, serverSessionId: 'a'.repeat(64), sessionEpoch: 'refresh-epoch', authFence: 2,
+    });
     expect(d.setProfileSyncState).not.toHaveBeenCalledWith('saved'); expect(await outbox.list(profile.id)).toEqual([]);
   });
   it('adopts the exact read guard that accepted a refreshed profile before applying it', async () => {
@@ -114,7 +116,7 @@ describe('durable profile actions', () => {
     expect(d.assertReadGuardImpl).toHaveBeenCalledWith(readGuard);
     expect(d.setLoginReadGuard).toHaveBeenCalledWith(readGuard);
     expect(d.setLoginReadGuard.mock.invocationCallOrder[0]).toBeLessThan(d.applyRemoteProfile.mock.invocationCallOrder[0]);
-    expect(d.applyRemoteProfile).toHaveBeenCalledWith({ ...profile, version: 3 });
+    expect(d.applyRemoteProfile).toHaveBeenCalledWith({ ...profile, version: 3 }, readGuard);
   });
   it('does not adopt or apply a refresh after its read guard becomes stale', async () => {
     const readGuard: OutboxReadGuard = { accountId: profile.id, serverSessionId: 'a'.repeat(64), sessionEpoch: 'refresh-epoch', authFence: 2 };

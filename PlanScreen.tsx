@@ -278,51 +278,8 @@ export default function PlanScreen({
         </div>
       )}
 
-      <div className="p-4 md:p-6 rounded-[1.6rem] md:rounded-[2rem] bg-gradient-to-br from-indigo-600/15 via-slate-950 to-slate-950 border border-indigo-500/20 text-left">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-black text-indigo-300 uppercase tracking-widest">Сегодня</p>
-            <h3 className="mt-2 text-xl font-black text-white">Что важно сделать сегодня</h3>
-            <p className="mt-1 text-sm text-slate-400 font-semibold">Минимум действий, которые двигают к цели и не перегружают.</p>
-          </div>
-          <div className="shrink-0 px-3 py-2 rounded-full bg-slate-950/70 border border-slate-800 text-[11px] font-black uppercase tracking-widest text-slate-300">
-            {Object.values(planTaskDone).filter(Boolean).length}/{Math.min(3, tasks.length)} выполнено
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          {firstThree.map((t: string, i: number) => {
-            const key = `${i}:${t}`;
-            const done = !!planTaskDone[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPlanTaskDone(prev => ({ ...prev, [key]: !prev[key] }))}
-                className={clsx(
-                  'min-h-[72px] w-full text-left flex items-start gap-3 p-4 rounded-[1.5rem] border transition-all active:scale-[0.99]',
-                  done ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-slate-900/40 border-slate-800 text-slate-200 hover:border-indigo-500/30'
-                )}
-              >
-                <span className={clsx('mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center shrink-0', done ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300' : 'border-slate-700 text-slate-500')}>
-                  {done ? <CheckCircle2 size={16} /> : <span className="w-2.5 h-2.5 rounded-full bg-current opacity-70" />}
-                </span>
-                <span className="font-bold leading-relaxed">{t}</span>
-              </button>
-            );
-          })}
-          {(!tasks || tasks.length === 0) && (
-            <div className="p-4 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 text-sm text-slate-500 font-semibold">Первые задачи появятся после генерации плана.</div>
-          )}
-        </div>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
-          <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
-          <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUserAiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+      <div className="grid grid-cols-1 gap-y-6 md:grid-cols-2 md:gap-x-4">
+        <div className="md:order-2 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
           <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">KPI на день</p>
           <p className="mt-2 text-2xl font-black text-white tabular-nums">{currentUserAiPlan?.dailyKpi?.calories ?? '—'} ккал</p>
           <p className="mt-1 text-sm font-black text-slate-200 tabular-nums">{currentUserAiPlan?.dailyKpi?.protein ?? '—'}Б · {currentUserAiPlan?.dailyKpi?.fat ?? '—'}Ж · {currentUserAiPlan?.dailyKpi?.carbs ?? '—'}У</p>
@@ -333,7 +290,49 @@ export default function PlanScreen({
             {currentUserTargetWeight ? <span className="px-3 py-1 rounded-full bg-slate-900/50 border border-slate-800 text-slate-300">Цель: {currentUserTargetWeight} кг</span> : null}
           </div>
         </div>
-        <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
+        <div className="md:order-1 md:col-span-2 p-4 md:p-6 rounded-[1.6rem] md:rounded-[2rem] bg-gradient-to-br from-indigo-600/15 via-slate-950 to-slate-950 border border-indigo-500/20 text-left">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-black text-indigo-300 uppercase tracking-widest">Сегодня</p>
+              <h3 className="mt-2 text-xl font-black text-white">Что важно сделать сегодня</h3>
+              <p className="mt-1 text-sm text-slate-400 font-semibold">Минимум действий, которые двигают к цели и не перегружают.</p>
+            </div>
+            <div className="shrink-0 px-3 py-2 rounded-full bg-slate-950/70 border border-slate-800 text-[11px] font-black uppercase tracking-widest text-slate-300">
+              {Object.values(planTaskDone).filter(Boolean).length}/{Math.min(3, tasks.length)} выполнено
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {firstThree.map((t: string, i: number) => {
+              const key = `${i}:${t}`;
+              const done = !!planTaskDone[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPlanTaskDone(prev => ({ ...prev, [key]: !prev[key] }))}
+                  className={clsx(
+                    'min-h-[72px] w-full text-left flex items-start gap-3 p-4 rounded-[1.5rem] border transition-all active:scale-[0.99]',
+                    done ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-slate-900/40 border-slate-800 text-slate-200 hover:border-indigo-500/30'
+                  )}
+                >
+                  <span className={clsx('mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center shrink-0', done ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300' : 'border-slate-700 text-slate-500')}>
+                    {done ? <CheckCircle2 size={16} /> : <span className="w-2.5 h-2.5 rounded-full bg-current opacity-70" />}
+                  </span>
+                  <span className="font-bold leading-relaxed">{t}</span>
+                </button>
+              );
+            })}
+            {(!tasks || tasks.length === 0) && (
+              <div className="p-4 rounded-[1.5rem] bg-slate-900/40 border border-slate-800 text-sm text-slate-500 font-semibold">Первые задачи появятся после генерации плана.</div>
+            )}
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button type="button" onClick={() => setActiveTab('nutrition')} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">📸 Добавить еду</button>
+            <button type="button" onClick={() => setPlanRulesExpanded(v => !v)} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-slate-950/70 border border-slate-800 text-slate-200 font-black text-sm hover:border-indigo-500/30 transition-all">{planRulesExpanded ? 'Скрыть правила' : 'Показать правила'}</button>
+            <button type="button" onClick={() => { if (window.confirm('Обновить недельное меню и список покупок?')) void handleGenerateWeeklyMenu(); }} disabled={weeklyMenuLoading || !currentUserAiPlan} className="min-h-[48px] px-4 py-3 rounded-[1.3rem] bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-sm hover:bg-indigo-600/30 disabled:opacity-50 transition-all">{weeklyMenuLoading ? 'Генерирую…' : 'Обновить план'}</button>
+          </div>
+        </div>
+        <div className="md:order-3 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
           <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Шаблон дня</p>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-bold text-slate-200">
             {mealTemplateFields.map((item) => {

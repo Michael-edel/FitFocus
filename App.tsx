@@ -138,6 +138,7 @@ import { exportWeeklyReportPdf } from './features/progress/exportWeeklyReportPdf
 import { useWisShareNotice } from './features/dashboard/useWisShareNotice';
 import { useInviteCodeState } from './features/auth/useInviteCodeState';
 import { usePlanActivation } from './features/auth/usePlanActivation';
+import { useRegistrationDraft } from './features/auth/useRegistrationDraft';
 import { buildAchievementContext } from './features/achievements/achievementContext';
 import { prepareLoginSession } from './features/auth/loginSession';
 import { startStateSyncLifecycle } from './features/auth/stateSyncLifecycle';
@@ -331,6 +332,16 @@ const App: React.FC = () => {
     profileSyncNoteScope,
     null,
   );
+  const [completedProfileReload, setCompletedProfileReload] = useState<OutboxReadGuard | null>(null);
+  useLayoutEffect(() => {
+    if (!completedProfileReload) return;
+    // Consume once after the scope hook's layout reset. A completion that lost
+    // its session cannot reappear on a later login or cache reconciliation.
+    setCompletedProfileReload(null);
+    if (authenticatedAccountSessionScope(completedProfileReload, currentUser?.id) !== profileSyncNoteScope
+      || profileSyncNoteScope === null) return;
+    setProfileSyncNote('Профиль обновлён из облака.');
+  }, [completedProfileReload, currentUser?.id, profileSyncNoteScope, setProfileSyncNote]);
   const paywall = usePaywall(currentUser?.plan || 'free', requireInvite, rootAccountSessionScope);
   const loginAttemptRef = useRef(0);
   const authBootstrapAttemptRef = useRef(0);
@@ -726,8 +737,13 @@ const App: React.FC = () => {
     setEditFoodModal(buildFoodCorrectionDraft(item, inferMealType(item.timestamp || new Date().toISOString())));
   };
   const registrationScope = googleMe?.sub ? `registration:${googleMe.sub}` : null;
-  const { value: regData, setValue: setRegData } = useAccountScopedUiState(
-    registrationScope,
+  const registrationGuard = registrationSessionGuardRef.current;
+  const registrationDraftScope = authState === 'register'
+    && isRegistrationSessionReady(googleMe?.sub, registrationSessionState)
+    && registrationGuard?.identity === googleMe?.sub && !registrationGuard?.invalid
+    && registrationGuard?.sessionKey ? `registration:${registrationGuard.sessionKey}` : null;
+  const { value: regData, setValue: setRegData } = useRegistrationDraft(
+    registrationDraftScope,
     INITIAL_REGISTRATION_DATA,
   );
 
@@ -1026,7 +1042,7 @@ const App: React.FC = () => {
   }, []);
 
 
-  const applyRemoteProfile = useCallback((profile: UserProfile) => {
+  const applyRemoteProfile = useCallback((profile: UserProfile, readGuard: OutboxReadGuard) => {
     loginAttemptRef.current += 1;
     const refreshed = resetUsageIfNewPeriod(profile);
     setUserProfileRepository(new UserStateRepository(profile.id));
@@ -1034,8 +1050,8 @@ const App: React.FC = () => {
     setAllUsers(previous => normalizeUserProfiles(previous.map(user => user.id === profile.id ? refreshed : user)));
     hasPendingProfileChangesRef.current = false;
     setProfileSyncState('idle');
-    setProfileSyncNote('Профиль обновлён из облака.');
-  }, [setProfileSyncNote]);
+    setCompletedProfileReload({ ...readGuard });
+  }, []);
 
   const flushPendingProfileToCloud = useCallback(async (profile: UserProfile) => {
     if (!googleMe?.sub) {
@@ -1056,7 +1072,7 @@ const App: React.FC = () => {
       persistUser,
       applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setProfileSyncNote]);
 
   const patchProfileInCloud = useCallback(async (patch: Partial<UserProfile>) => {
     return patchProfileInCloudService(patch, {
@@ -1072,7 +1088,7 @@ const App: React.FC = () => {
       persistUser,
       applyRemoteProfile,
     });
-  }, [currentUser, applyRemoteProfile, loginReadGuard, persistUser, userProfileRepository, isCurrentProfileSession]);
+  }, [currentUser, applyRemoteProfile, loginReadGuard, persistUser, userProfileRepository, isCurrentProfileSession, setProfileSyncNote]);
 
   const patchProfileInCloudWithAchievements = useCallback(async (patch: Partial<UserProfile>) => {
     const committed = await patchProfileInCloud(patch);
@@ -1108,7 +1124,7 @@ const App: React.FC = () => {
       persistUser,
       applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setProfileSyncNote]);
 
   useEffect(() => {
     if (profileSyncState === 'saved') {
@@ -1137,7 +1153,7 @@ const App: React.FC = () => {
       setLoginReadGuard,
       applyRemoteProfile,
     });
-  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setLoginReadGuard]);
+  }, [currentUser, googleMe?.sub, applyRemoteProfile, persistUser, userProfileRepository, isCurrentProfileSession, setLoginReadGuard, setProfileSyncNote]);
 
   // Edits are already durable. A debounce wakes the current sender without obtaining fresh proof.
   useProfileAutoSync({
@@ -1965,6 +1981,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         activationTotalMs={ACTIVATION_TOTAL_MS}
         handleActivateWithTransition={handleActivateWithTransition}
         onOpenVersionInfo={() => setVersionInfoOpen(true)}
+        onClearPlanError={() => setPlanError(null)}
       />
     </React.Suspense>
   );

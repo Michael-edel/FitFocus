@@ -1,4 +1,39 @@
+## Cached form lifecycle (second pass, 22 October 2026)
+
+`ProfileDraftHydration` allows cached UI restoration once per verified
+account/session scope. Explicit edits or save consume that opportunity before
+publishing the profile. A same-scope profile update preserves a dirty working
+form and refreshes a clean form from the profile, without rereading a stale dirty
+cache. This prevents a completed Save from manufacturing a new edit revision.
+Helper eligibility tests are in `tests/settings_profile_draft_hydration.test.ts`;
+real form, outbox and reload checks are in `e2e/profile-durability.spec.ts`.
+
 # Профиль: постоянная запись и проверка сессии
+
+## Подтверждение показанной ревизии и повторный Save, 22.10.2026
+
+Второй проход локальной ветки `qa/first-users-20261022` устраняет гонку:
+новый редактор читает регистрационный профиль до ACK, затем ACK повышает
+confirmedVersion без изменения значения. Ранее первая правка получала
+`base-version-conflict` даже без двойного нажатия.
+
+Repository передаёт точные прочитанные байты только для профиля. В той же
+IDB write-транзакции допускается только ACK этой показанной ревизии:
+valueRevision и acknowledgedRevision совпадают с expectedRevision, байты
+не менялись, ACK metadata присутствует, head и любые операции отсутствуют,
+confirmedVersion выросла. Остальные revision/parent/session/auth-fence и
+canCommit проверки остаются обязательными. Это не принятие чужой версии
+и не автоматическое разрешение конфликта. Обычные state-записи исключены.
+
+`SettingsScreen` использует синхронный [Save gate](../features/settings/profileDraftSave.ts)
+для cloud и local путей. Повторное нажатие во время await не создаёт вторую
+операцию; ошибка сохраняет dirty draft, завершение старой попытки не очищает
+новый ввод или данные другой сессии.
+
+Регрессии: [ACK interleaving](../tests/profile_editor_ack_interleaving.test.ts),
+[отрицательная матрица ACK](../tests/profile_ack_observation.test.ts),
+[Save gate](../tests/settings_profile_draft_save.test.ts).
+Публикация и точный CI фиксируются отдельно; исторические границы ниже сохранены.
 
 Обновлено: 12.10.2026. Ветка `fix/durable-outbox`,
 [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93), база #94 → #90.
@@ -157,6 +192,23 @@ auth-паузу, конфликт без перебазирования, чис�
 Остаются полный lifecycle остальных callbacks, legacy provenance/barrier/import,
 UI разрешения конфликтов, атомарный backup/экспорт/очистка всех stores,
 реальные OAuth/staging и выпуск в защищённую main. [TASKS](../TASKS.md).
+
+## Уведомление после обновления сессии 22.10.2026
+
+Ручное чтение облачного профиля может принять новую локальную эпоху того же
+аккаунта и server session. `profileSync.ts` передаёт в `applyRemoteProfile`
+точный read guard, который прошёл проверку перед применением профиля.
+`App.tsx` публикует успешное уведомление после layout-сброса области UI:
+завершение потребляется один раз и допускается только при совпадении account,
+server session и epoch. Несовпадение или отсутствие активной области навсегда
+отбрасывает это завершение. Общая защита устаревших UI-setters не ослабляется.
+
+Детерминированный сценарий в `e2e/ai-callback-account-switch.spec.ts`
+удерживает реальный mock GET до обновления эпохи, проверяет HTTP 200,
+облачное имя в ответе и форме, видимое уведомление, затем его отсутствие
+в обеих вкладках после перехода к аккаунту B. Исходный сценарий без
+принудительного обновления эпохи и сценарий повторного входа сохранены.
+Доказательства и результаты: [регрессионный отчёт](../qa/first-users/profile-refresh-notice-regression-2026-10-22.md).
 
 ## Дополнительная проверка до pointerdown 12.10.2026
 

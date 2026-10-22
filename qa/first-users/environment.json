@@ -1,0 +1,72 @@
+{
+  "baselineSha": "5ee93b0ea05faa5a3cf827ee80e6d51cdc017946",
+  "branch": "qa/first-users-20261022",
+  "root": "C:\\Users\\User\\Documents\\Codex\\2026-10-20\\task-3\\fitfocus-first-users-20261022",
+  "createdAt": "2026-10-22T04:23:34.237Z",
+  "serverPID": 9808,
+  "baseline": [
+    {
+      "port": 4251,
+      "origin": "http://127.0.0.1:4251",
+      "email": "first-user-4251@example.test",
+      "counts": {
+        "qa_user": 0,
+        "qa_profile": 0,
+        "qa_kv": 0
+      }
+    },
+    {
+      "port": 4252,
+      "origin": "http://127.0.0.1:4252",
+      "email": "first-user-4252@example.test",
+      "counts": {
+        "qa_user": 0,
+        "qa_profile": 0,
+        "qa_kv": 0
+      }
+    },
+    {
+      "port": 4253,
+      "origin": "http://127.0.0.1:4253",
+      "email": "first-user-4253@example.test",
+      "counts": {
+        "qa_user": 0,
+        "qa_profile": 0,
+        "qa_kv": 0
+      }
+    },
+    {
+      "port": 4254,
+      "origin": "http://127.0.0.1:4254",
+      "email": "first-user-4254@example.test",
+      "counts": {
+        "qa_user": 0,
+        "qa_profile": 0,
+        "qa_kv": 0
+      }
+    }
+  ],
+  "retestReservedPorts": [
+    4261,
+    4262,
+    4263,
+    4264
+  ],
+  "bind": "127.0.0.1",
+  "productionBindings": false,
+  "productionCredentials": false,
+  "auth": "Local HTTP fixture form, no real Google or email sending",
+  "ai": "Deterministic fixture; actual Gemini quality excluded",
+  "payments": "BLOCKED: no existing Stripe sandbox credentials; checkout returns503 and no external redirect",
+  "storage": "Per-origin IndexedDB/localStorage/SW; per-port SQLite and distinct cookie names",
+  "frozenBuild": "qa/first-users/baseline-dist",
+  "artifacts": "qa/first-users/artifacts",
+  "unsupportedAPI": "501 QA_UNIMPLEMENTED_API must be classified as fixture limitation",
+  "firstSuccess": "Complete registration, create plan, see daily goals and retain profile/plan after reload",
+  "browserRunsStarted": false,
+  "playwrightChromiumBinaryAvailable": true,
+  "viewport375": "Available via separate Playwright context, not yet exercised",
+  "slow3G": "Requires separate Playwright CDP network emulation; no Browser MCP throttle capability; not yet exercised",
+  "fixtureSHA256": "117f48f7bcd31eabdadfc4f26d9124bb6c04731c93a4584e530d715a53a44ed3",
+  "baselineIndexSHA256": "d126b1afdb62955369e16abd6577978abf5ffd28bebf59cd983ccf2ee46f49ed"
+}

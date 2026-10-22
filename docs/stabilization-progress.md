@@ -1,4 +1,59 @@
+## Second-pass cache race regression, 22 October 2026
+
+A Firefox diagnostic series reproduced duplicate Save twice in ten attempts.
+Trace proves successful save -> same-scope profile publication -> stale dirty
+cache restoration -> artificial edit revision -> second Save operation. Cache
+hydration is now consumed once per account/session, and explicit edits/saves
+consume it before asynchronous publication. Independent source review: no findings.
+Final-source local checks: 1608/1608 unit tests, 226 files; all three TypeScript
+configurations; schema/privacy/auth/API/admin guards; audit zero vulnerabilities.
+Strict Firefox duplicate-Save repeat: 10/10, retries zero. Seven-profile matrix: 28/28 passed, retries zero, including dirty-cache
+restoration, clean-cache persistence, reload, 375 px layout and logout/relogin.
+No publication yet; full exact-head CI remains required.
+
 # Стабилизация: проверяемые изменения
+
+## Первые пользователи, второй проход, 22.10.2026
+
+Ветка`qa/first-users-20261022`, parent272e7ef; рабочие изменения до commit.
+Устранены target validation, перекрытие CTA и profile ACK race. Диагностика
+реальным StateEditor/outbox показала first-save conflict без doubleclick.
+Desired regression на прежнем storage:exit1; после узкого atomic ACK fix
+focused78/78. Общий target validator:66/66, target field SSR7/7.
+Полный unit1608/1608 в226файлах; три typecheck, schema23migrations/32tables,
+privacy29tables, auth/API/admin guards и audit0 прошли. Независимый review:
+no material findings. Browser/regression SHA и CI кандидата фиксируются
+после подготовки; результаты старых CI не переносятся на новый код.
+Исторические persona-отчёты не изменены; второй regression report отдельный.
+
+## Vitest audit и диагностика bootstrap после merge, 22.10.2026
+
+Исходный main `5ee93b0ea05faa5a3cf827ee80e6d51cdc017946`:
+[CI 39717155497](https://github.com/Michael-edel/FitFocus/actions/runs/39717155497)
+упал на audit до проверок кода. Advisories:
+[GHSA-qxg6-89mg-rqv8](https://github.com/advisories/GHSA-qxg6-89mg-rqv8) и
+[GHSA-xp26-3454-mjgp](https://github.com/advisories/GHSA-xp26-3454-mjgp).
+Обе исправлены в 4.1.12.
+
+Рабочая ветка `fix/vitest-audit-20261022`, кодовый коммит
+`7686836d232076cd9099c79008a8127ac98aa0fc`: package.json и lockfile,
+Vitest и семь связанных `@vitest` пакетов 4.1.11 → 4.1.12.
+Посторонних dependency changes и ослабления проверок нет. Установлены
+собственные node_modules этой рабочей копии; npm ci прошёл. Официальные
+tarball URLs/integrity сверены для всех восьми пакетов. Audit до fix:
+2 moderate / exit 1; после fix: 0 vulnerabilities. Unit: 1506/1506,
+219 файлов; root/domain/storage typechecks, production build (Vite 6.4.4)
+и diff check прошли.
+Независимый Sol-review точного коммита: no findings. Это локальные результаты;
+полный CI опубликованного follow-up проверяется отдельно.
+
+Отдельная локальная диагностика на main `5ee93b0`: три SQLite :memory:
+проверки подтвердили missing `user_profiles.version` до0011 и missing
+`user_kv.deleted_at` до0019. Пустой bootstrap после этих migrations
+возвращает 200; live version сохраняется, tombstones фильтруются.
+Миграции применялись только к тестовой SQLite. Production schema и runtime
+exception не прочитаны; эти результаты не устанавливают причину
+пользовательского HTTP500. Extension warnings с ним не связываются.
 
 ## PR #96 — исправления интеграции, 21.10.2026
 

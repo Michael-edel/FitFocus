@@ -65,6 +65,58 @@ beforeEach(async () => {
 afterEach(() => { userStateDatabase.close(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('durable registration', () => {
+  it.each([[Goal.LOSS, 72], [Goal.GAIN, 84], [Goal.MAINTAIN, 80]])('persists the validated empty-target suggestion for %s', async (goal, expected) => {
+    const d = deps();
+    d.regData.weight = 80; d.regData.targetWeight = 0; d.regData.goal = goal as Goal;
+    await runRegistrationFlow(d);
+    expect(d.loginAsUser).toHaveBeenCalledOnce();
+    expect(d.generatePersonalPlan.mock.calls[0][0].targetWeight).toBe(expected);
+    const stored = (await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value;
+    expect(JSON.parse(stored!).targetWeight).toBe(expected);
+  });
+  it('rejects a target of 999 kg for loss from 80 kg before profile, invite or AI work', async () => {
+    const d = deps();
+    d.regData.weight = 80; d.regData.targetWeight = 999; d.requireInvite = true;
+    await runRegistrationFlow(d);
+    expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('целевой вес'));
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+    expect(d.getProfileWriteGuard).not.toHaveBeenCalled();
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+    expect((await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value).toBeNull();
+  });
+  it.each([999, 131, 0, -1, NaN, Infinity, 32.5])('rejects invalid age %s before any profile, invite or AI work', async age => {
+    const d = deps(); d.regData.age = age; d.requireInvite = true;
+    await runRegistrationFlow(d);
+    expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('возраст'));
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+    expect(d.getProfileWriteGuard).not.toHaveBeenCalled();
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(d.loginAsUser).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+    expect((await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value).toBeNull();
+  });
+  it('does not accept acknowledgement of another goal as loss-risk consent', async () => {
+    const d = deps();
+    await runRegistrationFlow({ ...d, regData: { ...d.regData, lossDeficit: 1000, riskAckGain: true } });
+    expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('Я понимаю риски'));
+    expect(d.getProfileWriteGuard).not.toHaveBeenCalled();
+    expect(d.generatePersonalPlan).not.toHaveBeenCalled();
+    expect(await new DurableOutbox().list(account)).toEqual([]);
+  });
+  it('preserves medical restrictions in the initial profile and AI input', async () => {
+    const d = deps(); const restriction = 'SYNTHETIC_TEST_RESTRICTION';
+    d.generatePersonalPlan.mockImplementation(async user => {
+      expect(user.medicalRestrictions).toBe(restriction);
+      const saved = await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`);
+      expect(JSON.parse(saved.value!).medicalRestrictions).toBe(restriction);
+      return undefined;
+    });
+    await runRegistrationFlow({ ...d, regData: { ...d.regData, medicalRestrictions: restriction } });
+    expect(d.generatePersonalPlan).toHaveBeenCalledTimes(1);
+    expect(d.loginAsUser).toHaveBeenCalledWith(expect.objectContaining({ medicalRestrictions: restriction }), expect.any(Object));
+  });
   it('does not save a profile or start AI when the registration session is not current', async () => {
     const d = deps();
     d.isCurrentSession = () => false;
