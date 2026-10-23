@@ -1,5 +1,9 @@
 # Данные и владение
 
+## Локальная модель семейного дня, 23.10.2026
+
+[family-planning](family-planning.md) добавляет миграцию0022: family_dining_profiles, roster versions, family format marker и legacy archive. Account и managed различны; общий лимит5. Частные конфигурации account доступны только своему аккаунту; managed — организатору. Дневной planningV1 хранится в прежнем family_menu_generations с точной датой и CAS, без второй таблицы актуального меню. Новые частные строки включены в export/delete и privacy inventory. Рабочая БД не мигрировалась.
+
 Снимок: 09.10.2026, `810adb1`. [Область документации](README.md).
 
 Дополнение 12.10.2026, `dac2de2`: [чтение облачных данных](bootstrap-hydration.md)

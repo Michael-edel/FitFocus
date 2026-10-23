@@ -23,6 +23,17 @@ it.each([undefined, { protocol: 1 }, { protocol: 2, guard: 1 }])('requires famil
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me({ familySync: capability }))); session.fetchImpl = fetchImpl;
   await expect(request()).rejects.toThrow('PROTOCOL'); expect(fetchImpl).toHaveBeenCalledOnce();
 });
+it.each(['/api/family/dining-profiles?familyId=f', '/api/family/dining-profile?familyId=f&profileId=p', '/api/family/menu/archive?familyId=f'])('requires complete planning capability before %s', async url => {
+  session.fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me()));
+  await expect(requestFamilyJson(session, url, { method: 'GET' })).rejects.toThrow('PROTOCOL');
+  expect(session.fetchImpl).toHaveBeenCalledOnce();
+});
+it('does not preview a structured day against a server missing the planning migration', async () => {
+  session.requireFamilyPlanning = true;
+  session.fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json(me({ familyMenuSync: { protocol: 1, guard: 1, cas: 1 } })));
+  await expect(requestFamilyJson(session, '/api/family/menu/generate?week=2026-10-23', { method: 'POST', body: '{}' })).rejects.toThrow('PROTOCOL');
+  expect(session.fetchImpl).toHaveBeenCalledOnce();
+});
 it.each([
   ['/api/family/invite', 'POST'],
   ['/api/family/member', 'PATCH'],

@@ -65,36 +65,47 @@ const familyJoin = [
   read('functions/api/family/join.ts'),
   read('functions/api/_lib/family_join_by_invite.ts'),
 ].join('\n');
+const familyPlanningMigration = read('migrations/0022_family_planning.sql');
 assertIncludes(
   familyJoin,
-  'WHERE code = ? AND used_by_user_id IS NULL',
-  'family join must claim invites atomically',
+  'await db.batch([',
+  'family join must transact membership insertion and invite claim together',
 );
 assertIncludes(
   familyJoin,
-  'AND expires_at >= ?',
-  'family join must include invite expiry in the atomic claim',
+  'i.used_by_user_id IS NULL AND i.expires_at>=? AND f.is_active=1',
+  'family join must recheck unused invite, expiry and active family in INSERT SELECT',
 );
 assertIncludes(
   familyJoin,
-  'WHERE (SELECT COUNT(*) FROM family_members WHERE family_id = ? AND status =',
-  'family join must enforce member limit during insert',
+  "WHERE code=? AND used_by_user_id IS NULL AND EXISTS(SELECT 1 FROM family_members WHERE id=? AND user_id=? AND is_active=1 AND status='active')",
+  'family join must claim only the invite backed by its exact inserted active membership',
 );
+assertOrder(familyJoin,'INSERT INTO family_members','UPDATE family_invites SET used_by_user_id',
+  'family join must insert the eligible membership before claiming its invite in the batch');
+assertNotIncludes(familyJoin,'UPDATE family_invites SET used_by_user_id = NULL',
+  'family join must rely on transaction rollback rather than a separate compensation write');
 assertIncludes(
   familyJoin,
-  'UPDATE family_invites SET used_by_user_id = NULL, used_at = NULL',
-  'family join must release invite when member insert fails',
-);
-assertIncludes(
-  familyJoin,
-  'AND NOT EXISTS (',
+  "AND NOT EXISTS(SELECT 1 FROM family_members m JOIN families other ON other.id=m.family_id WHERE m.user_id=? AND m.is_active=1 AND m.status='active' AND other.is_active=1)",
   'family join must prevent concurrent active membership in another family during invite redemption',
 );
 assertIncludes(
   familyJoin,
-  'FAMILY_JOIN_CONFLICT',
-  'family join must surface unresolved invite redemption races explicitly',
+  "throw new Error('INVITE_INVALID')",
+  'family join must explicitly reject a transaction that accepted no eligible membership',
 );
+assertIncludes(familyJoin,"AND (SELECT count(*) FROM family_members c WHERE c.family_id=i.family_id AND c.is_active=1 AND c.status='active')<5",
+  'compatible server before migration 0022 must still atomically enforce the original account limit');
+for(const trigger of ['family_dining_capacity_insert','family_dining_capacity_update','family_members_active_insert','family_members_active_update','family_members_dining_insert','family_members_dining_update']) {
+  assertIncludes(familyPlanningMigration,`CREATE TRIGGER ${trigger}`,'family activation must retain SQL quota and membership lifecycle guards');
+}
+assertIncludes(familyPlanningMigration,"(SELECT count(*) FROM family_dining_profiles WHERE family_id=NEW.family_id AND active=1)>=5",
+  'family quota must atomically count both accounts and managed profiles including owner');
+assertIncludes(familyPlanningMigration,"THEN RAISE(ABORT,'FAMILY_JOIN_CONFLICT') END",
+  'competing family membership must abort the entire join transaction');
+assertIncludes(familyPlanningMigration,"THEN RAISE(ABORT,'FAMILY_LIMIT') END",
+  'capacity failure must abort both membership and invite writes');
 
 const restore = read('functions/api/account/restore.ts');
 assertIncludes(restore, 'RESTORE_REQUIRES_REAUTH', 'account restore must require re-authentication');
@@ -1477,14 +1488,17 @@ const familyIndex = [
 ].join('\n');
 assertIncludes(
   familyIndex,
-  'WHERE NOT EXISTS (',
-  'family creation must guard owner membership insertion against concurrent active family membership',
+  'WHERE EXISTS(SELECT 1 FROM families WHERE id=?) AND NOT EXISTS (',
+  'family creation must require its newly inserted family and prevent concurrent active owner membership',
 );
 assertIncludes(
   familyIndex,
-  'DELETE FROM families WHERE id = ?',
-  'family creation must clean up orphan family rows when membership insertion loses a race',
+  'await db.batch([db.prepare(`INSERT INTO families',
+  'family creation must transact family and owner membership together so failure leaves no orphan',
 );
+assertIncludes(familyIndex,'SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM family_members m JOIN families f ON f.id=m.family_id',
+  'family creation must repeat active-membership eligibility at the first transactional INSERT');
+assertOrder(familyIndex,'INSERT INTO families','INSERT INTO family_members','family creation must write owner membership only after its family within the same batch');
 assertIncludes(
   familyIndex,
   'FAMILY_CREATE_CONFLICT',

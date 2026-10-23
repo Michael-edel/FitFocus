@@ -35,8 +35,13 @@ async function signJwt(payload: Record<string, unknown>) {
 function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: number; existingFamilyAfterConflict?: string | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   let familyAccessReadCount = 0;
+  let inserted=false;
   return {
     runs,
+    async batch(statements:Array<{run:()=>Promise<unknown>}>) {
+      if(options.memberInsertChanges===0&&!options.existingFamilyAfterConflict) throw new Error('FAMILY_LIMIT');
+      const results=[];for(const statement of statements)results.push(await statement.run());return results;
+    },
     prepare(sql: string) {
       const stmt = {
         sql,
@@ -62,6 +67,8 @@ function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: nu
             return { id: 'family-1', owner_user_id: 'owner-1' };
           }
           if (sql.includes('FROM subscriptions')) return { plan: 'family' };
+          if(sql.includes('FROM family_invites i JOIN families')) return {family_id:'family-1',owner_user_id:'owner-1'};
+          if(sql.includes('SELECT family_id FROM family_members WHERE id=')) return inserted?{family_id:'family-1'}:null;
           if (sql.includes('COUNT(*) as c FROM family_members')) return { c: 4 };
           return null;
         },
@@ -75,6 +82,7 @@ function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: nu
             return { success: true, meta: { changes: options.inviteClaimChanges ?? 1 } };
           }
           if (sql.includes('INSERT INTO family_members')) {
+            inserted=(options.memberInsertChanges??1)===1&&(options.inviteClaimChanges??1)===1;
             return { success: true, meta: { changes: options.memberInsertChanges ?? 1 } };
           }
           return { success: true, meta: { changes: 1 } };
@@ -105,7 +113,7 @@ async function postJoin(db: ReturnType<typeof makeDb>, requestId?: string) {
 }
 
 describe('/api/family/join', () => {
-  it('claims an invite with a conditional update before inserting the member', async () => {
+  it('atomically inserts an eligible membership before conditionally claiming its invite', async () => {
     const db = makeDb();
     const response = await postJoin(db, 'family-join-request-1');
 
@@ -113,8 +121,8 @@ describe('/api/family/join', () => {
     expect(response.headers.get('X-Request-ID')).toBe('family-join-request-1');
     const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-1');
-    expect(db.runs.some((run) => run.sql.includes('WHERE code = ? AND used_by_user_id IS NULL'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('WHERE code=? AND used_by_user_id IS NULL AND EXISTS'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('i.expires_at>=?'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
@@ -125,18 +133,18 @@ describe('/api/family/join', () => {
     expect(response.status).toBe(400);
     const body = await response.json() as FamilyJoinBody;
     expect(body.error.code).toBe('INVITE_INVALID');
-    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('i.expires_at>=?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
-  it('releases the invite when the conditional member insert fails on family limit', async () => {
+  it('rolls back the join on quota failure without a separate release operation', async () => {
     const db = makeDb({ memberInsertChanges: 0 });
     const response = await postJoin(db);
 
     expect(response.status).toBe(400);
     const body = await response.json() as FamilyJoinBody;
-    expect(body.error.code).toBe('FAMILY_JOIN_CONFLICT');
-    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
+    expect(body.error.code).toBe('FAMILY_LIMIT');
+    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites'))).toBe(false);
   });
 
   it('returns the latest family when the user loses a concurrent join race', async () => {
@@ -147,6 +155,6 @@ describe('/api/family/join', () => {
     const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-2');
     expect(body.alreadyMember).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(false);
   });
 });

@@ -34,6 +34,8 @@ export async function ensureUserRow(db: D1Database, user: { sub: string; email?:
 }
 
 export function toApiError(e: unknown) {
-  const code = e instanceof Error ? e.message : "BAD_REQUEST";
+  const raw = e instanceof Error ? e.message : "BAD_REQUEST";
+  // D1 prefixes SQLite RAISE messages. Expose only the stable public family code.
+  const code = raw.match(/\b(FAMILY_LIMIT|FAMILY_JOIN_CONFLICT|FAMILY_PLANNING_STATE_REQUIRED|FAMILY_ARCHIVE_IMMUTABLE|VERSION_EXHAUSTED)\b/)?.[1] || raw;
   return errRu(code);
 }

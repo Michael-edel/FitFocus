@@ -4,6 +4,7 @@ import type { AppSettings, UserProfile } from './types';
 import type { OutboxOperation, OutboxReadGuard, OutboxWriteGuard } from './storage/durableOutbox';
 import type { ProfilePersistOptions } from './features/profile/useProfilePersistence';
 import { ACTIVE_SESSION_CHANNEL, DurableOutbox } from './storage/durableOutbox';
+import { stateSync } from './storage/stateSync';
 import { accountSessionRenderKey } from './features/state/accountScopedUi';
 
 const DashboardScreen = React.lazy(() => import('./DashboardScreen'));
@@ -11,7 +12,7 @@ const PlanScreen = React.lazy(() => import('./PlanScreen'));
 const NutritionScreen = React.lazy(() => import('./NutritionScreen'));
 const RecipesScreen = React.lazy(() => import('./RecipesScreen'));
 const WorkoutsScreen = React.lazy(() => import('./WorkoutsScreen'));
-const FamilyScreen = React.lazy(() => import('./FamilyScreen'));
+const FamilyPlanningScreen = React.lazy(() => import('./FamilyPlanningScreen'));
 const CouncilScreen = React.lazy(() => import('./CouncilScreen'));
 const ProScreen = React.lazy(() => import('./ProScreen'));
 const CourseScreen = React.lazy(() => import('./CourseScreen'));
@@ -178,7 +179,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
   }, [allowCachedAccountUiStateRestore, onAccountUiCacheRestoreAllowedChange]);
 
   return (
-    <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}>
+    <main className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto p-4 md:p-10 xl:p-12 space-y-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(var(--ff-bottom-navigation-height, 88px) + 16px)' }}>
       {!canRenderActiveTab ? (
         <div role="status" aria-live="polite" className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm font-medium text-slate-300">
           {accountSessionMessage}
@@ -394,34 +395,15 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <WorkoutsScreen />
         </React.Suspense>
       )}
-      {activeTab === 'family' && (
-        <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка семьи...</div>}>
-          <FamilyScreen
-            key={screenSessionKey}
-            cloudFamily={cloudFamily}
-            cloudFamilyMembers={cloudFamilyMembers}
-            cloudFamilyLoading={cloudFamilyLoading}
-            cloudFamilyError={cloudFamilyError}
-            setCloudFamilyError={setCloudFamilyError}
-            familyInviteCode={familyInviteCode}
-            familyJoinCode={familyJoinCode}
-            familyNameDraft={familyNameDraft}
-            setFamilyJoinCode={setFamilyJoinCode}
-            setFamilyNameDraft={setFamilyNameDraft}
-            loadCloudFamily={loadCloudFamily}
-            createFamilyCloud={createFamilyCloud}
-            joinFamilyCloud={joinFamilyCloud}
-            makeInviteCode={makeInviteCode}
-            generateFamilyMenuNow={generateFamilyMenuNow}
-            updateMyFamilyGoal={updateMyFamilyGoal}
-            loadFamilyShopping={loadFamilyShopping}
-            familyShoppingLoading={familyShoppingLoading}
-            familyShopping={familyShopping}
-            toggleFamilyShoppingItem={toggleFamilyShoppingItem}
-            formatGramsPretty={formatGramsPretty}
-          />
+      {currentUser && <section hidden={!['today', 'family', 'shopping'].includes(activeTab)}>
+        <React.Suspense fallback={<div role="status" className="py-12 text-center text-slate-400">Открываем семейное меню…</div>}>
+          <FamilyPlanningScreen key={screenSessionKey} currentUser={currentUser} loginGuard={loginGuard}
+            isCurrentSession={isCurrentSession} allowCachedUiStateRestore={allowCachedAccountUiStateRestore}
+            currentView={activeTab === 'family' ? 'menu' : activeTab === 'shopping' ? 'shopping' : 'today'}
+            onViewChange={view => setActiveTab(view === 'menu' ? 'family' : view === 'shopping' ? 'shopping' : 'today')}
+            onSyncNow={async () => isCurrentSession() ? stateSync.syncNow(currentUser.id) : false} />
         </React.Suspense>
-      )}
+      </section>}
       {activeTab === 'council' && (
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка AI Совета...</div>}>
           <CouncilScreen

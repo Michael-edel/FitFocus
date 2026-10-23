@@ -10,6 +10,7 @@ export type FamilySession = {
   outbox?: DurableOutbox;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  requireFamilyPlanning?: boolean;
 };
 
 export function familyErrorMessage(error: unknown): string {
@@ -33,6 +34,8 @@ export async function requestFamilyJson(session: FamilySession, url: string, ini
   if (!guard) throw new SessionReadError('auth');
   const capability = body?.familySync;
   if (!isRecord(capability) || capability.protocol !== 1 || capability.guard !== 1) throw new SessionReadError('protocol');
+  if ((session.requireFamilyPlanning || url.startsWith('/api/family/dining-profile') || url.startsWith('/api/family/menu/archive'))
+    && (!isRecord(body?.familyPlanning) || body.familyPlanning.version !== 1)) throw new SessionReadError('protocol');
   if ((url === '/api/family/invite' || url === '/api/family/member') && capability.target !== 1) {
     throw new SessionReadError('protocol');
   }

@@ -42,7 +42,7 @@ const migrationReasonLabels: Record<MigrationUnknownReason, string> = {
   'fingerprint-collision': 'Не удалось однозначно различить записи',
   'missing-imported-operation': 'Импортированная операция не найдена',
 };
-const noticeClass = 'col-start-1 row-start-1 m-4 rounded-xl border p-4 text-sm';
+const noticeClass = 'col-start-1 row-start-1 m-4 min-w-0 break-words rounded-xl border p-4 text-sm';
 const labels: Record<string, string> = {
   profile: 'Профиль', diary: 'Дневник', history: 'История', favorite_recipes: 'Избранные рецепты',
   weekly_reports: 'Недельные отчёты', last_coach_card: 'Совет тренера', settings: 'Настройки',

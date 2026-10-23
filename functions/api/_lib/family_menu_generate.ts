@@ -7,6 +7,23 @@ import { isJsonObject, safeJsonParse } from './json';
 import { requireFamilyPlan } from './plans';
 import { calculateDailyTargets } from '../../../domain/profileMath';
 import { ActivityLevel, Gender, Goal } from '../../../domain/types';
+import { buildFamilyDayMenu, type FamilyMealSelection } from '../../../domain/familyPlanning';
+import { requireFamilyPlanning, readPlanningContext } from './family_dining';
+import { readFamilyMenuState } from './family_menu_state';
+
+/** A day candidate is a read-only catalog projection; only menu/state may accept it. */
+export async function previewFamilyDay(db:D1Database,userId:string,weekStart:string,body:unknown) {
+  await requireFamilyPlanning(db);
+  if(!isJsonObject(body)||body.preview!==true||typeof body.familyId!=='string'||typeof body.date!=='string'||body.date!==weekStart||!Array.isArray(body.selections)||!Number.isSafeInteger(body.rosterVersion)) throw new Error('BAD_SELECTION');
+  const family=await requireFamilyMember(db,body.familyId,userId);
+  if(family.owner_user_id!==userId) throw new Error('FORBIDDEN');
+  await requireFamilyPlan(db,family.owner_user_id);
+  const context=await readPlanningContext(db,family.id);
+  if(context.rosterVersion!==body.rosterVersion) throw new Error('VERSION_CONFLICT');
+  const accepted=await readFamilyMenuState(db,userId,family.id,weekStart);
+  const menu=buildFamilyDayMenu({...context,date:body.date,selections:body.selections as FamilyMealSelection[],previousPlanning:accepted.menu?.planningV1});
+  return {ok:true,preview:true,weekStart,menuId:family.id+':'+weekStart,shared:{id:family.id+':'+weekStart,familyId:family.id,weekStart,menu},members:menu.prefs.includeIds.length,rosterVersion:menu.planningV1.rosterVersion,profileVersions:menu.planningV1.profileVersions};
+}
 
 type ItemKey =
   | 'oatmeal' | 'greek_yogurt' | 'banana' | 'egg' | 'chicken_breast' | 'rice' | 'salad_mix'
@@ -78,7 +95,6 @@ function parseRestrictions(value: unknown): MemberRestrictions {
 }
 
 function isRestrictedItem(key: ItemKey, restrictions: MemberRestrictions) {
-  if (restrictions.severity !== 'strict') return false;
   const noteTerms = restrictions.notes ? normalizeText(restrictions.notes).split(/[,;\n]/).map((value) => value.trim()).filter((value) => value.length >= 3) : [];
   const terms = [...restrictions.allergens, ...restrictions.intolerances, ...restrictions.excludedFoods, ...noteTerms].map(normalizeText).filter((value) => value.length >= 3);
   if (!terms.length) return false;
@@ -121,8 +137,9 @@ function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number, restrict
       const meal = day[mealKey];
       const ingredients = meal.items.map((key) => {
         const resolvedKey = isRestrictedItem(key, restrictions)
-          ? (SUBSTITUTES[key] || []).find((candidate) => !isRestrictedItem(candidate, restrictions)) || key
+          ? (SUBSTITUTES[key] || []).find((candidate) => !isRestrictedItem(candidate, restrictions))
           : key;
+        if (!resolvedKey) throw new Error('NO_SAFE_RECIPE');
         if (resolvedKey !== key) replacements[ITEM_META[key].name] = ITEM_META[resolvedKey].name;
         const meta = ITEM_META[resolvedKey], grams = Math.max(1, Math.round(meta.grams * factor));
         totals[meta.name] = (totals[meta.name] || 0) + grams;
@@ -149,6 +166,11 @@ export async function generateFamilyMenu({ db, userId, weekStart, preview, famil
   const family = preview && familyId ? await requireFamilyMember(db, familyId, userId) : await requireFamilyOwner(db, userId);
   if (family.owner_user_id !== userId) throw new Error('FORBIDDEN');
   await requireFamilyPlan(db, userId);
+  const planningFamily=await db.prepare("SELECT name FROM pragma_table_info('families') WHERE name='planning_format_version'").first();
+  if(planningFamily) {
+    const state=await db.prepare('SELECT planning_format_version FROM families WHERE id=?').bind(family.id).first<{planning_format_version:number}>();
+    if(state?.planning_format_version===1) throw new Error('FAMILY_PLANNING_STATE_REQUIRED');
+  }
   const now = Math.floor(nowMs() / 1000), shared = buildDeterministicSharedMenu();
   const existing = preview ? null : await db.prepare('SELECT id FROM weekly_menus WHERE family_id=? AND week_start=? LIMIT 1').bind(family.id, weekStart).first<WeeklyMenuRow>();
   const menuId = existing?.id || uuid();

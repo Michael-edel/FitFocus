@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { sqliteD1 } from './_helpers/sqliteD1';
 import { createFamilyInvite } from '../functions/api/_lib/family_invite_create';
 import { parseFamilyMemberPatch, updateFamilyMemberProfile } from '../functions/api/_lib/family_member_profile';
@@ -37,10 +38,19 @@ describe('explicit family mutation targets against SQLite', () => {
   const familyB = 'family-b';
   let fixture: ReturnType<typeof sqliteD1>;
 
-  beforeEach(() => { fixture = sqliteD1(); });
+  // Historical rows may contain multiple active memberships from before 0022.
+  // Seed the actual pre-migration schema, then install every current SQL guard
+  // before exercising explicit-target behavior. Never disable guards in the tested state.
+  beforeEach(() => {
+    const schema=readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8');
+    fixture=sqliteD1(schema.split('-- Dining profiles are private;')[0]);
+  });
   afterEach(() => fixture.sqlite.close());
+  function migrateHistoricalFixture() {
+    fixture.sqlite.exec(readFileSync(new URL('../migrations/0022_family_planning.sql',import.meta.url),'utf8'));
+  }
 
-  it('updates only the targeted membership when one user belongs to multiple families', async () => {
+  it('updates only the targeted membership when migration preserves historical multiple-family rows', async () => {
     fixture.sqlite.prepare('INSERT INTO users (id, created_at) VALUES (?, 1)').run(userId);
     fixture.sqlite.prepare('INSERT INTO families (id, owner_user_id, name, created_at) VALUES (?, ?, ?, 1)')
       .run(familyA, 'family-a-owner', 'Family A');
@@ -50,6 +60,10 @@ describe('explicit family mutation targets against SQLite', () => {
       .run('member-a', familyA, userId);
     fixture.sqlite.prepare("INSERT INTO family_members (id, family_id, user_id, role, status, goal, created_at) VALUES (?, ?, ?, 'owner', 'active', 'MAINTAIN', 1)")
       .run('member-b', familyB, userId);
+
+    migrateHistoricalFixture();
+    expect(fixture.sqlite.prepare('SELECT count(*) AS count FROM family_dining_profiles WHERE user_id=?').get(userId))
+      .toEqual({count:2});
 
     const result = await updateFamilyMemberProfile({ db: fixture.db, userId, familyId: familyB, body: { goal: 'LOSS' } });
 
@@ -64,6 +78,7 @@ describe('explicit family mutation targets against SQLite', () => {
       .run(familyB, userId, 'Family B');
     fixture.sqlite.prepare("INSERT INTO family_members (id, family_id, user_id, role, status, goal, created_at) VALUES (?, ?, ?, 'owner', 'active', 'MAINTAIN', 1)")
       .run('member-b', familyB, userId);
+    migrateHistoricalFixture();
     fixture.hooks.before = sql => {
       if (sql.startsWith('UPDATE family_members')) fixture.sqlite.prepare('UPDATE family_members SET is_active = 0 WHERE family_id = ? AND user_id = ?').run(familyB, userId);
     };
@@ -86,6 +101,7 @@ describe('explicit family mutation targets against SQLite', () => {
     fixture.sqlite.prepare("INSERT INTO family_members (id, family_id, user_id, role, status, created_at) VALUES (?, ?, ?, 'owner', 'active', 1)")
       .run('member-b', familyB, userId);
     fixture.sqlite.prepare("INSERT INTO subscriptions (user_id, plan, status, updated_at) VALUES (?, 'family', 'active', 1)").run(userId);
+    migrateHistoricalFixture();
 
     const result = await createFamilyInvite({ db: fixture.db, userId, familyId: familyB, body: { ttlHours: 1 } });
 

@@ -33,8 +33,11 @@ async function signJwt(payload: Record<string, unknown>) {
 function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFamily | null } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
   let accessReadCount = 0;
+  let created:LatestFamily|null=null;
+  let memberInserted=false;
   return {
     runs,
+    async batch(statements:Array<{run:()=>Promise<unknown>}>) { return Promise.all(statements.map(statement=>statement.run())); },
     prepare(sql: string) {
       const stmt = {
         sql,
@@ -49,10 +52,11 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFa
           if (sql.includes('FROM families f') && sql.includes('JOIN family_members m')) {
             accessReadCount += 1;
             if (accessReadCount === 1) return null;
-            return options.latestFamily ? { id: options.latestFamily.id, owner_user_id: options.latestFamily.owner_user_id, role: 'owner' } : null;
+            const accepted=options.latestFamily||(memberInserted?created:null);
+            return accepted ? { id: accepted.id, owner_user_id: accepted.owner_user_id, role: 'owner' } : null;
           }
           if (sql.includes('SELECT id, name, owner_user_id, created_at FROM families WHERE id = ? LIMIT 1')) {
-            return options.latestFamily || null;
+            return options.latestFamily || (memberInserted?created:null);
           }
           if (sql.includes('FROM subscriptions')) return { plan: 'family' };
           return null;
@@ -63,7 +67,9 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFa
         },
         async run() {
           runs.push({ sql, binds: this.binds });
+          if(sql.includes('INSERT INTO families')) created={id:String(this.binds[0]),name:String(this.binds[1]),owner_user_id:String(this.binds[2]),created_at:Number(this.binds[3])};
           if (sql.includes('SELECT ?, ?, ?, \'owner\'')) {
+            memberInserted=(options.memberInsertChanges??1)===1;
             return { success: true, meta: { changes: options.memberInsertChanges ?? 1 } };
           }
           return { success: true, meta: { changes: 1 } };
@@ -120,7 +126,7 @@ describe('/api/family POST', () => {
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
-  it('deletes the orphan family row and returns the existing family when membership insert loses the race', async () => {
+  it('returns the existing family after the atomic create batch loses the race', async () => {
     const db = makeDb({
       memberInsertChanges: 0,
       latestFamily: { id: 'family-existing', name: 'Уже есть', owner_user_id: 'user-1', created_at: NOW },
@@ -132,7 +138,8 @@ describe('/api/family POST', () => {
       family: { id: 'family-existing' },
       alreadyMember: true,
     });
-    expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(false);
+    expect(db.runs.find(run=>run.sql.includes('INSERT INTO families'))?.sql).toContain('NOT EXISTS');
   });
 });
 

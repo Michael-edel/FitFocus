@@ -570,63 +570,11 @@ export default function PlanScreen({
         </React.Suspense>
       )}
 
-      {(cloudFamily?.id || (paywallPlan === 'family' && allUsers.length > 1)) && (
-        <div className="mt-6 p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Семейное меню на неделю</p>
-              <p className="mt-1 text-xs text-slate-500 font-semibold">Одна готовка для всех + порции под разные калории. Исключения учитываются.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setFamilyMenuPrefsOpen(true)} disabled={!currentUserAiPlan || familyMenuLoading} className="px-4 py-2 rounded-full bg-slate-900 border border-slate-800 text-slate-200 font-black text-[11px] uppercase tracking-widest hover:border-indigo-500/30 disabled:opacity-50">Параметры</button>
-              <button onClick={handleGenerateFamilyWeeklyMenu} disabled={familyMenuLoading || !currentUserAiPlan} className="px-4 py-2 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600/30 disabled:opacity-50">{familyMenuLoading ? 'Генерирую…' : (familyMenu ? 'Обновить' : 'Сгенерировать')}</button>
-            </div>
-          </div>
-          {familyMenuError && (<p className="mt-3 text-xs text-amber-300 font-bold">{familyMenuError}</p>)}
-          {familyMenu ? (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {familyMenu.days.map((d, i) => (
-                <div key={i} className="p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
-                  <div className="text-slate-200 font-black mb-2">{d.day}</div>
-                  {([['Завтрак', d.breakfast], ['Обед', d.lunch], ['Ужин', d.dinner], ['Перекус', d.snack]] as const).map(([label, meal], j) => (
-                    <div key={j} className="mt-2 text-xs text-slate-300 font-semibold">
-                      <div><span className="text-slate-500 font-black">{label}:</span> <MealParts value={meal.base} /></div>
-                      <div className="mt-1 pl-3 space-y-0.5">
-                        {Object.entries(meal.portions || {}).map(([pid, ptxt]) => {
-                          const person = allUsers.find((u) => u.id === pid);
-                          const nm = person?.name || (pid === currentUser?.id ? 'Вы' : pid);
-                          if (!ptxt) return null;
-                          return <div key={pid} className="text-[11px] text-slate-400"><span className="text-slate-500 font-black">{nm}:</span> <MealParts value={String(ptxt)} /></div>;
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500 font-semibold">Нажмите «Сгенерировать», чтобы получить семейное меню на 7 дней и список покупок.</p>
-          )}
-          {(familyMenu?.shoppingListItems?.length || familyMenu?.shoppingList?.length) && (
-            <div className="mt-4 p-4 rounded-[1.5rem] bg-slate-900/30 border border-slate-800">
-              <div className="text-slate-200 font-black mb-2">Список покупок (семья)</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm font-bold text-slate-200">
-                {(familyMenu?.shoppingListItems || []).length
-                  ? familyMenu.shoppingListItems.slice(0, 40).map((it, i) => (
-                      <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800 flex items-center justify-between gap-3">
-                        <span className="truncate">• {it.name}</span>
-                        <span className="text-slate-400 tabular-nums">{formatGramsPretty(it.grams)}</span>
-                      </div>
-                    ))
-                  : familyMenu.shoppingList.slice(0, 40).map((s: string, i: number) => (
-                      <div key={i} className="p-3 rounded-[1.2rem] bg-slate-950/40 border border-slate-800">• {s}</div>
-                    ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
+      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-950 p-5">
+        <h2 className="text-lg font-bold text-slate-100">Планирование для всей семьи</h2>
+        <p className="mt-2 text-sm text-slate-400">Состав семьи, общие блюда, порции и покупки теперь открываются в одном разделе. Этот экран сохраняет ваш личный план.</p>
+        <button type="button" onClick={() => setActiveTab('family')} className="mt-4 min-h-11 rounded-xl bg-indigo-600 px-5 text-base font-bold text-white focus-visible:ring-2 focus-visible:ring-indigo-300">Открыть меню семьи</button>
+      </section>
       <div className="mt-6" />
       <div className="p-6 rounded-[2rem] bg-slate-950 border border-slate-800 text-left">
         <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Правила</p>

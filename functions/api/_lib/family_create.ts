@@ -1,9 +1,8 @@
 import { nowMs, uuid } from './db';
 import { getActiveFamilyForUser } from './family_access';
-import { asString, isJsonObject } from './json';
+import { isJsonObject } from './json';
 import { requireFamilyPlan } from './plans';
 
-type MutationResult = { meta?: { changes?: number }; changes?: number };
 
 export type FamilyRecord = { id: string; name: string; owner_user_id: string; created_at: number };
 export type FamilyCreateResult =
@@ -11,13 +10,11 @@ export type FamilyCreateResult =
   | { kind: 'existing'; family: FamilyRecord }
   | { kind: 'conflict' };
 
-function changedRows(result: MutationResult): number {
-  return Number(result?.meta?.changes ?? result?.changes ?? 0);
-}
 
 export function normalizeFamilyName(body: unknown): string {
   const payload = isJsonObject(body) ? body : {};
-  return asString(payload.name, 'Моя семья').slice(0, 60);
+  if (typeof payload.name !== 'string' || !payload.name.trim() || payload.name.trim().length > 60) throw new Error('BAD_NAME');
+  return payload.name.trim();
 }
 
 async function readActiveFamily(db: D1Database, userId: string): Promise<FamilyRecord | null> {
@@ -45,16 +42,15 @@ export async function createFamily({
 
   const familyId = uuid();
   const createdAt = Math.floor(nowMs() / 1000);
-  await db
-    .prepare('INSERT INTO families (id, name, owner_user_id, created_at) VALUES (?, ?, ?, ?)')
-    .bind(familyId, name, userId, createdAt)
-    .run();
-
-  const memberInsert = await db.prepare(
+  await db.batch([db.prepare(`INSERT INTO families (id,name,owner_user_id,created_at)
+    SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM family_members m JOIN families f ON f.id=m.family_id
+      WHERE m.user_id=? AND m.is_active=1 AND m.status='active' AND f.is_active=1)
+    AND EXISTS(SELECT 1 FROM subscriptions WHERE user_id=? AND plan='family' AND status IN ('active','trialing') AND (current_period_end IS NULL OR current_period_end>?))`)
+      .bind(familyId,name,userId,createdAt,userId,userId,createdAt*1000), db.prepare(
     `INSERT INTO family_members
      (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
      SELECT ?, ?, ?, 'owner', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
-     WHERE NOT EXISTS (
+     WHERE EXISTS(SELECT 1 FROM families WHERE id=?) AND NOT EXISTS (
        SELECT 1
        FROM family_members fm
        JOIN families f ON f.id = fm.family_id
@@ -63,13 +59,13 @@ export async function createFamily({
          AND fm.is_active = 1
          AND f.is_active = 1
      )`,
-  ).bind(uuid(), familyId, userId, createdAt, createdAt, userId).run();
+  ).bind(uuid(), familyId, userId, createdAt, createdAt, familyId, userId)]);
 
-  if (changedRows(memberInsert) === 1) {
+  const accepted = await readActiveFamily(db,userId);
+  if (accepted?.id === familyId) {
     return { kind: 'created', family: { id: familyId, name, owner_user_id: userId, created_at: createdAt } };
   }
 
-  await db.prepare('DELETE FROM families WHERE id = ?').bind(familyId).run();
-  const latest = await readActiveFamily(db, userId);
+  const latest = accepted;
   return latest ? { kind: 'existing', family: latest } : { kind: 'conflict' };
 }

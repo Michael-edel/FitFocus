@@ -69,6 +69,7 @@ export async function readFamilyMenu({
   if (await familyMenuStateReady(db)) {
     const snapshot = await readFamilyMenuGeneration(db, family.id, weekStart);
     if (!snapshot.menu) return { kind: 'empty', weekStart, version: 0 };
+    if (snapshot.menu.planningV1) throw new Error('FAMILY_PLANNING_STATE_REQUIRED');
     return { kind: 'loaded', weekStart,
       shared: { id: `${family.id}:${weekStart}`, familyId: family.id, weekStart, menu: snapshot.menu, version: snapshot.version },
       portions: { portions: snapshot.menu.days.map(day => ({ day: day.day,

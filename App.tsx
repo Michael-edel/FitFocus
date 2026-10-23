@@ -569,7 +569,8 @@ const App: React.FC = () => {
     null,
   );
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
-  const { activeTab, setActiveTab } = useHashTabNavigation('dashboard');
+  const { activeTab, setActiveTab } = useHashTabNavigation('today');
+  const isFamilyWorkspaceTab = activeTab === 'today' || activeTab === 'family' || activeTab === 'shopping';
   const { value: mobileMoreOpen, setValue: setMobileMoreOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
   const sidebarVisibleTabs = isAdmin ? sidebarTabs : sidebarTabs.filter(tab => tab.id !== 'admin');
   const sidebarCoreTabs = sidebarVisibleTabs.filter(tab => sidebarCoreTabIds.includes(tab.id));
@@ -579,20 +580,10 @@ const App: React.FC = () => {
   const mobileMoreTabs = sidebarVisibleTabs.filter(tab => !mobilePrimaryTabIds.includes(tab.id));
 
 
-  // Load Cloud Family context when opening Family / Plan (so users can see family mode immediately)
+  // Daily family screens own their guarded context; do not run the former weekly writer in parallel.
   useEffect(() => {
     setMobileMoreOpen(false);
-    if (activeTab === 'family' || activeTab === 'plan') {
-      void loadCloudFamily();
-    }
-  }, [activeTab, loadCloudFamily]);
-
-  // If plan is in family scope, keep family shopping list fresh
-  useEffect(() => {
-    if (planScope === 'family' && cloudFamily?.id) {
-      void loadFamilyShopping();
-    }
-  }, [planScope, cloudFamily?.id, loadFamilyShopping]);
+  }, [activeTab]);
 
   const { value: isScanning, setValue: setIsScanning } = useAccountScopedUiState(rootAccountSessionScope, false);
   const { value: cameraOpen, setValue: setCameraOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
@@ -1988,7 +1979,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
-      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
+      {allowCachedUiStateRestore && !isFamilyWorkspaceTab && <StateStorageNotice accountId={currentUser?.id} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
@@ -2078,6 +2069,9 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         aiBadge={aiBadge}
         retryMeta={retryMeta}
         syncBadge={syncBadge}
+        storageNotice={allowCachedUiStateRestore && isFamilyWorkspaceTab
+          ? <React.Fragment key={rootAccountSessionScope ?? 'no-account'}><StateStorageNotice accountId={currentUser?.id} /></React.Fragment>
+          : undefined}
       />
 
       <AppWorkspace
