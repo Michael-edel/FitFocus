@@ -1442,7 +1442,7 @@ test('a delayed family shopping response cannot trigger an achievement after ano
   }
 });
 
-test('a delayed family shopping check from the previous same-account session is discarded after reauthentication', async ({ page, context }, info) => {
+test('a delayed family purchase callback is discarded while its durable intent retries under the reauthenticated session', async ({ page, context }, info) => {
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   const state: FixtureState = {
     current: accountA, familyId: 'family-before-reauthentication', inviteRequests: 0, inviteTargetIds: [], releasedInvites: 0,
@@ -1465,6 +1465,14 @@ test('a delayed family shopping check from the previous same-account session is 
   expect(state.shoppingCheckAccounts).toEqual([accountA.id]);
   expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
   expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication']);
+
+  const retainedPurchase = await saved(page);
+  expect(retainedPurchase.operations).toHaveLength(1);
+  expect(retainedPurchase.operations[0].opId).toEqual(expect.any(String));
+  expect(JSON.parse(retainedPurchase.operations[0].value)).toMatchObject({
+    familyId: 'family-before-reauthentication', mutationKind: 'purchases',
+  });
+  const originalMutation = structuredClone(state.familyPurchaseMutations![0]);
 
   const reauthenticated = { ...accountA, sid: 'd'.repeat(64) };
   state.current = reauthenticated;
@@ -1490,15 +1498,27 @@ test('a delayed family shopping check from the previous same-account session is 
     });
     await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
 
-      const oldSessionListReadsBeforeLateResponse = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length ?? 0;
+    // Same-account reauthentication resumes the saved intent with a fresh guard.
+    // It must retain the original family/payload/CAS, never target the new family.
+    await expect.poll(() => state.shoppingCheckSessions).toEqual([accountA.sid, reauthenticated.sid]);
+    expect(state.familyPurchaseMutations).toEqual([
+      originalMutation, { ...originalMutation, session: reauthenticated.sid },
+    ]);
+    await expect.poll(async () => (await saved(reauthenticatedPage)).operations).toEqual([]);
+    const acknowledgedPurchase = await saved(reauthenticatedPage);
+    const oldSessionListReadsBeforeLateResponse = state.familyShoppingListSessions?.filter(session => session === accountA.sid).length ?? 0;
     fixtureA.releaseShoppingCheck();
     await expect.poll(() => state.releasedShoppingChecks).toBe(1);
     await page.waitForTimeout(700);
     await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
     await expect(newCheckbox).not.toBeChecked();
-    expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
-    expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication']);
-      expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(oldSessionListReadsBeforeLateResponse);
+    expect(state.shoppingCheckSessions).toEqual([accountA.sid, reauthenticated.sid]);
+    expect(state.shoppingCheckFamilyIds).toEqual(['family-before-reauthentication', 'family-before-reauthentication']);
+    expect(state.familyPurchaseMutations).toEqual([
+      originalMutation, { ...originalMutation, session: reauthenticated.sid },
+    ]);
+    expect(await saved(reauthenticatedPage)).toEqual(acknowledgedPurchase);
+    expect(state.familyShoppingListSessions?.filter(session => session === accountA.sid)).toHaveLength(oldSessionListReadsBeforeLateResponse);
     expect(state.shoppingAchievements).toEqual([]);
     expect(errorsA).toEqual([]);
     expect(errorsReauthenticated).toEqual([]);
@@ -1654,15 +1674,15 @@ test('a delayed personal shopping check from account A is rejected after account
   await openApp(page, '/#plan');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(() => activeAccount(page)).toBe(accountA.id);
-  const accountACheckbox = page.getByLabel('Список A');
+  const accountACheckbox = page.locator('#shopping-list').getByRole('checkbox', { name: 'Список A 400 г', exact: true });
   await expect(accountACheckbox).toBeVisible();
-  await accountACheckbox.check();
+  await setPurchasedCheckbox(accountACheckbox, true);
   await expect.poll(() => state.personalShoppingCheckRequests).toBe(1);
   expect(state.personalShoppingCheckAccounts).toEqual([accountA.id]);
 
   try {
     const accountBPage = await openAccountB(context, state, errorsB, true);
-    const accountBCheckbox = accountBPage.getByLabel('Список B');
+    const accountBCheckbox = accountBPage.locator('#shopping-list').getByRole('checkbox', { name: 'Список B 400 г', exact: true });
     await expect(accountBCheckbox).toBeVisible();
     await expect(accountBCheckbox).not.toBeChecked();
     expect(await activeAccount(page)).toBe(accountB.id);
@@ -1696,7 +1716,7 @@ test('personal shopping toggles for one item reach the server in user-intent ord
     memberRequests: 0, memberTargetIds: [], releasedMembers: 0,
   };
   const fixture = await installAccountApi(page, state, false, errors, true, false, true);
-  const checkbox = page.getByLabel('Список A');
+  const checkbox = page.locator('#shopping-list').getByRole('checkbox', { name: 'Список A 400 г', exact: true });
 
   try {
     await openApp(page, '/#plan');
@@ -1705,9 +1725,9 @@ test('personal shopping toggles for one item reach the server in user-intent ord
     await expect(checkbox).toBeVisible();
     await expect(checkbox).not.toBeChecked();
 
-    await checkbox.check();
+    await setPurchasedCheckbox(checkbox, true);
     await expect.poll(() => state.personalShoppingCheckRequests).toBe(1);
-    await checkbox.uncheck();
+    await setPurchasedCheckbox(checkbox, false);
     await expect(checkbox).not.toBeChecked();
 
     // The first server write is held. A newer intent must wait instead of racing it.
