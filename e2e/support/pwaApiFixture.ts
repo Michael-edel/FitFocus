@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildMockProfile } from './appHarness';
 import { familyTestMenu } from '../../tests/_helpers/familyMenu';
+import { isFamilyPlanningMenu, isPurchaseOnlyChange, type PlannedFamilyMenu } from '../../domain/familyPlanning';
+import { planningDay, planningRoster, confirmedConfiguration } from './familyPlanningFixture';
 
 const account = 'google-e2e-sub', initialSessionId = 'a'.repeat(64), familyId = 'family-durable-e2e';
 const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account': account,
@@ -8,13 +10,21 @@ const headers = { 'Content-Type': 'application/json', 'X-FitFocus-State-Account'
     [[`X-FitFocus-${resource}-Protocol`, resource === 'State' ? '2' : '1'], [`X-FitFocus-${resource}-Guard`, '1']])) };
 
 /** Synthetic HTTP backend shared by both releases; no request interception or SW replacement. */
-export function createPwaApiFixture(options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
+export function createPwaApiFixture(options: { familyPlanning?: boolean; retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number;
   retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
   achievementCheckGate?: { started: (scope: { method: string | undefined; account: string | undefined; session: string | undefined }) => void; wait: Promise<void> };
   profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let sessionId = initialSessionId;
   let disconnectStateWrites = false;
-  let profile: Record<string, unknown> = buildMockProfile();
+  let profile: Record<string, unknown> = { ...buildMockProfile(), ...(options.familyPlanning ? { plan: 'family' } : {}) };
+  // Keep legacy /family/menu data separate: retained v2 clients still exercise their original payload.
+  const structuredDays = new Map<string, { version: number; menu: PlannedFamilyMenu }>();
+  const familyWrites: Array<{ familyId: string; weekStart: string; baseVersion: number; mutationKind: string; account: string; session: string }> = [];
+  const structuredDay = (date: string) => {
+    let day = structuredDays.get(date);
+    if (!day) { day = { version: 1, menu: planningDay(account, date, 0.75) }; structuredDays.set(date, day); }
+    return day;
+  };
   let week = familyTestMenu(account).weekStart;
   let available = options.conflictFirstFamilyPut === true, familyVersion = 1, familyMenu = familyTestMenu(account, 400, week);
   let firstFamilyConflictInjected = false, stateAvailable = options.stateUnavailable !== true;
@@ -24,9 +34,9 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
   const unexpectedApi: string[] = [], counts = { put: 0, preview: 0, profile: 0, profileGet: 0, accepted: 0, acceptedAtMs: null as number | null,
     me: 0, logout: 0, pushSubscribe: 0, oauth: 0, familyPutAborted: 0, legacyStatePutAttempts: 0, legacyStateScopeRejected: 0,
     legacyStateProtocolRejected: 0, stateProtocolRejected: 0,
-    currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0 };
+    currentStatePutAttempts: 0, currentStatePutAccepted: 0, currentStatePutTransportAborted: 0, structuredOldWriterRejected: 0 };
   const pushRequests: Array<{ path: string; method: string; account: string | null; session: string | null }> = [];
-  return { unexpectedApi, counts, stateWriteKeys, stateWriteItems, pushRequests,
+  return { unexpectedApi, counts, stateWriteKeys, stateWriteItems, pushRequests, familyWrites,
     setStateWriteDisconnected: (disconnected: boolean) => { disconnectStateWrites = disconnected; },
     setActiveSessionId: (nextSessionId: string) => { sessionId = nextSessionId; },
     recoverState: () => { stateAvailable = true; },
@@ -71,7 +81,7 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId },
       ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'huaweiSync', 'pushSync', 'familySync'].map(name =>
         [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
-      familyMenuSync: { protocol: 1, guard: 1, cas: 1 } });
+      familyMenuSync: { protocol: 1, guard: 1, cas: 1 }, ...(options.familyPlanning ? { familyPlanning: { version: 1 } } : {}) });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {
       if (method === 'PUT') { counts.profile += 1; profile = { ...body, version: Number(body.baseVersion) + 1 }; }
@@ -108,6 +118,58 @@ export function createPwaApiFixture(options: { retryAfterSeconds?: number; unaut
     }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },
       members: [{ user_id: account, role: 'owner', status: 'active' }] });
+    if (options.familyPlanning && (path.startsWith('/api/family/dining-profile') || path === '/api/family/menu/state'
+      || path === '/api/family/menu/generate' || path === '/api/family/menu/archive')
+      && (request.headers['x-fitfocus-state-account'] !== account || request.headers['x-fitfocus-state-session'] !== sessionId)) {
+      unexpectedApi.push(`INVALID_STRUCTURED_SCOPE:${path}`); return json({ error: 'INVALID_SCOPE' }, 403);
+    }
+    if (options.familyPlanning && (path === '/api/family/menu' && method !== 'GET' || path === '/api/shopping/check')) {
+      counts.structuredOldWriterRejected += 1; return json({ error: 'STRUCTURED_PLANNING_REQUIRED' }, 409);
+    }
+    if (options.familyPlanning && path === '/api/family/dining-profiles' && method === 'GET') {
+      return json({ roster: planningRoster(familyId, account) });
+    }
+    if (options.familyPlanning && path === '/api/family/dining-profile' && method === 'GET') {
+      return json({ profile: { ...planningRoster(familyId, account).profiles[0], configuration: confirmedConfiguration } });
+    }
+    if (options.familyPlanning && path === '/api/family/menu/archive' && method === 'GET') return json({ archives: [] });
+    if (options.familyPlanning && path === '/api/family/menu/generate') {
+      if (method !== 'POST' || body.preview !== true || body.familyId !== familyId || typeof body.date !== 'string' || body.rosterVersion !== 1 || !Array.isArray(body.selections)) {
+        counts.structuredOldWriterRejected += 1; return json({ error: 'STRUCTURED_PLANNING_REQUIRED' }, 409);
+      }
+      counts.preview += 1;
+      const menu = planningDay(account, body.date, 1, body.selections as Parameters<typeof planningDay>[3]);
+      return json({ preview: true, rosterVersion: 1, profileVersions: menu.planningV1.profileVersions,
+        shared: { familyId, weekStart: body.date, menu } });
+    }
+    if (options.familyPlanning && path === '/api/family/menu/state') {
+      const date = method === 'GET' ? url.searchParams.get('week') : body.weekStart;
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'BAD_DATE' }, 400);
+      const day = structuredDay(date);
+      const snapshot = () => ({ familyId, weekStart: date, version: day.version, menu: day.menu });
+      if (method === 'GET') return json({ ok: true, snapshot: snapshot() });
+      if (method !== 'PUT' || body.familyId !== familyId || !['planning', 'purchases'].includes(String(body.mutationKind)) || !isFamilyPlanningMenu(body.menu, date)) {
+        counts.structuredOldWriterRejected += 1; return json({ error: 'STRUCTURED_PLANNING_REQUIRED' }, 409);
+      }
+      counts.put += 1;
+      familyWrites.push({ familyId, weekStart: date, baseVersion: Number(body.baseVersion), mutationKind: String(body.mutationKind),
+        account: String(request.headers['x-fitfocus-state-account']), session: String(request.headers['x-fitfocus-state-session']) });
+      const delayMs = counts.put > 1 ? options.retryFamilyPutDelayMs ?? options.familyPutDelayMs : options.familyPutDelayMs;
+      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+      if (response.destroyed) { counts.familyPutAborted += 1; return; }
+      if (options.conflictFirstFamilyPut && !firstFamilyConflictInjected) {
+        firstFamilyConflictInjected = true; day.version += 1; day.menu = planningDay(account, date, 1);
+        return json({ error: 'VERSION_CONFLICT', snapshot: snapshot() }, 409);
+      }
+      if (!available) return json({ error: 'INJECTED_OFFLINE' }, 503,
+        options.retryAfterSeconds === undefined ? {} : { 'Retry-After': String(options.retryAfterSeconds) });
+      if (body.baseVersion !== day.version) return json({ error: 'VERSION_CONFLICT', snapshot: snapshot() }, 409);
+      if (body.mutationKind === 'purchases' && !isPurchaseOnlyChange(day.menu.planningV1, body.menu.planningV1)) {
+        return json({ error: 'INVALID_PURCHASE_CHANGE' }, 409);
+      }
+      day.menu = body.menu; day.version += 1; counts.accepted += 1; counts.acceptedAtMs = Date.now();
+      return json({ ok: true, snapshot: snapshot() });
+    }
     if (path === '/api/family/menu') {
       week = url.searchParams.get('week') ?? week;
       return json({ weekStart: week, shared: { familyId, version: familyVersion, menu: { ...familyMenu, weekStart: week } }, portions: null });

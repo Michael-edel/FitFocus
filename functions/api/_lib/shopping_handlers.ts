@@ -9,6 +9,7 @@ export type ShoppingEnv = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 type ShoppingRequest = { request: Request; env: ShoppingEnv; requestId: string };
 
 function errorStatus(error: ReturnType<typeof toApiError>) {
+  if(error.code==='FAMILY_PLANNING_STATE_REQUIRED') return 409;
   return ["UNAUTH", "STATE_SESSION_CHANGED", "STATE_SESSION_REQUIRED"].includes(error.code) ? 401 : error.code === "FORBIDDEN" ? 403 : error.code === "PLAN_REQUIRED_FAMILY" ? 402 : 400;
 }
 

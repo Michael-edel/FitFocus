@@ -41,5 +41,8 @@ export async function readActiveFamilyContext(db: D1Database, userId: string): P
     .bind(family.id)
     .all<FamilyMemberRecord>();
 
-  return { family, members: members.results || [] };
+  return { family, members: (members.results || []).map(member => member.user_id === userId ? member : ({
+    user_id: member.user_id, role: member.role, status: member.status,
+    created_at: member.created_at, updated_at: member.updated_at,
+  })) };
 }

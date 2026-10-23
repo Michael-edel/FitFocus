@@ -5,6 +5,7 @@ import { isFamilyWeek } from '../../../../familyMenuValidation';
 import { requestIdFor } from '../../_lib/observability';
 import { tracedJsonResponse } from '../../_lib/traced_response';
 import { readJsonRequest, RequestBodyTooLargeError } from '../../_lib/request_body';
+import { planningErrorStatus } from '../../_lib/family_planning_handler';
 
 type Env = { AUTH_JWT_SECRET?: string; DB?: D1Database };
 
@@ -31,7 +32,7 @@ async function handle(context: Parameters<PagesFunction<Env>>[0], write: boolean
     const apiError = toApiError(error);
     const status = ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiError.code) ? 401 : apiError.code === 'FORBIDDEN' ? 403
       : apiError.code === 'PLAN_REQUIRED_FAMILY' ? 402 : apiError.code === 'FAMILY_MENU_CORRUPT' ? 409
-      : apiError.code === 'FAMILY_MENU_MIGRATION_REQUIRED' ? 503 : 500;
+      : apiError.code === 'FAMILY_MENU_MIGRATION_REQUIRED' ? 503 : planningErrorStatus(apiError.code);
     return json({ error: apiError }, status);
   }
 }

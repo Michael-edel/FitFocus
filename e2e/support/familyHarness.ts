@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { mockApp, openApp, buildMockProfile } from './appHarness';
-import { familyTestMenu } from '../../tests/_helpers/familyMenu';
+import { planningDay, planningRoster, confirmedConfiguration } from './familyPlanningFixture';
+import { navigate } from './navigation';
 import type { CloudFamilyMember } from '../../features/family/familyApi';
 
 const account = 'google-e2e-sub', sid = 'a'.repeat(64), familyId = 'family-durable-e2e';
@@ -56,8 +57,8 @@ export async function saved(page: Page) {
 export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' | 'held-ai' | 'held-preview' | 'session-expired-ai' | 'quota' = 'normal', options: { url?: string; durable?: boolean; realServiceWorker?: boolean; standalone?: boolean; familyMembers?: CloudFamilyMember[] } = {}) {
   await mockApp(page, { session: 'app', realServiceWorker: options.realServiceWorker, push: { standalone: options.standalone ?? false } });
   let active = true, available = mode !== 'offline', conflict = mode === 'conflict', version = 1, week = '';
-  let cloud = familyTestMenu(account), profile = { ...buildMockProfile(),
-    plan: options.familyMembers ? 'family' as const : 'free' as const };
+  let cloud = planningDay(account, '2026-10-23', 0.75, undefined, options.familyMembers), profile = { ...buildMockProfile(), plan: 'family' as const };
+  const roster = planningRoster(familyId, account, options.familyMembers);
   const errors: string[] = [], counts = { preview: 0, previewFulfilled: 0, put: 0, bases: [] as number[], accepted: 0, ai: 0, fulfilled: 0, oldWriter: 0, achievements: 0, stateReads: 0, logout: 0 };
   let release!: () => void; const held = new Promise<void>(resolve => { release = resolve; });
   let releasePreview!: () => void; const heldPreview = new Promise<void>(resolve => { releasePreview = resolve; });
@@ -76,7 +77,7 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
       stateSync: { protocol: 2, guard: 1, accountId: account, sessionId: sid },
       ...Object.fromEntries(['bootstrapSync', 'profileSync', 'aiSync', 'weeklyMenuSync', 'achievementSync', 'huaweiSync', 'pushSync', 'familySync'].map(name =>
         [name, { protocol: 1, guard: 1, ...(name === 'profileSync' ? { weeklyMenuProjection: 1 } : {}), ...(name === 'familySync' ? { target: 1 } : {}) }])),
-      familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : { user: null });
+      familyMenuSync: { protocol: 1, guard: 1, cas: 1 }, familyPlanning: { version: 1 } } : { user: null });
     if (path === '/api/bootstrap') return json({ user: { sub: account }, profile, items: [] });
     if (path === '/api/profile') {
       if (request.method() === 'PUT') profile = { ...request.postDataJSON(), version: request.postDataJSON().baseVersion + 1 };
@@ -91,6 +92,8 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     if (path === '/api/achievements' && request.method() === 'POST') { counts.achievements += 1; return json({ ok: true, unlocked: [] }); }
     if (path === '/api/family') return json({ family: { id: familyId, name: 'Семья с постоянным меню', owner_user_id: account },
       members: [{ user_id: account, role: 'owner', status: 'active' }, ...(options.familyMembers ?? [])] });
+    if (path === '/api/family/dining-profiles') return json({ roster });
+    if (path === '/api/family/dining-profile') return json({ profile: { ...roster.profiles[0], configuration: confirmedConfiguration } });
     if (path === '/api/family/menu') {
       if (request.method() !== 'GET') { counts.oldWriter += 1; return json({ error: 'OLD_WRITER' }, 409); }
       week = url.searchParams.get('week')!; cloud = { ...cloud, weekStart: week };
@@ -99,6 +102,8 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
     if (path === '/api/family/menu/state') {
       expect(request.headers()['x-fitfocus-state-account']).toBe(account); expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
       if (request.method() === 'GET') {
+        week = url.searchParams.get('week')!;
+        cloud = { ...planningDay(account, week, 0.75, undefined, options.familyMembers), ...(cloud.weekStart === week ? cloud : {}) };
         counts.stateReads += 1;
         if (holdStateRead) { stateReadHeld = true; await heldStateRead; }
         return json({ ok: true, snapshot: { familyId, weekStart: week, version, menu: cloud } });
@@ -108,23 +113,29 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
         counts.bases.push(body.baseVersion);
         expect(body.familyId).toBe(familyId); expect(body.weekStart).toBe(week);
         if (!available) return json({ error: 'INJECTED_OFFLINE' }, 503);
-        if (conflict) { version = 8; cloud = { ...familyTestMenu(account, 999, week) }; return json({ error: 'VERSION_CONFLICT', snapshot: { familyId, weekStart: week, version, menu: cloud } }, 409); }
+        if (conflict) { version = 8; cloud = planningDay(account, week, 1, undefined, options.familyMembers); return json({ error: 'VERSION_CONFLICT', snapshot: { familyId, weekStart: week, version, menu: cloud } }, 409); }
         expect(body.baseVersion).toBe(version); cloud = body.menu; version += 1; counts.accepted += 1;
       }
       return json({ ok: true, snapshot: { familyId, weekStart: week, version, menu: cloud } });
     }
     if (path === '/api/family/menu/generate') {
-      counts.preview += 1; expect(request.postDataJSON()).toEqual({ preview: true, familyId });
-      if (mode === 'held-preview') await heldPreview;
-      counts.previewFulfilled += 1;
-      return json({ preview: true, shared: { familyId, weekStart: week, menu: familyTestMenu(account, 700, week) } });
-    }
-    if (path === '/api/ai' && String(request.postDataJSON()?.feature).startsWith('family_menu')) {
-      counts.ai += 1; expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
-      if (mode === 'session-expired-ai') return json({ error: { message: 'Session expired' } }, 401);
+      counts.preview += 1;
+      const body = request.postDataJSON();
+      expect(body).toMatchObject({ preview: true, familyId, date: week, rosterVersion: 1 });
+      expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
+      // The former family AI path now has a server preview boundary; retain each held-response ownership probe.
+      if (mode === 'held-ai' || mode === 'session-expired-ai') counts.ai += 1;
+      if (mode === 'session-expired-ai') return json({ error: 'STATE_SESSION_CHANGED' }, 401);
       if (mode === 'held-ai') await held;
-      await json({ text: JSON.stringify(familyTestMenu(account, 700, week)) }); counts.fulfilled += 1; return;
+      if (mode === 'held-preview') await heldPreview;
+      const menu = planningDay(account, week, 1, body.selections, options.familyMembers);
+      await json({ preview: true, rosterVersion: 1, profileVersions: menu.planningV1.profileVersions,
+        shared: { familyId, weekStart: week, menu } });
+      counts.previewFulfilled += 1;
+      if (mode === 'held-ai') counts.fulfilled += 1;
+      return;
     }
+    if (path === '/api/ai' && String(request.postDataJSON()?.feature).startsWith('family_menu')) { counts.oldWriter += 1; return json({ error: 'OLD_GENERATOR' }, 409); }
     if (path === '/api/weekly_menu/items' && request.method() === 'POST') { counts.oldWriter += 1; return json({ error: 'OLD_WRITER' }, 409); }
     if (path === '/api/shopping/list') return json({ family_id: familyId, week_start: week, items: cloud.shoppingListItems?.map(item => ({ ...item, checked: false })) });
     return route.fallback();
@@ -138,18 +149,44 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   });
   await openApp(page, options.url ?? '/#family'); await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#family$/);
   // #root also renders the bootstrap shell; start the data assertion on the actual family screen.
-  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Меню семьи', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
+  // The IDB refresh precedes the hook's final published/editor update and run() completion.
+  await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
   return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview,
     holdStateRead: () => { holdStateRead = true; }, releaseStateRead: releaseHeldStateRead, stateReadHeld: () => stateReadHeld,
   };
 }
-export async function navigate(page: Page, name: string) {
-  const button = page.getByRole('button', { name, exact: true });
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await button.scrollIntoViewIfNeeded(); await button.click();
+export { navigate };
+
+export function breakfastPortion(page: Page) {
+  // The wrapping label also contains option text, so getByLabel(..., exact:true) is not its exact name.
+  return page.locator('label.fp-share').filter({ has: page.getByText('Порция: E2E User, Завтрак', { exact: true }) }).getByRole('combobox');
 }
+
+export async function openDayEditor(page: Page) {
+  await navigate(page, 'Меню семьи');
+  await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
+  const selection = page.getByText('Кто ест и какие порции', { exact: true });
+  const editor = page.locator('details').filter({ has: selection });
+  if (await editor.getAttribute('open') === null) await selection.click();
+  await expect(editor).toHaveJSProperty('open', true);
+}
+
+export async function preview(page: Page) {
+  await openDayEditor(page);
+  const portion = breakfastPortion(page);
+  await expect(portion).toBeVisible(); await expect(portion).toBeEnabled();
+  await portion.selectOption('1.25'); await expect(portion).toHaveValue('1.25');
+  const generate = page.getByRole('button', { name: 'Посмотреть меню на день', exact: true });
+  await expect(generate).toBeEnabled(); await generate.click();
+}
+export async function confirmPreview(page: Page) {
+  await preview(page);
+  await page.getByRole('button', { name: 'Подтвердить меню', exact: true }).click();
+}
+
 export function isExpectedStateProtocolRejection(error: string): boolean {
   return /Failed to load resource:.*\b426 \(Upgrade Required\)/.test(error);
 }

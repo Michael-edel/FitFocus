@@ -106,8 +106,15 @@ const commitCount = pickCommitCount();
 const builtAt = new Date().toISOString();
 const recentCommits = pickRecentCommits();
 const recentBuilds = pickRecentBuilds();
+const sourceTree = /^[a-f0-9]{40}$/.test(process.env.QA_SOURCE_TREE || '') ? process.env.QA_SOURCE_TREE : null;
 
-const file = `export const BUILD_SOURCE = ${JSON.stringify(
+// Archives have no .git history. Empty history is real, not a readonly-empty-tuple API.
+const file = `export type BuildHistoryEntry = { sha: string; shortSha: string; committedAt: string; subject: string };
+export type BuildSource = {
+  branch: string; sha: string; shortSha: string; commitCount: number; builtAt: string;
+  recentCommits: readonly string[]; recentBuilds: readonly BuildHistoryEntry[]; sourceTree: string | null;
+};
+export const BUILD_SOURCE: BuildSource = ${JSON.stringify(
   {
     branch,
     sha,
@@ -116,6 +123,7 @@ const file = `export const BUILD_SOURCE = ${JSON.stringify(
     builtAt,
     recentCommits,
     recentBuilds,
+    sourceTree,
   },
   null,
   2

@@ -8,7 +8,8 @@ export type FamilyOperation =
   | 'family.invite.join'
   | 'family.menu.read'
   | 'family.menu.save'
-  | 'family.menu.generate';
+  | 'family.menu.generate'
+  | `family.planning.${'roster'|'private'|'create'|'patch'|'archive'}`;
 
 /** Return a traceable family API response without putting request data into logs. */
 export function familyResponse(

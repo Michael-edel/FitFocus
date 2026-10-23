@@ -1,3 +1,4 @@
+import { navigate } from './support/navigation';
 import { expect } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
@@ -98,10 +99,7 @@ test('navigation aborts a held admin response before unload without losing its c
   }));
 
   await openApp(page, '/');
-  if ((page.viewportSize()?.width ?? 1024) < 768) {
-    await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  }
-  await page.getByRole('button', { name: 'Админ', exact: true }).click();
+  await navigate(page, 'Админ');
   await firstStatsStarted;
   await expect.poll(() => page.evaluate(key => localStorage.getItem(`${key}:stats`), marker)).toBe('1');
 
@@ -157,8 +155,7 @@ test('a delayed admin stats response from a previous same-account session is dis
     serverSessionId: sid,
   });
   const previousSession = await activeSessionIdentity(page);
-  if ((page.viewportSize()?.width ?? 1024) < 768) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await page.getByRole('button', { name: 'Админ', exact: true }).click();
+  await navigate(page, 'Админ');
   await oldStatsStarted;
 
   const reauthenticatedPage = await context.newPage();
@@ -213,10 +210,7 @@ test('a delayed admin stats response from a previous same-account session is dis
     const nextSession = await activeSessionIdentity(reauthenticatedPage);
     expect(nextSession?.sessionEpoch).toBeTruthy();
     expect(nextSession?.sessionEpoch).not.toBe(previousSession?.sessionEpoch);
-    if ((reauthenticatedPage.viewportSize()?.width ?? 1024) < 768) {
-      await reauthenticatedPage.getByRole('button', { name: 'Ещё', exact: true }).click();
-    }
-    await reauthenticatedPage.getByRole('button', { name: 'Админ', exact: true }).click();
+    await navigate(reauthenticatedPage, 'Админ');
     await expect(reauthenticatedPage.getByText('NEW_ADMIN_SESSION_ONLY', { exact: true })).toBeVisible();
 
     releaseOldStats();

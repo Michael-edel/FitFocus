@@ -1,5 +1,105 @@
 # Совместимый артефакт отката
 
+## Текущий локальный pin B3, 23.10.2026
+
+После добавления prefix guards выбран fence-aware B3
+`b8babb13200a95827b7495769a15151bb4c1c7de`, tree
+`f1e221c0bfec4857a4658b34d0f3c0416d1f83f5`. Он сохраняет контракты B2,
+DOMPurify3.4.17 и добавляет атомарный create/join adapter. Его исходные unit/types/
+guards/builds и56 compiled local-D1 cases приняты отдельно. C25
+`f5f3d635f0cd827eb245131bcb733d9071578e83` фиксирует новый pin в CI/PWA fixture
+и прошёл1695 unit/234файла, types/guards/builds. Совместная упаковка полных
+архивов (`ff-family-prepare-c43eaf154fd0`), HTTP C25→B3→C25
+(`ff-family-http-99be0cff12de`:50запросов) и штатный rollout
+(12запросов/7групп) PASS. Native WebKit rollback2/2
+(`ff-family-e2e-9c667f0b825c`) и fresh install1/1
+(`ff-family-e2e-9598d3a341e2`) PASS, workers1/retries0, исходные assertions
+и timeouts сохранены. Target PID0, network/resources и source Git blob
+до/после проверены parent. B3 на момент снимка ещё не опубликован.
+
+Полные архивы этой пары: B3 SHA256
+`4186c8473621f2e2ebfcbc323433ed7ec5a86833b17bb6e14c205a6933b4f3ef`,
+C25 SHA256 `2ca097ba1e20b9d43923ccc4205dd9aae21952ff3efc8002977dd5f057b88c54`.
+Это локальная приёмка точных артефактов; будущий MD-only commit и новый CI
+не получают этот PASS автоматически. Отдельный previous fresh install
+`ff-family-e2e-c8b5fb161fa4` сохранён как infrastructure FAIL: доверенный parent
+потерял stdin при перезапуске tool service, promotion не выполнен.
+
+Прежние B2 `a6b2048` и его успешные проверки ниже — история пары до prefix
+guards. B2 без token protocol не принят как writer rollback после установки
+этих guards. Runtime не устанавливает DDL; отдельные installer/receipt,
+lifecycle/drain, backup и live согласование остаются обязательными.
+
+## Ограничение локальной ветки family-first, 23.10.2026
+
+Новый [planningV1](family-planning.md) требует0022, совместимого reader, family format marker и архива. Откат должен понимать эти данные и IDB v3; прежний main fa08eaf1 не является совместимым rollback после новой записи. Первоначальный аудит был локальным. Последующим отдельным разрешением владелец поручил исправления и выпуск на рабочем сайте; приёмочные gates и защита main сохраняются. [Порядок выпуска и миграции](family-planning-release.md) отделяет подготовку от выполненных действий.
+
+### Контракт упаковки 0022 и обязательный bridge
+
+Подготовлен исходный код поддержки двух отдельных контрактов. Исторический
+manifest format 1 / IDB 3 / D1 0021 сохраняется. Для 0022 используется format 2:
+`compatibility.familyPlanning` содержит `schemaVersion:1`, `formatMarker:1`,
+`archiveColumn:"legacy_menu_json"`, `purchaseCas:1`,
+`accountCleanup:"family_dining_profiles"`. Проверяются точный набор полей,
+наличие миграций 0021/0022 и полная прежняя SHA-256 inventory. Это декларация
+контракта исходного SHA, а не доказательство совместимости worker.
+
+**Назначен кандидат 0022 bridge B `a6b2048bb94b4550013662b18c778f88b785798d`.**
+Это новый dependency-only commit поверх сохранённого B `246a2d7`: DOMPurify
+обновлён до 3.4.17. Старый B и его результаты не переписываются; прежний HTTP
+PASS не считается приёмкой новой пары. Полные B/C собираются и проверяются заново.
+Его runtime/HTTP/PWA приёмка обязательна; назначение SHA не означает её успех.
+`fa08eaf1` и
+`98d4910` имеют контракт 0021: они не валидируют canonical day1 и не очищают
+новую таблицу private profiles. Проверка намеренно отказывает паре
+candidate0022/retained0021. Подмена поля manifest и повторная сборка текущего
+кандидата под видом собственного rollback также не являются приёмкой.
+
+Совместимый отдельный reviewable commit **B** содержит:
+миграция 0022, domain/validator и guarded planning/purchase CAS, canonical
+reader и архив, format-marker barriers, dining membership/профили,
+export и member/owner account cleanup; клиент сохраняет IDB v3 и понимает
+структурированные intents/`mutationKind` в validation/sender. B основан на
+прежнем локальном кандидате tree a054 с узким hook/cache overlay: новые
+selectionDraft/selectionRecovery и явный пустой выбор не теряются при возврате.
+Его UI сохраняет известные прежние неудобства. Исправленный клиент C — другой
+tree и commit. Отдельная production-установка B не нужна: для приёмки
+требуется сохранённый полный B и настоящий переход C→B→C.
+
+Нужно сохранить **полный** B:
+клиент/SW/Pages Worker архив и затем проверить C → сохранённый B → C на одной
+локальной D1. Скрипт принимает точный предварительно упакованный кандидат,
+поэтому больше не требует подменять проверяемый tree текущим HEAD:
+
+```text
+npm run release:build -- --source <B-full-immutable-SHA> --output D:/FitFocus-artifacts/bridge-B
+npm run release:build -- --source <C-full-immutable-SHA> --output D:/FitFocus-artifacts/candidate-C
+npm run release:check -- D:/FitFocus-artifacts/bridge-B --retained-source <B-full-immutable-SHA> --candidate D:/FitFocus-artifacts/candidate-C
+```
+
+Без `--candidate` сохраняется прежнее поведение: сборка неизменяемого HEAD.
+Для 0022 `--retained-source` обязателен; B и C должны различаться, миграции
+должны совпадать побайтно. База берётся из source.tar самого кандидата,
+применяются 0021 и 0022. Прежние HTTP assertions для weekly/personal canonical
+generation, guards, empty canonical и сохранности legacy остаются обязательны.
+Дополнительно выполняются preview и day1 commit текущим worker, перезапуск
+неизменённого retained worker, canonical reader/archive, отказ plain downgrade,
+member purchase CAS (rice 250 г и ручная строка в штуках), owner planning CAS,
+stale/session/owner отказы, возврат кандидата с новым CAS и cleanup private
+данных участника и managed профилей владельца. Для owner cleanup только в
+синтетической локальной D1 семья предварительно деактивируется согласно
+существующему требованию удаления аккаунта. Current-client serializer и
+projection компилируются из проверенного candidate source.tar.
+
+Эта HTTP-проверка не запускает React, настоящий SW или IDB sender. Прежние
+retained browser/PWA gates не отменяются; им тоже нужно передать именно B и
+добавить structured pending/conflict сценарии. Прежний `98d4910`
+нельзя использовать после structured-записей. Текущий workflow и native
+fixture теперь указывают отдельный B `a6b2048`; HTTP gate требует этот exact SHA.
+Исторический v2 forward/import сценарий и format1 validation сохраняются.
+Пока новые HTTP/PWA gates не прошли, 0022 release gate остаётся закрыт.
+Результаты каждого запуска основной исполнитель фиксирует с точным tree/SHA.
+
 Обновлено: 12.10.2026. Компонент добавляет упаковщик, npm-команды,
 browser/HTTP-проверки и CI-хранение; ветка `fix/durable-outbox`.
 Точная база — `98d49101e15ad652e1960381ce00e00e8dac0d44`,
@@ -102,8 +202,9 @@ npm run release:check -- D:/FitFocus-artifacts/rollback-98d4910
 ```
 
 Сборка использует зависимости сохранённого lockfile; установленный набор
-переиспользуется только при совпадении lockfile. Упаковщик пока поддерживает
-проверенный контракт IDB v3 / D1 0021; новую схему нужно принять отдельно.
+переиспользуется только при совпадении lockfile. Исторический пример ниже
+относится к IDB v3 / D1 0021; для 0022 применяется отдельный контракт и bridge
+из начала документа.
 `release:check` собирает текущий HEAD из Git и запускает два настоящих локальных
 Pages Worker по очереди на одном origin и одной D1: сначала кандидат,
 затем неизменённый worker из артефакта. Он не разворачивает код в Cloudflare

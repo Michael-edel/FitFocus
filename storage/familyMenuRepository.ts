@@ -1,4 +1,5 @@
 import type { FamilyWeeklyMenu } from '../types';
+import type { FamilyPlanningMutationKind } from '../domain/familyPlanning';
 import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuSnapshot, type FamilyMenuSnapshot, type FamilyMenuTarget } from '../familyMenuValidation';
 import { DurableOutbox, type OutboxCommitGuard, type OutboxOperation, type OutboxReadGuard } from './durableOutbox';
 import { reportStateOperation, reportStateQueue, reportStateSaveIssue } from './stateSaveStatus';
@@ -51,10 +52,12 @@ export class FamilyMenuRepository {
     if (!await this.outbox.isReadSessionCurrent(guard)) throw new Error('FAMILY_MENU_SESSION_CHANGED');
     return this.observe();
   }
-  async commit(menu: FamilyWeeklyMenu, observed: FamilyMenuObservation, guard: OutboxCommitGuard): Promise<OutboxOperation> {
+  async commit(menu: FamilyWeeklyMenu, observed: FamilyMenuObservation, guard: OutboxCommitGuard,
+    mutationKind: FamilyPlanningMutationKind = 'planning'): Promise<OutboxOperation> {
     try {
       const operation = await this.outbox.write({ accountId: this.accountId, writerId: this.writerId, resource: 'familyMenu',
-        intent: { type: 'put', key: this.key, value: JSON.stringify({ ...this.target, menu }) },
+        intent: { type: 'put', key: this.key, value: JSON.stringify({ ...this.target, menu,
+          ...(menu.planningV1 ? { mutationKind } : {}) }) },
         expectedRevision: observed.revision, baseVersion: observed.confirmedVersion,
         ...(observed.parentOpId ? { parentOpId: observed.parentOpId } : {}),
         readGuard: { ...guard.readGuard }, canCommit: guard.canCommit,

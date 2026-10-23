@@ -1,5 +1,9 @@
 # Синхронизация FitFocus
 
+## Локальное дополнение 23.10.2026
+
+[Семейный день](family-planning.md) использует прежнюю IDB v3/outbox и sender. deliverySnapshot атомарно связывает scope/fence/value/operation/ACK; UI различает черновик, local pending и подтверждённую версию. Structured intent сохраняет mutationKind при retry, требует capability familyPlanning v1. Conflict не переотправляется автоматически; явный выбор серверной версии защищён ожидаемыми opIds. Старые версии и результаты ниже остаются историческими.
+
 Снимок: 09.10.2026, `810adb1`. [Область документации](README.md).
 
 Последующие этапы PR #93: [repository](runtime-state.md),

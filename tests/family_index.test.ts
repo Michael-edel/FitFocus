@@ -30,11 +30,20 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFamily | null } = {}) {
+function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFamily | null; metadataReadError?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: string[][] = [];
   let accessReadCount = 0;
+  let created:LatestFamily|null=null;
+  let memberInserted=false;
   return {
-    runs,
+    runs, batches,
+    async batch(statements:Array<{sql:string;run:()=>Promise<unknown>}>) {
+      batches.push(statements.map(statement=>statement.sql));
+      const before={created,memberInserted};
+      try { const results=[];for(const statement of statements)results.push(await statement.run());return results; }
+      catch(error) { created=before.created;memberInserted=before.memberInserted;throw error; }
+    },
     prepare(sql: string) {
       const stmt = {
         sql,
@@ -49,21 +58,28 @@ function makeDb(options: { memberInsertChanges?: number; latestFamily?: LatestFa
           if (sql.includes('FROM families f') && sql.includes('JOIN family_members m')) {
             accessReadCount += 1;
             if (accessReadCount === 1) return null;
-            return options.latestFamily ? { id: options.latestFamily.id, owner_user_id: options.latestFamily.owner_user_id, role: 'owner' } : null;
+            const accepted=options.latestFamily||(memberInserted?created:null);
+            return accepted ? { id: accepted.id, owner_user_id: accepted.owner_user_id, role: 'owner' } : null;
           }
           if (sql.includes('SELECT id, name, owner_user_id, created_at FROM families WHERE id = ? LIMIT 1')) {
-            return options.latestFamily || null;
+            return options.latestFamily || (memberInserted?created:null);
           }
           if (sql.includes('FROM subscriptions')) return { plan: 'family' };
           return null;
         },
         async all() {
-          if (sql.includes('SELECT role FROM user_roles')) return { results: [{ role: 'user' }] };
-          return { results: [] };
+          if (sql.includes('FROM sqlite_master')) {
+            if(options.metadataReadError) throw new Error('synthetic metadata read failure');
+            return { success: true, results: [] }; // Explicitly absent prefix schema, not a read failure.
+          }
+          if (sql.includes('SELECT role FROM user_roles')) return { success: true, results: [{ role: 'user' }] };
+          return { success: true, results: [] };
         },
         async run() {
           runs.push({ sql, binds: this.binds });
-          if (sql.includes('SELECT ?, ?, ?, \'owner\'')) {
+          if(sql.includes('INSERT INTO families')&&(options.memberInsertChanges??1)===1) created={id:String(this.binds[0]),name:String(this.binds[1]),owner_user_id:String(this.binds[2]),created_at:Number(this.binds[3])};
+          if (sql.includes('INSERT INTO family_members')) {
+            memberInserted=(options.memberInsertChanges??1)===1;
             return { success: true, meta: { changes: options.memberInsertChanges ?? 1 } };
           }
           return { success: true, meta: { changes: 1 } };
@@ -110,17 +126,29 @@ async function getFamily(db: ReturnType<typeof makeDb>, requestId: string) {
 }
 
 describe('/api/family POST', () => {
+  it('does not treat a failed prefix metadata read as absence or execute a family batch', async () => {
+    const db=makeDb({metadataReadError:true});
+    const response=await postFamily(db);
+    expect(response.status).toBe(400);
+    expect(db.batches).toEqual([]);
+    expect(db.runs.some(run=>/INSERT INTO (families|family_members)|DELETE FROM families/.test(run.sql))).toBe(false);
+  });
   it('creates a family when the owner membership insert succeeds', async () => {
     const db = makeDb();
     const response = await postFamily(db, 'family-create-request-1');
 
     expect(response.status).toBe(201);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0]).toHaveLength(3);
+    expect(db.batches[0][0]).toContain('INSERT INTO families');
+    expect(db.batches[0][1]).toContain('INSERT INTO family_members');
+    expect(db.batches[0][2]).toContain('ELSE abs(-9223372036854775808)');
     expect(response.headers.get('X-Request-ID')).toBe('family-create-request-1');
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO families'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
-  it('deletes the orphan family row and returns the existing family when membership insert loses the race', async () => {
+  it('returns the existing family after the atomic create batch loses the race', async () => {
     const db = makeDb({
       memberInsertChanges: 0,
       latestFamily: { id: 'family-existing', name: 'Уже есть', owner_user_id: 'user-1', created_at: NOW },
@@ -132,7 +160,8 @@ describe('/api/family POST', () => {
       family: { id: 'family-existing' },
       alreadyMember: true,
     });
-    expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('DELETE FROM families WHERE id = ?'))).toBe(false);
+    expect(db.runs.find(run=>run.sql.includes('INSERT INTO families'))?.sql).toContain('NOT EXISTS');
   });
 });
 

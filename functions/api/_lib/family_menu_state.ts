@@ -2,6 +2,7 @@ import { isRecord, parseJson } from '../../../safeJson';
 import { isFamilyMenuIntent, isFamilyMenuPayload, type FamilyMenuIntent, type FamilyMenuSnapshot } from '../../../familyMenuValidation';
 import { requireFamilyMember } from './family_access';
 import { requireFamilyPlan } from './plans';
+import { writeFamilyPlanningState } from './family_planning_state';
 
 export async function familyMenuStateReady(db: D1Database): Promise<boolean> {
   const row = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='family_menu_generations'").first<{ name: string }>();
@@ -36,6 +37,7 @@ export type FamilyMenuWriteResult =
 
 /** All fields are one CAS statement. RETURNING identifies this mutation even if triggers write. */
 export async function writeFamilyMenuState(db: D1Database, userId: string, body: unknown): Promise<FamilyMenuWriteResult> {
+  if (isRecord(body) && isRecord(body.menu) && 'planningV1' in body.menu) return writeFamilyPlanningState(db,userId,body);
   if (!isRecord(body) || typeof body.familyId !== 'string' || !body.familyId.length
     || typeof body.baseVersion !== 'number' || !Number.isSafeInteger(body.baseVersion) || body.baseVersion < 0) {
     return { kind: 'invalid', error: 'FAMILY_MENU_STATE_REQUIRED' };

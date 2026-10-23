@@ -62,13 +62,17 @@ const currentBuildIdentity: BuildLabelInput = {
 };
 
 export const BUILD_SEQUENCE_LABEL = formatBuildSequenceLabel(currentBuildIdentity);
-export const BUILD_SHORT_LABEL = formatBuildShortLabel(currentBuildIdentity);
-export const BUILD_VERSION_LABEL = formatCurrentBuildLabel(currentBuildIdentity);
+export const BUILD_SHORT_LABEL = BUILD_SOURCE.sourceTree
+  ? `Локальный кандидат ${BUILD_SOURCE.sourceTree.slice(0, 8)} • база ${BUILD_SOURCE.shortSha}`
+  : formatBuildShortLabel(currentBuildIdentity);
+export const BUILD_VERSION_LABEL = BUILD_SOURCE.sourceTree
+  ? `Текущий локальный кандидат ${BUILD_SOURCE.sourceTree.slice(0, 8)} • база ${BUILD_SOURCE.shortSha}`
+  : formatCurrentBuildLabel(currentBuildIdentity);
 export const BUILD_COMBINED_LABEL = `${APP_VERSION_UI_LABEL} • ${BUILD_SHORT_LABEL}`;
 
 export const API_SCHEMA_VERSION = 3;
 export const DATA_SCHEMA_VERSION = 3;
-export const DB_MIGRATION_VERSION = "0021_family_menu_generations.sql";
+export const DB_MIGRATION_VERSION = "0022_family_planning.sql";
 
 export const versioningRules = [
   {
