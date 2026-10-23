@@ -10,7 +10,8 @@ async function openFamilyRecovery(page: Page) {
   await expect(notice).toBeVisible();
   const recovery = notice.locator('summary').filter({ hasText: /^Разрешить конфликт или повторить отправку$/ });
   await expect(recovery).toBeVisible();
-  const editor = notice.locator('details').filter({ has: recovery });
+  // has is evaluated relative to each details; do not require a nested notice region.
+  const editor = notice.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^Разрешить конфликт или повторить отправку$/ }) });
   if (await editor.getAttribute('open') === null) await recovery.click();
   await expect(editor).toHaveJSProperty('open', true);
   const group = notice.getByRole('region', { name: 'Семейное меню', exact: true });
