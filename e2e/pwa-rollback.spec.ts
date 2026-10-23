@@ -52,9 +52,15 @@ async function selectionCache(page: Page) {
   });
 }
 async function openParticipation(page: Page) {
-  if (!await page.getByRole('checkbox', { name: 'Готовим завтрак', exact: true }).isVisible()) {
-    await page.getByText('Кто ест и какие порции', { exact: true }).click();
+  // The family header and IDB operation can be ready before loadDay finishes rendering.
+  await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
+  const summary = page.getByText('Кто ест и какие порции', { exact: true });
+  const details = page.locator('details').filter({ has: summary });
+  if (!await details.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await summary.click();
   }
+  await expect(details).toHaveJSProperty('open', true);
+  await expect(page.getByRole('checkbox', { name: 'Готовим завтрак', exact: true })).toBeVisible();
 }
 
 function isExpectedFirefoxIdbNavigationWarning(message: string): boolean {
