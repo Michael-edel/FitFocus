@@ -244,9 +244,8 @@ Native mobile C20 `ff-mobile-c20-4870f3130f0f`: 36/37 engineering checks,
 сохранял disabled attribute. External harness теперь ждёт естественный enabled
 control и displayed saved state, сохраняет focus/inside/hit и добавляет
 disabled/connected. Повтор `ff-mobile-c20-dc734b9aec91` также36/37 FAIL:
-после двух ready animation frames checkbox снова disabled=true, focus=false,
-connected/inside/hit=true. Причина повторного UI-перехода пока не доказана;
-app bug или harness timing окончательно не классифицированы. Все12 PNG и
+checkbox disabled=true, focus=false, connected/inside/hit=true. Прежний вывод
+о пройденных ready animation frames исправлен диагностикой ниже. Все12 PNG и
 сетевые/ресурсные proofs сохранены. Предшествующие pre-app manifest и
 tmpfs evidence-retention failures также сохранены; это не дефекты пользователя.
 Physical iOS, VoiceOver, native zoom и3G не проверены; root-rem simulation
@@ -275,3 +274,52 @@ backup/restore-check, QA actor и новый exact-head Family CI остаютс
 Рабочая DB, binding и защитные правила не менялись. Family не merged/deployed.
 Исходные 4+4 Sol-роли и58PNG относятся к своим зафиксированным snapshots;
 инженерные агенты/прогоны не прибавляются к этому пользовательскому аудиту.
+
+Уточнение 18:40: третий диагностический WebKit прогон
+`ff-mobile-c20-67cf7ea1b9e3` сохраняет FAIL36/37 и12PNG. Trace содержит18
+событий без truncation и четыре read-only IDB metadata snapshots. Маркер
+FOCUS_READY_TWO_RAF не достигнут; disabled/local состояние до focus непрерывно.
+PUT и точный HTTP readback версии2 успешны, IDB подтверждает тот же opId/revision3.
+Playwright1.64.1 coreBundle.js (SHA256829521b67ed7be90c7d6d6098ff39f2241562d47e4ad7ccab13710924a56001d,
+строки25681–25712) проверяет truthiness результата predicate до await: Promise
+от async predicate преждевременно завершает poll даже с false. Это ошибка QA
+ожидания; trace не доказывает прежнюю гипотезу stale setter приложения.
+Отдельное статическое воспроизведение и исправленный полный прогон описаны ниже.
+
+### Приёмка 18:54: ожидание WebKit и prefix adapter
+
+Static proof `ff-wk-predicate-ed4e19a27185` подтвердил asyncfalse → false handle
+без polling, тогда как syncfalse завершился TimeoutError200ms. Fixture оставалась
+disabled, app/HTTP/D1 не запускались. Прежний masked static FAIL
+`ff-wk-predicate-f558b78ca26e` сохранён; точную причину его отказа восстановить
+нельзя, CPU/timing не объявляются доказанной причиной.
+
+Full native mobile `ff-mobile-c20-502f559ef725`:37/37 checks,12PNG375/390/430,
+console errors0; в trace ready marker предшествует успешному focus на375.
+QA harness использует synchronous predicate, требует result===true, сохраняет
+два RAF, strict recheck и общий20sbudget. App не менялся ради этого PASS.
+Parent подтвердил namespace/external unreachable до/после, resource gates,
+input hashes, stoppedPID0 и12PNG при безопасном продвижении evidence.
+
+B3 implementation `c98951e` и test/checker fix `b8babb1` сохранены отдельными
+локальными commits/refs/bundles. `ff-check-12d853f2a027` остаётся FAIL: шесть
+устаревших mocks и прежний inline SQL checker. `ff-check-e854da2c2e90` наb8babb1
+PASS1680unit/232файла, три types, guards, schema24/33, privacy30, builds.
+Runtime bytes между этими двумя B3 commits не менялись.
+
+Actual compiled B3 + local workerd/D1:
+create0021 `ff-prefix-bridge-create-0021-a24bfeb15042`14cases;
+join0021 `ff-prefix-bridge-join-0021-01d92f5ce142`12;
+create0022 `ff-prefix-bridge-create-0022-0cb8f779d73e`14;
+join0022 `ff-prefix-bridge-join-0022-110da1a46574`12 — все52PASS.
+Exact full schema/rows, bare3/token5, metadata/partial refusal, no-op/IGNORE,
+installer TOCTOU и три persistence opens каждой конфигурации проверены.
+`ff-prefix-managed-capacity-6e385b75ad48`: ещё4PASS — owner+3managed принимает
+пятый account, owner+4managed отклоняет шестой; оба modes, fullrollback/token0,
+invite unchanged, distinct probes и durable reopen. Исходные файлы неизменны,
+все targetPID0 подтверждены перед чтением результатов и контейнеры удалены.
+
+B3 перенесён в локальную Family-ветку. Новый combined candidate/HTTP и pin
+совместимого rollback ещё проверяются. Это не public HTTP/auth, Cloud D1 или
+разрешение рабочей миграции. Atomic installer/receipt, lifecycle/drain,
+backup/restore и live согласование остаются открыты; рабочая DB не менялась.

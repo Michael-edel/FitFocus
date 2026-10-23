@@ -14,10 +14,10 @@ export const legacyWriterPwaCommit = '22a77889f131b554f52519515efc7ac811f6169f';
 export const legacyWriterPwaRoot = resolve(tmpdir(), 'fitfocus-pwa-fixtures',
   createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12), 'legacy-writer-22a');
 export const legacyWriterPwaDist = resolve(legacyWriterPwaRoot, 'dist');
-// Distinct 0022-compatible baseline; acceptance still requires the native and HTTP gates.
-export const rollbackPwaCommit = 'a6b2048bb94b4550013662b18c778f88b785798d';
+// Distinct prefix-aware B3 baseline; its native/HTTP pair acceptance remains separate.
+export const rollbackPwaCommit = 'b8babb13200a95827b7495769a15151bb4c1c7de';
 export const rollbackPwaRoot = process.env.FITFOCUS_ROLLBACK_ARTIFACT ?? resolve(tmpdir(), 'fitfocus-pwa-fixtures',
-  createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12), 'rollback-a6b2048');
+  createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12), 'rollback-b8babb1');
 export const rollbackPwaDist = resolve(rollbackPwaRoot, 'dist');
 
 /** Build a pinned source release once, before browser workers start. */

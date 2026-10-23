@@ -71,7 +71,7 @@ jobs:
 
       - name: Browser tests (local mock API)
         env:
-          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-a6b2048
+          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-b8babb1
         run: npm run test:e2e:mock -- --workers=1
 
       - name: Retain browser diagnostics
@@ -92,9 +92,9 @@ jobs:
 
       - name: Canonical readers and CAS after server rollback
         env:
-          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-a6b2048
+          FITFOCUS_ROLLBACK_ARTIFACT: ${{ runner.temp }}/fitfocus-rollback-b8babb1
           FITFOCUS_CANDIDATE_ARTIFACT: ${{ runner.temp }}/fitfocus-candidate
-        run: npm run release:check -- "$FITFOCUS_ROLLBACK_ARTIFACT" --retained-source a6b2048bb94b4550013662b18c778f88b785798d --candidate "$FITFOCUS_CANDIDATE_ARTIFACT"
+        run: npm run release:check -- "$FITFOCUS_ROLLBACK_ARTIFACT" --retained-source b8babb13200a95827b7495769a15151bb4c1c7de --candidate "$FITFOCUS_CANDIDATE_ARTIFACT"
 
       - name: Verify pre-DDL API and atomic D1 migration
         env:
@@ -104,8 +104,8 @@ jobs:
       - name: Retain tested rollback artifact
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: fitfocus-rollback-a6b2048-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/fitfocus-rollback-a6b2048.tar
+          name: fitfocus-rollback-b8babb1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fitfocus-rollback-b8babb1.tar
           if-no-files-found: error
           retention-days: 90
 

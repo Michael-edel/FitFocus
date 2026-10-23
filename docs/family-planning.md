@@ -23,6 +23,16 @@
 
 ## Профили и права
 
+Создание семьи и присоединение выполняют одну D1 batch через
+`family_prefix_fence.ts`. Успешное отсутствие reserved schema выбирает три
+statements с внутренней SQL проверкой согласованности. Полностью установленная
+совместимая схема выбирает пять statements с временным token, проверкой и
+удалением token в той же транзакции. Ошибка metadata, частичная/изменённая схема
+и закрытый bridge запрещают запись; повторного bare или split fallback нет.
+Runtime не устанавливает DDL. Control row — admission state, не installation
+receipt. [Локальные результаты и границы](../B3-LOCAL-REVIEW.md) не заменяют
+отдельную приёмку installer/receipt, lifecycle и рабочего выпуска.
+
 `family_dining_profiles` различает `account` и `managed`. Первичный ключ —
 `(family_id,id)`. У account `id=user_id`; managed имеет собственный стабильный
 id и NULL user_id, без записей users/login. Новые account-конфигурации NULL

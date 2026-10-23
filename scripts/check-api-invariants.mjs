@@ -61,14 +61,49 @@ for (const file of browserSourceFiles()) {
   }
 }
 
+// SQL moved to the shared adapter. Parse its literal data, never execute target TS,
+// and still verify that each handler sends exactly that plan through one batch.
+const familyPrefix = read('functions/api/_lib/family_prefix_fence.ts');
+let familyPrefixBlocks;
+try {
+  const match = /const BLOCKS = ([\s\S]*?) as const;/.exec(familyPrefix);
+  if (!match) throw new Error('Missing literal blocks');
+  familyPrefixBlocks = JSON.parse(match[1]);
+  for (const operation of ['create', 'join']) {
+    const expected = ['token', ...(operation === 'create' ? ['create-family', 'create-owner', 'assert-create'] : ['join-member', 'join-claim', 'assert-join']), 'delete-token'];
+    if (JSON.stringify(familyPrefixBlocks[operation]?.map(block => block.name)) !== JSON.stringify(expected)
+      || !familyPrefixBlocks[operation].every(block => typeof block.sql === 'string' && Array.isArray(block.params))) throw new Error('Invalid ordered blocks');
+  }
+} catch {
+  console.error('family prefix adapter must retain literal reviewed token/business/assert/delete plans');
+  process.exitCode = 1;
+  familyPrefixBlocks = { create: [], join: [] };
+}
+const prefixSql = operation => familyPrefixBlocks[operation].map(block => block.sql.replace(/\s+/g, ' ').trim()).join('\n');
+assertIncludes(familyPrefix, 'const blocks = BLOCKS[input.operation];', 'family handlers must bind the reviewed operation plan');
+assertIncludes(familyPrefix, "return mode === 'token' ? blocks.map(bind) : [...blocks.slice(1, 3).map(bind), bind(BARE_ASSERT[input.operation])];", 'bare and token plans must preserve business ordering and intrinsic assertions');
+assertIncludes(familyPrefix, "if (!objects.length) return 'absent';", 'only a successful empty metadata inventory may select absent mode');
+assertIncludes(familyPrefix, 'result.success !== true || !Array.isArray(result.results)', 'metadata transport failure must fail closed');
+assertIncludes(familyPrefix, 'DEFERRABLE INITIALLY DEFERRED', 'present prefix mode must retain optional deferred FK protection');
+assertIncludes(familyPrefix, 'ELSE abs(-9223372036854775808)', 'prefence batches must contain a table-free consistency assertion');
+assertNotIncludes(familyPrefix, '.catch(', 'prefix admission must not turn failures into bare/split retries');
+assertNotIncludes(familyPrefix, '.run(', 'prefix adapter must not issue standalone business statements');
+for (const file of ['family_create', 'family_join_by_invite']) {
+  const handler = read(`functions/api/_lib/${file}.ts`);
+  assertIncludes(handler, "import { prepareFamilyPrefixBatch } from './family_prefix_fence';", 'handler must use the checked prefix adapter');
+  assertIncludes(handler, 'await db.batch(await prepareFamilyPrefixBatch(db, {', 'handler must execute the complete admitted plan atomically');
+  if ((handler.match(/\bdb\.batch\(/g) ?? []).length !== 1) { console.error(`${file}: exactly one business batch required`); process.exitCode = 1; }
+  assertNotIncludes(handler, '.run(', 'handler must not fall back to split business writes');
+}
 const familyJoin = [
   read('functions/api/family/join.ts'),
   read('functions/api/_lib/family_join_by_invite.ts'),
+  prefixSql('join'),
 ].join('\n');
 const familyPlanningMigration = read('migrations/0022_family_planning.sql');
 assertIncludes(
   familyJoin,
-  'await db.batch([',
+  'await db.batch(await prepareFamilyPrefixBatch(db, {',
   'family join must transact membership insertion and invite claim together',
 );
 assertIncludes(
@@ -78,7 +113,7 @@ assertIncludes(
 );
 assertIncludes(
   familyJoin,
-  "WHERE code=? AND used_by_user_id IS NULL AND EXISTS(SELECT 1 FROM family_members WHERE id=? AND user_id=? AND is_active=1 AND status='active')",
+  "WHERE code=? AND family_id=? AND used_by_user_id IS NULL AND EXISTS(SELECT 1 FROM family_members WHERE id=? AND user_id=? AND family_id=? AND is_active=1 AND status='active')",
   'family join must claim only the invite backed by its exact inserted active membership',
 );
 assertOrder(familyJoin,'INSERT INTO family_members','UPDATE family_invites SET used_by_user_id',
@@ -1485,20 +1520,27 @@ assertIncludes(
 const familyIndex = [
   read('functions/api/family/index.ts'),
   read('functions/api/_lib/family_create.ts'),
+  prefixSql('create'),
 ].join('\n');
 assertIncludes(
   familyIndex,
-  'WHERE EXISTS(SELECT 1 FROM families WHERE id=?) AND NOT EXISTS (',
+  'WHERE EXISTS(SELECT 1 FROM families WHERE id=? AND owner_user_id=? AND created_at=?)',
   'family creation must require its newly inserted family and prevent concurrent active owner membership',
 );
 assertIncludes(
   familyIndex,
-  'await db.batch([db.prepare(`INSERT INTO families',
+  'await db.batch(await prepareFamilyPrefixBatch(db, {',
   'family creation must transact family and owner membership together so failure leaves no orphan',
 );
 assertIncludes(familyIndex,'SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM family_members m JOIN families f ON f.id=m.family_id',
   'family creation must repeat active-membership eligibility at the first transactional INSERT');
 assertOrder(familyIndex,'INSERT INTO families','INSERT INTO family_members','family creation must write owner membership only after its family within the same batch');
+assertIncludes(prefixSql('create'), "AND NOT EXISTS( SELECT 1 FROM family_members m JOIN families f ON f.id=m.family_id WHERE m.user_id=? AND m.status='active' AND m.is_active=1 AND f.is_active=1)",
+  'owner membership must independently reject an existing active family membership');
+if (prefixSql('create').split("AND EXISTS(SELECT 1 FROM subscriptions WHERE user_id=? AND plan='family'").length - 1 !== 2) {
+  console.error('family create must repeat subscription eligibility for both family and exact owner membership');
+  process.exitCode = 1;
+}
 assertIncludes(
   familyIndex,
   'FAMILY_CREATE_CONFLICT',

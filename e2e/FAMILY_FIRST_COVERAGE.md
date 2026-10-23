@@ -55,13 +55,16 @@ Open migration boundaries at this source edit:
   ports only the current side of the pinned v2-to-v3 test and adds a current-only
   native SW/HTTP/IDB preview-confirm-retry-reload-purchase test. These edits have
   not been executed.
-- Structured rollback tests now target the independently pinned 0022 bridge B
-  selected by the parent task: `a6b2048bb94b4550013662b18c778f88b785798d`,
-  tree `f5fe858c9b0369799ee6a3c94193bb94bbf2240a`. B is a054 plus the scoped
-  family draft/cache hook compatibility patch, its regression test, and the
-  DOMPurify 3.4.17 dependency-only security patch. Its runtime
-  has not been accepted by this source edit. The former 98d artifact is historical
-  evidence only and must not be described as 0022 compatible.
+- Structured rollback tests now target independently pinned prefix-aware B3:
+  `b8babb13200a95827b7495769a15151bb4c1c7de`, tree
+  `f1e221c0bfec4857a4658b34d0f3c0416d1f83f5`. B3 retains the B2 draft/cache
+  compatibility and DOMPurify 3.4.17 changes and adds the single-batch prefix-aware
+  create/join adapter. This pin is currently local; it has not been published.
+  Earlier pair/browser results for B2 `a6b2048` remain historical B2 evidence and
+  do not establish B3 acceptance. The new C25/B3 artifact pair, actual HTTP and
+  native PWA rollback checks still require their own frozen-source execution.
+  This source edit makes no production-readiness claim. The former 98d artifact
+  remains historical and must not be described as 0022 compatible.
 - `pwa-rollback.spec.ts` keeps pending/conflicted payload/opId/remote snapshot,
   retry timing, two-tab explicit SW activation, profile, IDB store/ledger/quarantine
   and auth-fence assertions and adds the return C -> B -> C. A real UI empty

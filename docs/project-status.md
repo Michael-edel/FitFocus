@@ -1,4 +1,4 @@
-## Семейный кандидат, 23.10.2026, 18:26 Asia/Yekaterinburg
+## Семейный кандидат, 23.10.2026, 18:54 Asia/Yekaterinburg
 
 Текущий main — `a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`: security-only
 PR #100 слит обычным merge; в Cloudflare подтверждён успешный Production/main
@@ -10,9 +10,12 @@ rollback. Family B2 a6b2048, main и текущий кандидат содер�
 Family и миграция 0022 в опубликованный security выпуск не входят.
 
 Семейная ветка опубликована как [draft PR #99](https://github.com/Michael-edel/FitFocus/pull/99)
-и интегрирует текущий main. Последний проверенный код C23 —
-`50b60523d7443715796523ba37bcfa36bba660d9`; последнее изменение runtime —
-`f272639ba1ccc1a9b908d8a42c3ef635a040f497`. C22/C23 меняют только ожидание
+и интегрирует текущий main. Опубликованный head C24 — `3230c81`; его CI
+`39961299287` ещё выполняется. Последний проверенный код C23 —
+`50b60523d7443715796523ba37bcfa36bba660d9`; последнее изменение интерфейса —
+`f272639ba1ccc1a9b908d8a42c3ef635a040f497`. Локально интегрируется
+проверенный B3 adapter создания/присоединения; combined candidate ещё проверяется.
+C22/C23 меняют только ожидание
 готовности rollback editor и относительный summary selector recovery helper;
 исходные assertions, timeouts, workers=1/retries=0 сохранены.
 
@@ -24,10 +27,16 @@ Android AI C20: 71 passed / 3 предусмотренных platform skip / 0 f
 Это результаты указанных ревизий; полной exact-head CI приёмки Family ещё нет.
 
 Дополнительная native WebKit mobile engineering проверка C20 сохраняет 12 PNG
-на 375/390/430. Два прогона дали 36/37 checks: один focus check после покупки
-на375 не прошёл. Второй прогон ожидал natural enabled/saved state, затем
-зафиксировал повторный disabled=true; источник перехода ещё исследуется.
-Focus/inside/hit assertions сохранены, пункт не закрыт. Это не новый
+на 375/390/430. Три прогона дали 36/37 checks: один focus check после покупки
+на375 не прошёл. Диагностика `ff-mobile-c20-67cf7ea1b9e3` опровергла
+прежнюю трактовку повторной блокировки после готовности: маркер готовности
+вообще не достигнут. В Playwright 1.64.1 async-предикат завершает опрос
+через truthy Promise, даже если его результат false. Серверный ACK и IDB
+receipt подтверждены; ошибка ожидания находится во внешнем QA harness.
+Отдельный static proof `ff-wk-predicate-ed4e19a27185` подтвердил этот механизм.
+После исправления только QA harness `ff-mobile-c20-502f559ef725` прошёл37/37
+checks и12PNG, включая focus на375 после реального ready marker. Focus/inside/hit,
+strict enabled/connected и прежний20sbudget сохранены. Это не новый
 пользовательский агент и не physical iOS/VoiceOver/
 native zoom/3G acceptance.
 
@@ -38,8 +47,10 @@ create/join прошёл: 6 пар / 12 вариантов / 18 runtime opens; �
 варианты дают exact durable rollback. Прежний diagnostic остаётся FAIL с четырьмя
 error-string assertions: workerd возвращает generic internal error. Его успешные
 state observations и новый отдельный proof не переименовывают тот FAIL.
-Cloud D1 не проверен. Fence-aware B3 готовится в отдельном локальном worktree;
-ни installer, ни этот адаптер пока не включены в PR #99.
+Cloud D1 не проверен. Fence-aware B3 `b8babb1` отдельно прошёл1680 unit/232файла,
+все types/guards/builds,52 actual compiled local-D1 cases до/после0022 и4 managed
+capacity cases. Он перенесён в локальную Family-ветку; combined HTTP/artifact
+приёмка ещё требуется. Installer/receipt пока не реализованы и не входят вPR99.
 
 Исходные четыре Sol-роли и четыре другие слепые Sol-роли завершены на своих
 зафиксированных snapshots; их 58 PNG, клики и решения о возвращении сохранены.
