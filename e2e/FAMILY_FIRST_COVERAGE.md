@@ -56,9 +56,10 @@ Open migration boundaries at this source edit:
   native SW/HTTP/IDB preview-confirm-retry-reload-purchase test. These edits have
   not been executed.
 - Structured rollback tests now target the independently pinned 0022 bridge B
-  selected by the parent task: `246a2d70b70671f20081d0ba985279127c0e0262`,
-  tree `14638ad264afe4dc5c4ef3c133dea39fbeb409f8`. B is a054 plus the scoped
-  family draft/cache hook compatibility patch and its regression test. Its runtime
+  selected by the parent task: `a6b2048bb94b4550013662b18c778f88b785798d`,
+  tree `f5fe858c9b0369799ee6a3c94193bb94bbf2240a`. B is a054 plus the scoped
+  family draft/cache hook compatibility patch, its regression test, and the
+  DOMPurify 3.4.17 dependency-only security patch. Its runtime
   has not been accepted by this source edit. The former 98d artifact is historical
   evidence only and must not be described as 0022 compatible.
 - `pwa-rollback.spec.ts` keeps pending/conflicted payload/opId/remote snapshot,
