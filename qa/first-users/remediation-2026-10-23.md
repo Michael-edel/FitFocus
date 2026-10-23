@@ -113,3 +113,55 @@ production checkLegacyWriterFence ждёт 2500 мс. Фактическую з�
 проверяет challengeId и workerBuildId; complete, количество клиентов и совпадение
 их builds остаются обязательными. SW, hooks, suite timeouts и retries не менялись.
 Исправление ещё требует native retest; null не переименован в PASS.
+
+### Обновление 16:10: точные повторы и граница выпуска
+
+C13 `eb8a136c1e9536e1cedbabddc15e76b344a03e2c`: native Chromium PWA update
+прошёл 2 сценария, один прежний Safari-only skip, без failed/flaky
+(`ff-family-e2e-ea4f9c89a944`). C14
+`15330c6307e2e28da5a21d304b35af7a63961954`: C→B2→C rollback прошёл 2/2
+pending/conflicted (`ff-family-e2e-234fb0d816bb`). В тесте сохранён Settings
+hash после reload, затем проверен личный профиль и выполнен явный переход
+в семейное меню; ACK, IDB, retry и сохранность данных не ослаблялись.
+
+C15 `7ed0ee15cc318b96b513e27fff0820bf4e743d69` интегрировал текущий main.
+Единственный конфликт CI разрешён с сохранением B2 и всех семейных gates;
+его tree `94deb35141ce89df2880ba2217baeb8dbd214190` точно равен C14.
+На C15 прошли 1683 unit / 233 файла, три typecheck, guards, schema/privacy,
+frontend/PWA/Pages build (`ff-check-fdd16bfdd516`). Точная полная пара C15/B2
+прошла 50 HTTP/CAS и 12 migration-runner проверок
+(`ff-family-prepare-eaa5a9ad89f3`, `ff-family-http-de08c1674ae8`).
+Свежая установка B2→C15 в Chromium — 1/1 PASS
+(`ff-family-e2e-fa75a12847da`). Все target-процессы запускались внутри
+прежнего Linux sandbox без внешней сети, workers=1/retries=0.
+
+C15 native WebKit/iphone-safari update — 1 passed / 2 failed / 0 skip/flaky
+(`ff-family-e2e-67d4a2deca1b`). MiniBrowser SIGABRT при открытии oldPage
+и отдельный retryCount=0 после structured confirm пока не имеют установленной
+причины. OOMKilled=false контейнера не доказывает отсутствие resource pressure
+дочернего процесса. Последующая browser очередь остановлена. Технический
+diagnostic с bounded resource telemetry и catch только временной копии теста
+выполняется отдельно; он не считается acceptance PASS. Sandbox, guards,
+timeouts/retries и исходные assertions ради результата не ослаблялись.
+
+Security-only PR #100 слит обычным merge в main
+`a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`. Его PR CI 39933203987 SUCCESS:
+1608 unit, 1665 browser passed / 71 предусмотренных платформенных skip,
+HTTP/CAS 23/23; rollback/diagnostics artifacts загружены. Tree merge/head/
+synthetic merge совпадает. Main CI 39942447140 ещё выполняется. В Chrome
+подтверждены Production/main/a42b9de/success; Family и 0022 туда не включены.
+Исторический security rollback 98d4910 содержит DOMPurify 3.4.16 и не принят
+как безопасный откат security patch.
+
+Правило main прочитано на странице GitHub без изменения настроек:
+Require PR, build-and-typecheck/up-to-date, conversation resolution и запрет
+admin bypass включены; Require approvals выключено. Поэтому прежнее ожидание
+обязательного APPROVED не переносится на текущий выпуск автоматически.
+
+Рабочая D1 проверялась только на чтение. Конкретный проект prefix barrier
+подготовлен отдельно в infrastructure workspace; он ещё не реализован и
+не проверен. Два guards не означают полного family hold или HTTP drain.
+Безопасный installer/bridge/rollback, lifecycle gates, backup/restore и QA
+остаются условиями будущей семейной публикации. Family merge/deploy не выполнены.
+Нового слепого 4+4 после этих инженерных исправлений не было; сохранённые
+58 PNG и оценки исходных восьми Sol-персон относятся к их прежним snapshot.
