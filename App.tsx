@@ -1979,8 +1979,8 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
 
   return (
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
-      {/* Purchase delivery failures must remain visible while the More dialog is closed. */}
-      {allowCachedUiStateRestore && (!isFamilyWorkspaceTab || activeTab === 'shopping') && <StateStorageNotice accountId={currentUser?.id} reserveSpace={activeTab !== 'shopping'} />}
+      {/* Delivery and storage notices remain visible across the family workspace, even with More closed. */}
+      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} reserveSpace={!isFamilyWorkspaceTab} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
@@ -2070,9 +2070,6 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         aiBadge={aiBadge}
         retryMeta={retryMeta}
         syncBadge={syncBadge}
-        storageNotice={allowCachedUiStateRestore && isFamilyWorkspaceTab && activeTab !== 'shopping'
-          ? <React.Fragment key={rootAccountSessionScope ?? 'no-account'}><StateStorageNotice accountId={currentUser?.id} /></React.Fragment>
-          : undefined}
       />
 
       <AppWorkspace

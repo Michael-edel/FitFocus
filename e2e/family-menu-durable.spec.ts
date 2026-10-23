@@ -6,16 +6,14 @@ import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
 
 async function openFamilyRecovery(page: Page) {
-  const moreButton = page.getByRole('button', { name: 'Ещё', exact: true });
-  await expect(moreButton).toHaveAttribute('aria-expanded', 'false');
-  await moreButton.click();
-  const more = page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true });
-  await expect(more).toBeVisible();
-  const applicationState = more.locator('summary').filter({ hasText: /^Состояние приложения/ });
-  await expect(applicationState).toBeVisible(); await applicationState.click();
-  const recovery = more.locator('[data-state-notice-region] summary').filter({ hasText: 'Разрешить конфликт или повторить отправку' });
-  await expect(recovery).toBeVisible(); await recovery.click();
-  const group = more.getByRole('region', { name: 'Семейное меню', exact: true });
+  const notice = page.locator('[data-state-notice-region]');
+  await expect(notice).toBeVisible();
+  const recovery = notice.locator('summary').filter({ hasText: /^Разрешить конфликт или повторить отправку$/ });
+  await expect(recovery).toBeVisible();
+  const editor = notice.locator('details').filter({ has: recovery });
+  if (await editor.getAttribute('open') === null) await recovery.click();
+  await expect(editor).toHaveJSProperty('open', true);
+  const group = notice.getByRole('region', { name: 'Семейное меню', exact: true });
   await expect(group).toBeVisible(); return group;
 }
 

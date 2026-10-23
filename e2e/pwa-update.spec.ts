@@ -285,7 +285,7 @@ test('real service worker waits for an explicit update and preserves durable fam
     await page.reload();
     // The previous build is still an open same-origin writer, so the new runtime
     // must keep legacy-dependent sends paused until every client has updated.
-    await expect(page.getByText(/Сначала нужно проверить импорт прежних изменений/)).toBeVisible();
+    await expect(page.locator('[data-state-notice-region]').getByText(/Сначала нужно проверить импорт прежних изменений/)).toBeVisible();
     await expect(update).toBeVisible();
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(pending.opId);
     expect(server.counts.put).toBe(0);
