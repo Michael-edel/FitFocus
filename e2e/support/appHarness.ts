@@ -133,7 +133,11 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
     const json = async (payload: unknown, status = 200) => route.fulfill({
       status,
       contentType: 'application/json',
-      headers: path.startsWith('/api/push/') && request.headers()['x-fitfocus-state-account'] ? {
+      headers: path === '/api/family' ? {
+        'X-FitFocus-Family-Protocol': '1', 'X-FitFocus-Family-Guard': '1',
+        'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'] ?? 'google-e2e-sub',
+        'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'] ?? 'a'.repeat(64),
+      } : path.startsWith('/api/push/') && request.headers()['x-fitfocus-state-account'] ? {
         'X-FitFocus-Push-Protocol': '1', 'X-FitFocus-Push-Guard': '1',
         'X-FitFocus-State-Account': request.headers()['x-fitfocus-state-account'],
         'X-FitFocus-State-Session': request.headers()['x-fitfocus-state-session'],
@@ -202,9 +206,14 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
         achievementSync: { protocol: 1, guard: 1 },
         huaweiSync: { protocol: 1, guard: 1 },
         pushSync: { protocol: 1, guard: 1 },
+        familySync: { protocol: 1, guard: 1, target: 1 },
+        familyMenuSync: { protocol: 1, guard: 1, cas: 1 },
+        familyPlanning: { version: 1 },
       });
       return;
     }
+
+    if (path === '/api/family' && method === 'GET') return void await json({ family: null, members: [] });
 
     if (path === '/api/bootstrap' && method === 'GET') {
       if (options.session === 'app') {

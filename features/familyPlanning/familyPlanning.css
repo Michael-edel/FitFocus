@@ -43,8 +43,18 @@
 .fp-share{flex:0 0 142px}
 .fp-ingredients li{display:flex;justify-content:space-between;gap:12px;padding:8px 0}
 .fp-ingredients strong{white-space:nowrap}
-.fp-shopping-list{display:grid;gap:12px}
-.fp-shopping-row{padding:16px;border:1px solid var(--fp-border);border-radius:16px;background:var(--fp-card)}
+.fp-shopping-list{display:grid;gap:0;border:1px solid var(--fp-border);border-radius:14px}
+.fp-shopping-row{padding:8px 12px;border-bottom:1px solid var(--fp-border);background:var(--fp-card)}
+.fp-shopping-row:last-child{border-bottom:0}
+.fp-shopping-row>.fp-option{padding:4px 0}
+.fp-shopping-amounts{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;line-height:1.5}
+.fp-root .fp-shopping-row details{margin:4px 0 0;border-top:0}
+.fp-root .fp-shopping-row summary{font-size:14px;padding:10px 0}
+.fp-root .fp-shopping-history{margin:4px 0}
+.fp-shopping-list:empty{display:none}
+.fp-root :is(input,button,summary,select){scroll-margin-block:100px}
+.fp-root .fp-profile-extra .fp-field{margin-top:8px}
+@media(min-width:700px){.fp-shopping-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(280px,1.8fr);gap:0 16px;align-items:center}.fp-shopping-row>details,.fp-shopping-history,.fp-shopping-row>button{grid-column:2}.fp-shopping-amounts{justify-content:space-between}}
 .fp-shopping-row.fp-bought{border-color:#34d39966}
 .fp-bought>.fp-option strong{text-decoration:line-through;color:var(--ff-muted,#a4b1c5)}
 .fp-code{font-size:1.4rem;letter-spacing:.1em;user-select:all}

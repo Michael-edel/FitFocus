@@ -24,7 +24,7 @@ export function FamilyRosterPanel({ controller: c }: { controller: FamilyPlannin
     <ul className="fp-roster">{members.map(profile => <li key={profile.id}><div><strong>{profile.displayName}</strong>
       <span className="fp-muted">{profile.kind === 'managed' ? 'Профиль без аккаунта' : 'Участник с аккаунтом'}</span></div>
       {profile.canEdit ? <button type="button" onClick={() => void c.editProfile(profile.id)} disabled={!!c.busy}>Настроить профиль</button>
-        : <span className="fp-muted">Настраивает сам участник</span>}</li>)}</ul>
+        : <span className="fp-muted">{profile.kind === 'managed' ? 'Настраивает организатор' : 'Настраивает сам участник'}</span>}</li>)}</ul>
     {c.owner && <div className="fp-actions"><button type="button" className="fp-primary" onClick={() => void c.editProfile(null)} disabled={!!c.busy || members.length >= 5}>Добавить профиль без аккаунта</button>
       <button type="button" onClick={() => void c.invite()} disabled={!!c.busy || members.length >= 5}>Пригласить по коду</button></div>}
     {members.length >= 5 && <p className="fp-note">В семье 5 человек. Общий лимит включает аккаунты и профили без аккаунта.</p>}

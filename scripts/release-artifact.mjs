@@ -10,6 +10,26 @@ const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const required = ['dist/index.html', 'dist/sw.js', 'dist/_routes.json', 'dist/_worker.js/index.js',
   'source.tar', 'package-lock.json', 'wrangler.toml', 'migrations/0021_family_menu_generations.sql'];
 
+export function releaseStorageContract(migration) {
+  const base = { idbVersion: 3, d1Migration: migration };
+  if (migration === '0021_family_menu_generations.sql') return base;
+  if (migration === '0022_family_planning.sql') return { ...base, familyPlanning: {
+    schemaVersion: 1, formatMarker: 1, archiveColumn: 'legacy_menu_json',
+    purchaseCas: 1, accountCleanup: 'family_dining_profiles',
+  } };
+  throw new Error('Unsupported release identity or storage contract');
+}
+
+export function assertRollbackCompatibility(candidate, retained) {
+  if (candidate.compatibility?.idbVersion !== 3 || retained.compatibility?.idbVersion !== 3
+    || candidate.compatibility?.d1Migration !== retained.compatibility?.d1Migration) {
+    throw new Error('A 0021 worker is not a rollback target for 0022 structured menus; retain and review a separate 0022 bridge first');
+  }
+  if (candidate.compatibility.d1Migration === '0022_family_planning.sql' && candidate.sourceSha === retained.sourceSha) {
+    throw new Error('Candidate and retained 0022 bridge must be distinct reviewed commits');
+  }
+}
+
 function inventory(root, directory = root) {
   return readdirSync(directory).sort().flatMap(name => {
     const path = resolve(directory, name), info = lstatSync(path);
@@ -24,13 +44,16 @@ function inventory(root, directory = root) {
 /** Hashes detect damaged/mixed files; source review and runtime tests establish compatibility. */
 export function verifyReleaseArtifact(root) {
   const manifest = JSON.parse(readFileSync(resolve(root, 'release.json'), 'utf8'));
-  if (manifest.format !== 1 || !/^[a-f0-9]{40}$/.test(manifest.sourceSha)
+  const migration = manifest.compatibility?.d1Migration;
+  const contract = releaseStorageContract(migration);
+  if (manifest.format !== (migration === '0022_family_planning.sql' ? 2 : 1) || !/^[a-f0-9]{40}$/.test(manifest.sourceSha)
     || manifest.compatibility?.idbVersion !== 3
-    || manifest.compatibility?.d1Migration !== '0021_family_menu_generations.sql') {
+    || JSON.stringify(manifest.compatibility?.familyPlanning) !== JSON.stringify(contract.familyPlanning)) {
     throw new Error('Unsupported release identity or storage contract');
   }
   const files = inventory(root);
   for (const file of required) if (!files.some(entry => entry.path === file)) throw new Error(`Missing release file: ${file}`);
+  if (!files.some(entry => entry.path === `migrations/${migration}`)) throw new Error(`Missing release file: migrations/${migration}`);
   if (JSON.stringify(files) !== JSON.stringify(manifest.files)) throw new Error('Release file inventory or SHA-256 mismatch');
   return manifest;
 }
@@ -48,10 +71,12 @@ export function buildReleaseArtifact({ sourceSha, output, project = process.cwd(
   const git = args => execFileSync('git', args, { cwd: project, encoding: 'utf8' }).trim();
   git(['cat-file', '-e', `${sourceSha}^{commit}`]);
   const source = file => git(['show', `${sourceSha}:${file}`]);
-  if (!/STATE_DATABASE_VERSION\s*=\s*3\s*;/.test(source('storage/stateDatabase.ts'))
-    || !/DB_MIGRATION_VERSION\s*=\s*"0021_family_menu_generations.sql"/.test(source('versioning.ts'))) {
-    throw new Error('This packager only supports the reviewed IDB v3 / D1 0021 contract');
-  }
+  const migration = /DB_MIGRATION_VERSION\s*=\s*"([^"]+)"/.exec(source('versioning.ts'))?.[1];
+  const contract = releaseStorageContract(migration);
+  if (!/STATE_DATABASE_VERSION\s*=\s*3\s*;/.test(source('storage/stateDatabase.ts'))) throw new Error('This packager requires the reviewed IDB v3 contract');
+  // Require all 0022 sources in the immutable archive; metadata alone does not establish runtime compatibility.
+  if (contract.familyPlanning) for (const file of ['migrations/0022_family_planning.sql', 'domain/familyPlanning.ts',
+    'functions/api/_lib/family_planning_state.ts', 'functions/api/_lib/family_dining.ts', 'functions/api/_lib/family_planning_archive.ts']) source(file);
   const require = createRequire(resolve(project, 'package.json'));
   wranglerCli ??= resolve(dirname(require.resolve('wrangler/package.json')), 'bin/wrangler.js');
   const wranglerVersion = execFileSync(process.execPath, [wranglerCli, '--version'], { encoding: 'utf8' }).trim();
@@ -79,9 +104,9 @@ export function buildReleaseArtifact({ sourceSha, output, project = process.cwd(
   for (const file of ['package-lock.json', 'wrangler.toml', 'migrations']) {
     cpSync(resolve(buildRoot, file), resolve(output, file), { recursive: true, errorOnExist: true, force: false });
   }
-  const manifest = { format: 1, sourceSha, builtAt: new Date().toISOString(),
+  const manifest = { format: contract.familyPlanning ? 2 : 1, sourceSha, builtAt: new Date().toISOString(),
     toolchain: { node: process.version, wrangler: wranglerVersion },
-    compatibility: { idbVersion: 3, d1Migration: '0021_family_menu_generations.sql',
+    compatibility: { ...contract,
       date: '2026-02-17', flags: ['nodejs_compat'] }, files: inventory(output) };
   writeFileSync(resolve(output, 'release.json'), JSON.stringify(manifest, null, 2) + '\n');
   verifyReleaseArtifact(output);

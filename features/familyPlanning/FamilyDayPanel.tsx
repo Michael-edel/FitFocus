@@ -23,6 +23,8 @@ export function FamilyDayPanel({ controller: c }: { controller: FamilyPlanningCo
         onChange={event => c.changeDate(event.target.value)} /></label>
       {c.staleRoster && <p className="fp-note" role="status">Профили или состав семьи изменились после подтверждения этого меню. Пересоберите меню перед готовкой; прежняя версия не проверена по новым ограничениям.</p>}
       {!c.owner && <p className="fp-muted">Меню и участие меняет организатор. Вы можете настроить свой профиль и отмечать покупки.</p>}
+      {c.owner && c.selectionRecovery && <div className="fp-note"><p>Прежний выбор на {c.selectionRecovery.date} сохранён отдельно. В редакторе показано сохранённое меню; прежний выбор можно вернуть как черновик.</p>
+        <button type="button" disabled={!!c.busy} onClick={c.restoreSelectionRecovery}>Восстановить прежний черновик</button></div>}
       {c.owner && <details open={!menu || undefined}><summary>Кто ест и какие порции</summary>
         <p className="fp-muted">Порции задаются вручную. Цель и возраст не меняют их автоматически.</p>
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map(slot => {

@@ -5,7 +5,7 @@ import { rollbackPwaDist, rollbackPwaRoot, rollbackPwaCommit } from './support/p
 import { verifyReleaseArtifact } from '../scripts/release-artifact.mjs';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
 import { mockApp, openApp } from './support/appHarness';
-import { healthy, navigate, saved } from './support/familyHarness';
+import { healthy, navigate, saved, confirmPreview } from './support/familyHarness';
 
 async function markers(page: Page, seed = false) {
   return page.evaluate(async seed => {
@@ -45,6 +45,18 @@ async function retryTiming(page: Page) {
   });
 }
 
+async function selectionCache(page: Page) {
+  return page.evaluate(() => {
+    const key = Object.keys(sessionStorage).find(key => key.startsWith('fitfocus.family-planning.draft.v1:'));
+    return key ? { key, value: JSON.parse(sessionStorage.getItem(key)!) } : null;
+  });
+}
+async function openParticipation(page: Page) {
+  if (!await page.getByRole('checkbox', { name: 'Готовим завтрак', exact: true }).isVisible()) {
+    await page.getByText('Кто ест и какие порции', { exact: true }).click();
+  }
+}
+
 function isExpectedFirefoxIdbNavigationWarning(message: string): boolean {
   return message.includes('An IndexedDB transaction that was not yet complete has been aborted due to page navigation.')
     && message.includes('/assets/ai-');
@@ -56,6 +68,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
   const rollbackScript = readFileSync(resolve(rollbackPwaDist, 'index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
   expect(rollbackScript).toBeTruthy();
   const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), {
+    familyPlanning: true,
     ...(status === 'pending' ? { retryAfterSeconds: 20 } : {}),
     ...(status === 'conflicted' ? { conflictFirstFamilyPut: true } : {}),
   }); server.release();
@@ -115,7 +128,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await expect(observer.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
     const candidateScript = await page.locator('script[type="module"][src]').getAttribute('src');
     expect(candidateScript).not.toBe(rollbackScript);
-    await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+    await confirmPreview(page);
     await expect.poll(() => server.counts.put).toBeGreaterThan(0);
     await navigate(page, 'Настройки');
     const profileName = page.getByPlaceholder('Как к вам обращаться');
@@ -128,6 +141,25 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     const operation = (await saved(page)).operations[0];
     const beforeTiming = await retryTiming(page);
     const before = await markers(page, true); expect(before.fence?.revision).toBeGreaterThan(0);
+    await navigate(page, 'Меню семьи');
+    await openParticipation(page);
+    await page.getByRole('checkbox', { name: 'Готовим завтрак', exact: true }).uncheck();
+    await expect.poll(async () => (await selectionCache(page))?.value.selectionDraft).toBe(true);
+    await expect.poll(async () => (await selectionCache(page))?.value.drafts.selections).toEqual([]);
+    const selectedDate = (await selectionCache(page))!.value.drafts.date as string;
+    const recovery = { familyId: 'family-durable-e2e', date: selectedDate,
+      selections: [{ slot: 'lunch', recipeId: 'chicken-rice-v1', participantShares: { 'google-e2e-sub': 0.75 } }] };
+    // Synthetic legacy recovery input tests metadata compatibility. Real empty draft above comes from UI intent.
+    await page.evaluate(recovery => {
+      const key = Object.keys(sessionStorage).find(key => key.startsWith('fitfocus.family-planning.draft.v1:'))!;
+      const envelope = JSON.parse(sessionStorage.getItem(key)!);
+      sessionStorage.setItem(key, JSON.stringify({ ...envelope, selectionRecovery: recovery }));
+    }, recovery);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Восстановить прежний черновик', exact: true })).toBeVisible();
+    const draftBeforeRollback = await selectionCache(page);
+    expect(draftBeforeRollback?.value).toMatchObject({ selectionDraft: true, selectionRecovery: recovery, drafts: { selections: [] } });
+    const previewsBeforeRoundTrip = server.counts.preview, putsBeforeRoundTrip = server.counts.put;
     meResponseCountBeforeRollback = meResponses.length;
     server.rollback();
     await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
@@ -142,6 +174,11 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await expect(observer.locator('script[type="module"][src]')).toHaveAttribute('src', rollbackScript!);
     await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
     await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe(status);
+    await openParticipation(page);
+    for (const meal of ['завтрак', 'обед', 'ужин', 'перекус']) await expect(page.getByRole('checkbox', { name: `Готовим ${meal}`, exact: true })).not.toBeChecked();
+    const draftOnBridge = await selectionCache(page);
+    expect(draftOnBridge?.key).toBe(draftBeforeRollback?.key);
+    expect(draftOnBridge?.value).toMatchObject({ selectionDraft: true, selectionRecovery: recovery, drafts: { selections: [] } });
     const restored = (await saved(page)).operations[0];
     expect(restored.opId).toBe(operation.opId); expect(restored.value).toBe(operation.value);
     expect(restored.serverSnapshot).toEqual(operation.serverSnapshot);
@@ -152,9 +189,38 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     expect(await markers(page)).toEqual(before);
     await expect.poll(async () => (await saved(observer)).operations[0]?.opId).toBe(operation.opId);
     expect(await markers(observer)).toEqual(before);
-    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(125);
     await navigate(page, 'Настройки');
     await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль перед откатом');
+    server.release();
+    await page.evaluate(async () => { await (await navigator.serviceWorker.ready).update(); });
+    await expect(page.getByRole('button', { name: 'Обновить приложение', exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting?.state)).toBe('installed');
+    const forwardReloads = [page, observer].map(tab => tab.waitForEvent('framenavigated', frame => frame === tab.mainFrame()));
+    await page.getByRole('button', { name: 'Обновить приложение', exact: true }).click({ noWaitAfter: true });
+    await Promise.all(forwardReloads);
+    await Promise.all([page.waitForLoadState('load'), observer.waitForLoadState('load')]);
+    await expect(page.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
+    await expect(observer.locator('script[type="module"][src]')).toHaveAttribute('src', candidateScript!);
+    await navigate(page, 'Меню семьи');
+    await expect(page.getByRole('button', { name: 'Восстановить прежний черновик', exact: true })).toBeVisible();
+    expect((await selectionCache(page))?.value).toMatchObject({ selectionDraft: true, selectionRecovery: recovery, drafts: { selections: [] } });
+    await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(operation.opId);
+    expect((await saved(page)).operations[0].value).toBe(operation.value);
+    expect((await saved(page)).operations[0].serverSnapshot).toEqual(operation.serverSnapshot);
+    expect(await markers(page)).toEqual(before);
+    await openParticipation(page);
+    for (const meal of ['завтрак', 'обед', 'ужин', 'перекус']) await expect(page.getByRole('checkbox', { name: `Готовим ${meal}`, exact: true })).not.toBeChecked();
+    await page.getByRole('button', { name: 'Восстановить прежний черновик', exact: true }).click();
+    await expect.poll(async () => (await selectionCache(page))?.value.selectionRecovery).toBeNull();
+    expect((await selectionCache(page))?.value).toMatchObject({ selectionDraft: true, drafts: { date: selectedDate, selections: recovery.selections } });
+    await openParticipation(page);
+    await expect(page.getByLabel('Порция: E2E User, Обед', { exact: true })).toHaveValue('0.75');
+    expect(server.counts.preview).toBe(previewsBeforeRoundTrip);
+    // Retries may occur, but restoring the cache must never manufacture another logical mutation.
+    expect(server.familyWrites.every(write => write.mutationKind === 'planning' && write.weekStart === selectedDate)).toBe(true);
+    expect(server.counts.put).toBeGreaterThanOrEqual(putsBeforeRoundTrip);
+    await navigate(page, 'Настройки');
     if (status === 'pending') {
       server.recover(); await page.getByRole('button', { name: /Синхронизировать сейчас/ }).click();
       recoveryTiming = await retryTiming(page);
@@ -169,7 +235,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
       await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
       await page.reload(); await page.waitForLoadState('load');
       await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
-      expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+      expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(125);
       expect(await markers(page)).toEqual(before);
     } else { expect(server.counts.accepted).toBe(0); }
     expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
@@ -189,7 +255,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await healthy(page, errors); await healthy(observer, errors);
     await page.screenshot({ path: info.outputPath('rollback-preserved.png') });
     await info.attach('rollback-proof', { body: JSON.stringify({ sourceSha: rollbackPwaCommit, rollbackScript,
-      candidateScript, status, operation, before, beforeTiming, after: await markers(page), recoveryTiming, recoveryTimeoutMs,
+      candidateScript, status, operation, draftBeforeRollback, draftOnBridge, recovery, before, beforeTiming, after: await markers(page), recoveryTiming, recoveryTimeoutMs,
       counts: server.counts, diagnostics, googleRequests, expectedWebKitApiMeWarnings: expectedWebKitApiMeWarnings.length,
       expectedFirefoxIdbNavigationWarnings: expectedFirefoxIdbNavigationWarnings.length, meResponses, failedApiRequests }), contentType: 'application/json' });
   } catch (error) {

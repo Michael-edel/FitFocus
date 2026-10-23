@@ -4,11 +4,11 @@ import { resolve } from 'node:path';
 import { rollbackPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
 import { mockApp, openApp } from './support/appHarness';
-import { saved, healthy, isExpectedStateProtocolRejection } from './support/familyHarness';
+import { saved, healthy, isExpectedStateProtocolRejection, confirmPreview, navigate } from './support/familyHarness';
 
 test('fresh rollback installation can explicitly update to the candidate and preserve its family intent', async ({ context }, info) => {
   test.setTimeout(90_000);
-  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { retryFamilyPutDelayMs: 5_000 });
+  const server = await startPwaReleaseServer(rollbackPwaDist, resolve('dist'), { familyPlanning: true, retryFamilyPutDelayMs: 5_000 });
   const page = await context.newPage(), errors: string[] = [], googleRequests: string[] = [];
   let stateProtocolRejectionResponses = 0;
   let navigations = 0;
@@ -54,7 +54,7 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     const installedScript = await page.locator('script[type="module"][src]').getAttribute('src');
     const candidateScript = readFileSync(resolve('dist/index.html'), 'utf8').match(/src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1];
     expect(candidateScript).toBeTruthy(); expect(installedScript).not.toBe(candidateScript);
-    await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+    await confirmPreview(page);
     // Let the rollback client receive an offline response, then hold its retry so
     // activation exercises pagehide while the old sender is issuing that retry.
     await expect.poll(() => server.counts.put).toBeGreaterThan(0);
@@ -75,16 +75,36 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(operation.opId);
     expect((await saved(page)).operations[0].value).toBe(operation.value); expect((await saved(page)).version).toBe(3);
     await expect.poll(() => server.counts.familyPutAborted).toBeGreaterThan(0);
+    expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(125);
+    expect(server.familyWrites.length).toBeGreaterThan(1);
+    expect(server.familyWrites.every(write => write.account === 'google-e2e-sub' && write.session === 'a'.repeat(64)
+      && write.familyId === 'family-durable-e2e' && write.mutationKind === 'planning' && write.baseVersion === 1)).toBe(true);
+    server.recover();
+    await page.getByRole('button', { name: 'Проверить синхронизацию', exact: true }).click();
+    // An interrupted native attempt retains the production 30s lease. Do not erase it for the test.
+    await expect.poll(() => server.counts.accepted, { timeout: 40_000 }).toBe(1);
+    await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+    await navigate(page, 'Покупки');
+    await page.getByRole('checkbox', { name: 'Яблоко', exact: true }).check();
+    await expect.poll(() => server.counts.accepted, { timeout: 15_000 }).toBe(2);
+    await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+    expect(server.familyWrites.at(-1)).toMatchObject({ mutationKind: 'purchases', baseVersion: 2,
+      account: 'google-e2e-sub', session: 'a'.repeat(64), familyId: 'family-durable-e2e' });
+    await page.reload();
+    await expect(page.getByRole('checkbox', { name: 'Яблоко', exact: true })).toBeChecked();
+    expect((await saved(page)).menus[0].menu.planningV1.purchasedQuantities.find((item: { ingredientId: string }) => item.ingredientId === 'apple').quantity).toBe(125);
+    expect(server.counts.structuredOldWriterRejected).toBe(0);
     const lifecycle = await page.evaluate(() => JSON.parse(sessionStorage.getItem('__fitfocusPwaRollbackLifecycle') ?? '[]') as Array<{ type?: string }>);
     expect(lifecycle.filter(event => event.type === 'unhandledrejection')).toEqual([]);
     expect(lifecycle.filter(event => event.type === 'error')).toEqual([]);
-    expect(server.counts.stateProtocolRejected).toBeGreaterThan(0);
+    // B is protocol-2/0022 aware. Legacy writer rejection remains in the separate pinned v2 forward/import gates.
+    expect(server.counts.stateProtocolRejected).toBe(0);
     expect(stateProtocolRejectionResponses).toBe(server.counts.stateProtocolRejected);
     await healthy(page, errors.filter(error => !isExpectedStateProtocolRejection(error)));
     expect(server.unexpectedApi).toEqual([]); expect(googleRequests).toEqual([]);
     await page.screenshot({ path: info.outputPath('fresh-rollback-updated.png') });
     await info.attach('fresh-rollback-proof', { body: JSON.stringify({ installedScript, candidateScript, navigations, operation,
-      counts: server.counts, googleRequests, lifecycle }), contentType: 'application/json' });
+      counts: server.counts, writes: server.familyWrites, googleRequests, lifecycle }), contentType: 'application/json' });
   } catch (error) {
     const lifecycle = await page.evaluate(() => sessionStorage.getItem('__fitfocusPwaRollbackLifecycle')).catch(() => null);
     console.error('Fresh rollback diagnostics:', JSON.stringify({ navigations, errors, googleRequests,

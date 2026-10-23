@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { previousPwaDist } from './support/preparePwaFixture';
 import { startPwaReleaseServer } from './support/pwaReleaseServer';
-import { saved, navigate, healthy, isExpectedStateProtocolRejection } from './support/familyHarness';
+import { saved, navigate, healthy, isExpectedStateProtocolRejection, confirmPreview } from './support/familyHarness';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
 
 async function openNative(page: Page, url: string, standalone: boolean) {
@@ -162,7 +162,7 @@ async function stateDebug(page: Page) {
 test('real service worker waits for an explicit update and preserves durable family intent', async ({ context }, info) => {
   // Two real installations, two tabs, update activation and reload are one integration flow.
   test.setTimeout(90_000);
-  const server = await startPwaReleaseServer(previousPwaDist, resolve('dist'));
+  const server = await startPwaReleaseServer(previousPwaDist, resolve('dist'), { familyPlanning: true });
   const oldPage = await context.newPage(), page = await context.newPage();
   let legacyIdentityLoads = 0;
   const currentIdentityRequests: string[] = [];
@@ -270,7 +270,7 @@ test('real service worker waits for an explicit update and preserves durable fam
     // The currently open v2 page still lacks the writer-fence responder, so the
     // active old worker cannot prove that all old writers have stopped.
     expect(await requestLegacyWriterFence(page)).toBeNull();
-    await page.getByRole('button', { name: 'Сгенерировать семейное меню', exact: true }).click();
+    await confirmPreview(page);
     await expect.poll(async () => (await saved(page)).operations.length).toBeGreaterThan(0);
     await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('pending');
     const pending = (await saved(page)).operations[0]; expect(pending.status).toBe('pending');
@@ -339,13 +339,14 @@ test('real service worker waits for an explicit update and preserves durable fam
     const currentBuildId = await localBuildId(page);
     expect(writerFence?.clients?.every(client => client.buildId === currentBuildId)).toBe(true);
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Черновик перед обновлением');
-    // In-app tab selection does not change the original #family deep link.
+    // Current navigation retains its real hash route across activation. Reopen the family day explicitly.
+    await navigate(page, 'Меню семьи');
     await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
     await navigate(page, 'Настройки');
     await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Черновик перед обновлением');
     await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(pending.opId);
     await expect.poll(async () => (await saved(page)).operations[0]?.value).toBe(pending.value);
-    expect((await saved(page)).version).toBe(3); expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(700);
+    expect((await saved(page)).version).toBe(3); expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(125);
     await expect.poll(async () => (await saved(oldPage)).operations[0]?.opId).toBe(pending.opId);
     expect((await saved(oldPage)).version).toBe(3);
     await expect(oldPage.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
@@ -401,3 +402,72 @@ test('real service worker waits for an explicit update and preserves durable fam
 async function localBuildId(page: Page): Promise<string | null> {
   return page.evaluate(() => localStorage.getItem('fitfocus.build.id'));
 }
+
+// Independent of any rollback/bridge SHA: exercise the candidate's actual SW,
+// IndexedDB and native HTTP using structured day data only.
+test('native structured day confirmation preserves retry intent across reload and purchases use the same CAS resource', async ({ context }, info) => {
+  test.setTimeout(60_000);
+  const server = await startPwaReleaseServer(resolve('dist'), resolve('dist'), { familyPlanning: true, retryAfterSeconds: 8 });
+  const page = await context.newPage();
+  const errors: string[] = [], googleRequests: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => { if (/(^|\.)google\.com$/.test(new URL(request.url()).hostname)) googleRequests.push(request.url()); });
+  page.on('console', message => {
+    if (!['error', 'warning'].includes(message.type())) return;
+    if (message.location().url.includes('/api/family/menu/state') && /\b503\b/.test(message.text())) return;
+    errors.push(message.text());
+  });
+  try {
+    await mockApp(page, { session: 'app', realServiceWorker: true, nativeApi: true,
+      push: { standalone: info.project.name.endsWith('-pwa') } });
+    await openApp(page, server.origin + '/#family');
+    await expect(page.getByRole('heading', { name: 'Меню семьи', exact: true })).toBeVisible();
+    await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL)).toContain('/sw.js');
+    await confirmPreview(page);
+    await expect.poll(async () => (await saved(page)).operations[0]?.retryCount).toBeGreaterThan(0);
+    const pending = (await saved(page)).operations[0];
+    expect(pending.status).toBe('pending'); expect(server.counts.accepted).toBe(0);
+    const timing = await page.evaluate(async opId => {
+      const request = indexedDB.open('fitfocus-user-state-v1');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      try {
+        const tx = db.transaction('outbox', 'readonly');
+        const complete = new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error); });
+        const read = tx.objectStore('outbox').get(opId);
+        const row = await new Promise<{ nextAttemptAtMs: number; retryCount: number }>((resolve, reject) => { read.onsuccess = () => resolve(read.result); read.onerror = () => reject(read.error); });
+        await complete; return row;
+      } finally { db.close(); }
+    }, pending.opId);
+    expect(timing.nextAttemptAtMs).toBeGreaterThan(Date.now());
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Меню семьи', exact: true })).toBeVisible();
+    await expect.poll(async () => (await saved(page)).operations[0]?.opId).toBe(pending.opId);
+    expect((await saved(page)).operations[0].value).toBe(pending.value);
+    expect((await saved(page)).version).toBe(3);
+    server.recover();
+    await page.getByRole('button', { name: 'Проверить синхронизацию', exact: true }).click();
+    await expect.poll(() => server.counts.accepted, { timeout: 15_000 }).toBe(1);
+    expect(server.counts.acceptedAtMs).toBeGreaterThanOrEqual(timing.nextAttemptAtMs);
+    await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+    expect(server.familyWrites.every(write => write.account === 'google-e2e-sub' && write.session === 'a'.repeat(64)
+      && write.familyId === 'family-durable-e2e' && write.mutationKind === 'planning' && write.baseVersion === 1)).toBe(true);
+    await navigate(page, 'Покупки');
+    await page.getByRole('checkbox', { name: 'Яблоко', exact: true }).check();
+    await expect.poll(() => server.counts.accepted).toBe(2);
+    await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+    expect(server.familyWrites.at(-1)).toMatchObject({ mutationKind: 'purchases', baseVersion: 2,
+      account: 'google-e2e-sub', session: 'a'.repeat(64), familyId: 'family-durable-e2e' });
+    await page.reload();
+    await expect(page.getByRole('checkbox', { name: 'Яблоко', exact: true })).toBeChecked();
+    expect((await saved(page)).menus[0].menu.planningV1.purchasedQuantities.find((item: { ingredientId: string }) => item.ingredientId === 'apple').quantity).toBe(125);
+    const cachedApi = await page.evaluate(async () => {
+      const requests = await Promise.all((await caches.keys()).map(async name => (await caches.open(name)).keys()));
+      return requests.flat().filter(request => new URL(request.url).pathname.startsWith('/api/')).map(request => request.url);
+    });
+    expect(cachedApi).toEqual([]); expect(googleRequests).toEqual([]);
+    expect(server.counts.structuredOldWriterRejected).toBe(0); expect(server.unexpectedApi).toEqual([]);
+    await healthy(page, errors);
+    await info.attach('native-structured-day-proof', { body: JSON.stringify({ pending, timing, counts: server.counts, writes: server.familyWrites }), contentType: 'application/json' });
+  } finally { await page.close(); await server.close(); }
+});

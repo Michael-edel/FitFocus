@@ -4,6 +4,7 @@ import { FamilyRosterPanel } from './features/familyPlanning/FamilyRosterPanel';
 import { FamilyProfileEditor } from './features/familyPlanning/FamilyProfileEditor';
 import { FamilyDayPanel } from './features/familyPlanning/FamilyDayPanel';
 import { FamilyShoppingPanel } from './features/familyPlanning/FamilyShoppingPanel';
+import { FamilyConflictView } from './features/familyPlanning/FamilyConflictView';
 import { MEAL_LABELS, type PlanningView } from './features/familyPlanning/planningUiState';
 import './features/familyPlanning/familyPlanning.css';
 
@@ -32,8 +33,7 @@ export default function FamilyPlanningScreen(props: FamilyPlanningScreenProps) {
     {c.error && <div className="fp-error fp-card" role="alert"><p>{c.error}</p><button type="button" onClick={() => void c.refresh()} disabled={!!c.busy}>Обновить данные</button>
       {props.onOpenPlans && c.error.includes('тариф') && <button type="button" onClick={props.onOpenPlans}>Открыть тарифы</button>}</div>}
     {c.delivery.kind === 'conflict' && <section className="fp-card"><h2>Две версии меню</h2><p>Локальный вариант остаётся сохранённым. Повторная отправка не перезапишет конфликт автоматически.</p>
-      <div className="fp-two"><div><h3>На устройстве</h3>{c.conflictLocal?.days.map((day, index) => <p key={index}>{day.day}: {day.dinner?.base}</p>)}</div>
-        <div><h3>На сервере</h3>{c.delivery.remote?.days.map((day, index) => <p key={index}>{day.day}: {day.dinner?.base}</p>) ?? <p>Серверная версия пока недоступна.</p>}</div></div>
+      <FamilyConflictView local={c.conflictLocal} remote={c.delivery.remote} members={c.roster?.profiles} />
       <div className="fp-actions"><button type="button" onClick={c.exportLocal}>Сохранить копию своего варианта</button>
         <button type="button" onClick={() => void c.acceptServer()} disabled={!!c.busy || !c.delivery.remote}>Оставить серверную версию</button></div>
     </section>}

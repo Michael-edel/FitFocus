@@ -1,3 +1,4 @@
+import { navigate } from './support/navigation';
 import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
@@ -152,10 +153,7 @@ async function generate(page: Page) {
   await page.getByRole('button', { name: 'Обновить план', exact: true }).click();
 }
 async function settings(page: Page) {
-  const button = page.getByRole('button', { name: 'Настройки', exact: true });
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await button.scrollIntoViewIfNeeded(); await expect(button).toBeInViewport();
-  await button.click();
+  await navigate(page, 'Настройки');
   await expect(page.getByPlaceholder('Как к вам обращаться')).toBeVisible();
 }
 async function healthy(page: Page, errors: string[], expectedWebKitReloadWarnings: string[] = []) {
@@ -209,7 +207,7 @@ test('weekly menu preserves an independent profile edit made while AI is pending
     await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
     await expect.poll(async () => (await saved(page)).profile?.name).toBe('Edited while AI'); release();
     await expect.poll(() => counts.fulfilled).toBe(1);
-    await page.getByRole('button', { name: 'План', exact: true }).click();
+    await navigate(page, 'Личный план');
     await expect(page.getByText(WEEKLY_MENU_PROFILE_CHANGED, { exact: true })).toBeVisible();
     expect((await saved(page)).profile?.name).toBe('Edited while AI'); expect((await saved(page)).profile?.aiPlan?.weeklyMenu).toBeUndefined();
     expect(counts.items).toBe(0); await healthy(page, errors);

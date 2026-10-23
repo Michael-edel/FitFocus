@@ -10,11 +10,14 @@ function ShoppingRow({ name, need, purchased, toBuy, unit, disabled, onChange, o
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState('');
   const value = draft ?? String(purchased);
-  return <li className={`fp-shopping-row${toBuy === 0 ? ' fp-bought' : ''}`}>
-    <label className="fp-option"><input type="checkbox" checked={toBuy === 0} disabled={disabled}
+  const bought = purchased > 0 && toBuy === 0;
+  return <li className={`fp-shopping-row${bought ? ' fp-bought' : ''}`}>
+    <label className="fp-option"><input type="checkbox" checked={bought} disabled={disabled || (need === 0 && purchased === 0)}
       onChange={event => void onChange(event.target.checked ? Math.max(purchased, need) : 0)} /><strong>{name}</strong></label>
-    <p>Нужно {prettyQuantity(need)} {UNIT_LABELS[unit]} · Куплено {prettyQuantity(purchased)} {UNIT_LABELS[unit]}</p>
-    <p><strong>Осталось купить {prettyQuantity(toBuy)} {UNIT_LABELS[unit]}</strong></p>
+    <div className="fp-shopping-amounts"><span>Нужно {prettyQuantity(need)} {UNIT_LABELS[unit]}</span>
+      <span>Куплено {prettyQuantity(purchased)} {UNIT_LABELS[unit]}</span>
+      <strong>Осталось купить {prettyQuantity(toBuy)} {UNIT_LABELS[unit]}</strong></div>
+    {need === 0 && purchased > 0 && <p className="fp-muted fp-shopping-history">Куплено ранее; в текущем меню не требуется.</p>}
     <details><summary>Куплено другое количество</summary><form onSubmit={async event => {
       event.preventDefault(); const quantity = Number(value.replace(',', '.'));
       if (!value.trim() || !Number.isFinite(quantity) || quantity < 0) { setError('Введите количество от 0.'); return; }
@@ -29,13 +32,15 @@ function ShoppingRow({ name, need, purchased, toBuy, unit, disabled, onChange, o
 export function FamilyShoppingPanel({ controller: c }: { controller: FamilyPlanningController }) {
   const projection = c.projection;
   const disabled = c.commitBlocked || !!c.candidate;
+  // Historical purchase records stay persisted; only inactive zero rows are omitted from this view.
+  const visibleItems = projection?.items.filter(item => item.quantity > 0 || item.purchasedQuantity > 0 || item.toBuy > 0) ?? [];
   return <section className="fp-stack" aria-label="Общие покупки">
     <div className="fp-card"><h2>Покупки на {c.drafts.date}</h2><p>Общий список по подтверждённому меню. Можно отметить всё купленное или указать часть количества.</p>
       {c.candidate && <p className="fp-note">Сейчас показан список по последнему подтверждённому меню. Сначала подтвердите или отмените предпросмотр, чтобы изменить покупки.</p>}
       {c.staleRoster && <p className="fp-note">Ограничения или состав семьи изменились. Покупки относятся к прежнему меню; организатору нужно пересобрать его.</p>}
       {!projection && <p className="fp-note">Список появится после подтверждения меню на этот день.</p>}
     </div>
-    {projection && <><ul className="fp-shopping-list">{projection.items.map(item => <React.Fragment key={`${c.drafts.date}:${item.ingredientId}:${item.unit}`}><ShoppingRow
+    {projection && <>{!visibleItems.length && <p className="fp-note">По меню на этот день покупать пока нечего.</p>}<ul className="fp-shopping-list">{visibleItems.map(item => <React.Fragment key={`${c.drafts.date}:${item.ingredientId}:${item.unit}`}><ShoppingRow
       name={item.name} need={item.quantity} purchased={item.purchasedQuantity} toBuy={item.toBuy} unit={item.unit} disabled={disabled}
       onChange={quantity => c.setPurchased(item.ingredientId, item.unit, quantity)} /></React.Fragment>)}</ul>
       <section className="fp-card"><h2>Добавлено вручную</h2>{projection.manualItems.length ? <ul className="fp-shopping-list">
