@@ -496,7 +496,6 @@ async function openAccountB(context: BrowserContext, state: FixtureState, waitFo
 }
 
 test('navigation aborts a held Coach retry without durable success effects', async ({ page }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const marker = '__e2e_coach_retry_unload__';
   await page.addInitScript(({ markerKey, feature }) => {
     const mark = (suffix: string, value: string) => {
@@ -813,7 +812,6 @@ test('a held hydration plateau response cannot update a new session of the same 
 });
 
 test('held coach retry cannot write for account A after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const profileA = profileFor(accountA.id);
   const state: FixtureState = { current: accountA, profile: profileA };
   const errorsA: string[] = [];
@@ -884,7 +882,6 @@ test('held coach retry cannot write for account A after another tab signs in as 
 });
 
 test('held coach retry cannot write after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1135,7 +1132,6 @@ test('AI Council hides its transient draft after the same account starts a new s
 });
 
 test('held personal-plan retry cannot update either profile after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1199,7 +1195,6 @@ test('held personal-plan retry cannot update either profile after another tab si
 });
 
 test('held personal-plan retry cannot update the profile after same-account reauthentication', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1286,7 +1281,6 @@ test('held personal-plan retry cannot update the profile after same-account reau
 });
 
 test('held plateau retry cannot appear after another tab signs in as account B', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
   const errorsA: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
@@ -1354,7 +1348,6 @@ test('held plateau retry cannot appear after another tab signs in as account B',
 });
 
 test('held plateau retry cannot appear after the same account starts a new server session', async ({ page, context }, info) => {
-  test.skip(!info.project.name.startsWith('desktop-'), 'The AI retry control is in desktop navigation.');
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id, true) };
   const errorsA: string[] = [], errorsReauthenticated: string[] = [];
   page.on('pageerror', error => errorsA.push(error.message));
