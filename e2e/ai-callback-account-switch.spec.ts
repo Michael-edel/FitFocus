@@ -51,6 +51,26 @@ function profileFor(accountId: string, plateau = false) {
   };
 }
 
+// AI retry and delivery status live in More on every viewport.
+async function openAiActivity(page: Page) {
+  const dialog = page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true });
+  if (!await dialog.isVisible()) {
+    await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  }
+  await expect(dialog).toBeVisible();
+  const details = dialog.locator('details').filter({ has: page.getByText('Состояние приложения', { exact: true }) });
+  if (!await details.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await details.locator('summary').click();
+  }
+  await expect(details).toHaveAttribute('open', '');
+}
+
+async function closeAiActivity(page: Page) {
+  const dialog = page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true });
+  await dialog.getByRole('button', { name: 'Закрыть меню', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+}
+
 function deferred() {
   let release!: () => void;
   const promise = new Promise<void>(resolve => { release = resolve; });
@@ -516,6 +536,7 @@ test('navigation aborts a held Coach retry without durable success effects', asy
     localStorage.setItem(key, JSON.stringify({ feature: 'coach_advice', type: 'coach', userId: accountId, actionId: 'unload-coach-retry' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
 
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Coach', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   const before = await readDurableSnapshot(page);
@@ -527,6 +548,7 @@ test('navigation aborts a held Coach retry without durable success effects', asy
   const coachStateWritesBefore = fixture.counts.stateWrites.filter(key => key === coachKey(accountA.id));
   const achievementChecksBefore = fixture.counts.achievementChecks;
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixture.counts.heldRequests).toBe(1);
   await expect.poll(() => page.evaluate(markerKey => localStorage.getItem(`${markerKey}:request`), marker)).toBe('started');
 
@@ -809,9 +831,11 @@ test('held coach retry cannot write for account A after another tab signs in as 
   await page.evaluate(({ key, accountId }) => {
     localStorage.setItem(key, JSON.stringify({ feature: 'coach_advice', type: 'coach', userId: accountId, actionId: 'seeded-coach' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Coach', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   const beforeSwitch = await readDurableSnapshot(page);
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
@@ -825,7 +849,9 @@ test('held coach retry cannot write for account A after another tab signs in as 
 
   try {
     const switched = await openAccountB(context, state);
+    await openAiActivity(switched.page);
     await expect(switched.page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
+    await closeAiActivity(switched.page);
     const accountBBefore = await readDurableSnapshot(switched.page);
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountB.id);
     const profileBBefore = rawValue(accountBBefore, profileKey(accountB.id));
@@ -873,9 +899,11 @@ test('held coach retry cannot write after the same account starts a new server s
   await page.evaluate(({ key, accountId }) => {
     localStorage.setItem(key, JSON.stringify({ feature: 'coach_advice', type: 'coach', userId: accountId, actionId: 'seeded-same-session-coach' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Coach', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   await waitForAccountOutboxIdle(page, accountA);
 
@@ -1122,9 +1150,11 @@ test('held personal-plan retry cannot update either profile after another tab si
   await page.evaluate(({ key, accountId }) => {
     localStorage.setItem(key, JSON.stringify({ feature: 'personal_plan', type: 'plan', userId: accountId, actionId: 'seeded-plan' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Plan', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   const beforeSwitch = await readDurableSnapshot(page);
   expect(beforeSwitch.activeSession?.accountId).toBe(accountA.id);
@@ -1184,9 +1214,11 @@ test('held personal-plan retry cannot update the profile after same-account reau
   await page.evaluate(({ key, accountId }) => {
     localStorage.setItem(key, JSON.stringify({ feature: 'personal_plan', type: 'plan', userId: accountId, actionId: 'seeded-same-session-plan' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Plan', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   await waitForAccountOutboxIdle(page, accountA);
 
@@ -1271,9 +1303,11 @@ test('held plateau retry cannot appear after another tab signs in as account B',
       feature: 'plateau', type: 'plateau', userId: accountId, actionId: 'seeded-plateau-retry',
     }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Plateau', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toBeVisible();
 
@@ -1335,9 +1369,11 @@ test('held plateau retry cannot appear after the same account starts a new serve
   await page.evaluate(({ key, accountId }) => {
     localStorage.setItem(key, JSON.stringify({ feature: 'plateau', type: 'plateau', userId: accountId, actionId: 'seeded-same-session-plateau' }));
   }, { key: aiActionKey(accountA.id), accountId: accountA.id });
+  await openAiActivity(page);
   const retry = page.getByRole('button', { name: 'Retry: Plateau', exact: true });
   await expect(retry).toBeVisible({ timeout: 5_000 });
   await retry.click();
+  await closeAiActivity(page);
   await expect.poll(() => fixtureA.counts.heldRequests).toBe(1);
   await expect(page.getByRole('button', { name: 'AI думает...', exact: true })).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
@@ -2799,8 +2835,10 @@ test('AI activity cached for account A is hidden after another tab activates acc
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
   if (info.project.name.startsWith('desktop-')) {
+    await openAiActivity(page);
     await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+    await closeAiActivity(page);
   }
 
   const switched = await openAccountB(context, state);
@@ -2817,9 +2855,12 @@ test('AI activity cached for account A is hidden after another tab activates acc
     expect(JSON.parse(actionBAfterSwitch).userId).toBe(accountB.id);
   }
   if (info.project.name.startsWith('desktop-')) {
+    await openAiActivity(page);
     await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    await expect(page.getByText('AI: готов', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+    await closeAiActivity(page);
   }
   expect(switched.errors).toEqual([]);
 });
