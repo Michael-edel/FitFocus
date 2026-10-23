@@ -204,3 +204,74 @@ skips: AI Retry теперь доступен через общее More на в
 regressions выполняются строго по очереди; окончательные результаты пока
 не заявлены. Family CI 39945032316 относится к remote C16 и уже показывает
 старые navigation failures; исправления C17–C20 не выдаются за его результат.
+
+### Обновление 18:23: текущий main и завершённые семейные regressions
+
+Main API повторно подтвердил `a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`,
+protected=true. Exact CI `39942447140` завершён SUCCESS: 1608 unit / 226 файлов,
+1658 browser passed / 78 reported skips / 0 failed; HTTP/CAS 23/23; browser и
+rollback artifacts фактически загружены (IDs 12503002995 и 12503795856).
+Локальный inventory: `MAIN-CI-39942447140-20261023.json`. Исторический 98d4910
+с DOMPurify 3.4.16 не является принятым security rollback. Family B2 a6b2048,
+main и C23 содержат 3.4.17, проверено по immutable lock blobs.
+
+C20 Android AI `ff-family-e2e-16393205da6a`: 71 passed / 3 platform skip,
+без failed/flaky/retries. C22 `77b5384` исправляет только rollback helper:
+ожидание enabled day editor, native details.open и visible checkbox до исходных
+assertions. Exact C22 Linux WebKit rollback `ff-family-e2e-f858d60d82d0`:
+2/2 PASS; Git spec before/after, network/resources и parent acceptance PASS.
+
+C22 menu regression `ff-family-e2e-469a178fa3df` сохранён как 17/19 FAIL:
+notice-rooted locator внутри details.has ошибочно требовал вложенный notice.
+C23 `50b60523d7443715796523ba37bcfa36bba660d9` меняет только relative summary
+selector, сохраняя все local/remote/menu/CAS/outbox/persistence assertions.
+Exact C23 последовательная очередь `remaining-acceptance-f8b22474cbae.json`
+завершена PASS: menu 19/19 `ff-family-e2e-b286f73d3403`, session 12/12
+`ff-family-e2e-d0fe42509080`, callbacks 37/37 `ff-family-e2e-bd8d96bfe899`.
+Ни skips, ни retries, ни flaky. Native C23 WebKit fresh installation
+`ff-family-e2e-f7fa50980e87`: 1/1 PASS; parent подтверждает неизменный spec и PID0.
+
+WebKit infrastructure pre-app failure `ff-family-e2e-8278365eae18` сохранён:
+отложенный kernel ff00::/8 route после однократного cleanup. Только bounded
+cleanup exact kernel multicast rows двух внутренних veth исправлен; строгая
+allowlist, terminal IPv4/IPv6 unreachable rules, empty DNS/caps0 не ослаблены.
+Отказные контейнеры не запускали app/browser и удалены после PID0.
+
+Native mobile C20 `ff-mobile-c20-4870f3130f0f`: 36/37 engineering checks,
+12 PNG на375/390/430, menu/purchases exact ACK/readback, console errors=0.
+Единственный FAIL — shopping focus на375 сразу после ACK. Код controller
+подтверждает отдельное ожидание durable ACK observation; исходный trace не
+сохранял disabled attribute. External harness теперь ждёт естественный enabled
+control и displayed saved state, сохраняет focus/inside/hit и добавляет
+disabled/connected. Повтор `ff-mobile-c20-dc734b9aec91` также36/37 FAIL:
+после двух ready animation frames checkbox снова disabled=true, focus=false,
+connected/inside/hit=true. Причина повторного UI-перехода пока не доказана;
+app bug или harness timing окончательно не классифицированы. Все12 PNG и
+сетевые/ресурсные proofs сохранены. Предшествующие pre-app manifest и
+tmpfs evidence-retention failures также сохранены; это не дефекты пользователя.
+Physical iOS, VoiceOver, native zoom и3G не проверены; root-rem simulation
+не называется native text zoom. Это технический QA, не новые независимые роли.
+
+Отдельный prefix prototype: `ff-prefix-f4618a6fa286` SQLite18 групп + JS5
+binding checks PASS; source bytes и bounded isolated sandbox подтверждены.
+`ff-prefix-d1-52f11a5cb6c6` остаётся diagnostic FAIL по четырём исходным FK
+error-string assertions, хотя full state checks, обе positive batches,
+16 durable checkpoints /33 runtime opens и original old-prefix/late-suffix/
+unchanged0022 sequence наблюдались успешно. D1 наружу скрывает FK error за
+generic internal reference; произвольный internal error не принят как PASS.
+Новый отдельный matched differential proof:
+`ff-prefix-d1-differential-create-9c5c84eb8dac` и
+`ff-prefix-d1-differential-join-9f8fe848c753` PASS, суммарно6пар/12вариантов/
+18opens/4durableFKrejections. Matched control отличается только exact FK clause,
+принимает standalone/forgot-delete с exact persisted rows; FK variant откатывает
+те же inputs; правильная5statement batch коммитится в обоих. Проверены exact
+schema/FK pragma, foreign_keys=1, пустой невозможный parent и durable reopen.
+Это local pinned workerd, не Cloud D1, не app integration или разрешение live DDL.
+
+Fence-aware B3 готовится отдельно на B2; current B2 atomic handlers ещё не знают
+token protocol, поэтому после guard он не принят как рабочий rollback writer.
+Atomic installer/receipt, B3 runtime/race proof, полный lifecycle/drain,
+backup/restore-check, QA actor и новый exact-head Family CI остаются gates.
+Рабочая DB, binding и защитные правила не менялись. Family не merged/deployed.
+Исходные 4+4 Sol-роли и58PNG относятся к своим зафиксированным snapshots;
+инженерные агенты/прогоны не прибавляются к этому пользовательскому аудиту.
