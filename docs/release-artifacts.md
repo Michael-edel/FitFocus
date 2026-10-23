@@ -1,5 +1,35 @@
 # Совместимый артефакт отката
 
+## Текущий локальный pin B3, 23.10.2026
+
+После добавления prefix guards выбран fence-aware B3
+`b8babb13200a95827b7495769a15151bb4c1c7de`, tree
+`f1e221c0bfec4857a4658b34d0f3c0416d1f83f5`. Он сохраняет контракты B2,
+DOMPurify3.4.17 и добавляет атомарный create/join adapter. Его исходные unit/types/
+guards/builds и56 compiled local-D1 cases приняты отдельно. C25
+`f5f3d635f0cd827eb245131bcb733d9071578e83` фиксирует новый pin в CI/PWA fixture
+и прошёл1695 unit/234файла, types/guards/builds. Совместная упаковка полных
+архивов (`ff-family-prepare-c43eaf154fd0`), HTTP C25→B3→C25
+(`ff-family-http-99be0cff12de`:50запросов) и штатный rollout
+(12запросов/7групп) PASS. Native WebKit rollback2/2
+(`ff-family-e2e-9c667f0b825c`) и fresh install1/1
+(`ff-family-e2e-9598d3a341e2`) PASS, workers1/retries0, исходные assertions
+и timeouts сохранены. Target PID0, network/resources и source Git blob
+до/после проверены parent. B3 на момент снимка ещё не опубликован.
+
+Полные архивы этой пары: B3 SHA256
+`4186c8473621f2e2ebfcbc323433ed7ec5a86833b17bb6e14c205a6933b4f3ef`,
+C25 SHA256 `2ca097ba1e20b9d43923ccc4205dd9aae21952ff3efc8002977dd5f057b88c54`.
+Это локальная приёмка точных артефактов; будущий MD-only commit и новый CI
+не получают этот PASS автоматически. Отдельный previous fresh install
+`ff-family-e2e-c8b5fb161fa4` сохранён как infrastructure FAIL: доверенный parent
+потерял stdin при перезапуске tool service, promotion не выполнен.
+
+Прежние B2 `a6b2048` и его успешные проверки ниже — история пары до prefix
+guards. B2 без token protocol не принят как writer rollback после установки
+этих guards. Runtime не устанавливает DDL; отдельные installer/receipt,
+lifecycle/drain, backup и live согласование остаются обязательными.
+
 ## Ограничение локальной ветки family-first, 23.10.2026
 
 Новый [planningV1](family-planning.md) требует0022, совместимого reader, family format marker и архива. Откат должен понимать эти данные и IDB v3; прежний main fa08eaf1 не является совместимым rollback после новой записи. Первоначальный аудит был локальным. Последующим отдельным разрешением владелец поручил исправления и выпуск на рабочем сайте; приёмочные gates и защита main сохраняются. [Порядок выпуска и миграции](family-planning-release.md) отделяет подготовку от выполненных действий.

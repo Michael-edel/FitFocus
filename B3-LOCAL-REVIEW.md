@@ -34,9 +34,12 @@ account; owner+four managed rejects the sixth with full rollback. Both bare/toke
 plans, token0 and durable reopen were verified. These are compiled Node use cases
 with real local D1, not public HTTP/session or Cloud D1 proof.
 
-Integration into the current Family candidate and its exact B3 rollback artifacts
-requires a separate combined check. A dedicated atomic installer and installation
-receipt remain **unimplemented** and separately reviewed/authorized requirements.
+Integration C25 `f5f3d635f0cd827eb245131bcb733d9071578e83` passed1695unit/234files,
+types/guards/builds; full C25/B3 archives passed50HTTP requests plus12requests/
+7rollout groups, native WebKit rollback2/2 and fresh install1/1. These are separate
+frozen-source local results, not a future head's CI acceptance. A dedicated atomic
+installer and installation receipt have an external17-case draft, not yet
+executed or accepted; they remain separately reviewed/authorized requirements.
 No production install, deploy or working-database change is authorized here.
 
 The existing differential local-D1 evidence for the optional FK prototype does

@@ -1,4 +1,4 @@
-## Семейный кандидат, 23.10.2026, 18:54 Asia/Yekaterinburg
+## Семейный кандидат, 23.10.2026, 19:22 Asia/Yekaterinburg
 
 Текущий main — `a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`: security-only
 PR #100 слит обычным merge; в Cloudflare подтверждён успешный Production/main
@@ -10,19 +10,25 @@ rollback. Family B2 a6b2048, main и текущий кандидат содер�
 Family и миграция 0022 в опубликованный security выпуск не входят.
 
 Семейная ветка опубликована как [draft PR #99](https://github.com/Michael-edel/FitFocus/pull/99)
-и интегрирует текущий main. Опубликованный head C24 — `3230c81`; его CI
-`39961299287` ещё выполняется. Последний проверенный код C23 —
-`50b60523d7443715796523ba37bcfa36bba660d9`; последнее изменение интерфейса —
-`f272639ba1ccc1a9b908d8a42c3ef635a040f497`. Локально интегрируется
-проверенный B3 adapter создания/присоединения; combined candidate ещё проверяется.
+и интегрирует текущий main. На момент снимка опубликованный head C24 —
+`3230c81`; его CI `39961299287` ещё выполняется и не подтверждает новый код.
+Локальный C25 `f5f3d635f0cd827eb245131bcb733d9071578e83` интегрирует B3 adapter
+атомарного создания/присоединения и новый rollback pin. Он прошёл 1695 unit /
+234 файла, три typecheck, guards, schema/privacy и frontend/PWA/Pages build.
+Последнее изменение интерфейса — `f272639ba1ccc1a9b908d8a42c3ef635a040f497`.
 C22/C23 меняют только ожидание
 готовности rollback editor и относительный summary selector recovery helper;
 исходные assertions, timeouts, workers=1/retries=0 сохранены.
 
 На C23 Chromium family menu 19/19, session 12/12, callbacks 37/37 — без skip,
-flaky и retries. Native WebKit: C20 PWA update 3/3, C22 rollback 2/2,
-C23 fresh installation 1/1. Git blob до/после, private network, resource gates
-и stopped PID0 подтверждены независимым parent; профиль 2 CPU / 3 GiB / 512 PID.
+flaky и retries. Полные архивы C25/B3 упакованы и проверены: 50 HTTP-запросов
+при C25→B3→C25 и 12 запросов / 7 групп штатного локального D1 rollout PASS.
+Native WebKit на новой паре: C25 rollback 2/2 и fresh installation 1/1 PASS;
+предыдущий C20 PWA update 3/3 относится к своей ревизии. Git blob до/после,
+private network, resource gates и stopped PID0 подтверждены независимым parent;
+профиль 2 CPU / 3 GiB / 512 PID. Один предыдущий fresh-install запуск потерял
+stdin доверенного parent при перезапуске tool service; он сохранён как
+infrastructure FAIL, а не принят по exit0 target. Новый отдельный запуск PASS.
 Android AI C20: 71 passed / 3 предусмотренных platform skip / 0 failed/flaky/retries.
 Это результаты указанных ревизий; полной exact-head CI приёмки Family ещё нет.
 
@@ -49,8 +55,10 @@ error-string assertions: workerd возвращает generic internal error. Е
 state observations и новый отдельный proof не переименовывают тот FAIL.
 Cloud D1 не проверен. Fence-aware B3 `b8babb1` отдельно прошёл1680 unit/232файла,
 все types/guards/builds,52 actual compiled local-D1 cases до/после0022 и4 managed
-capacity cases. Он перенесён в локальную Family-ветку; combined HTTP/artifact
-приёмка ещё требуется. Installer/receipt пока не реализованы и не входят вPR99.
+capacity cases. Он перенесён в локальную Family-ветку; совместные архивы,
+HTTP и native rollback/fresh-install C25/B3 приняты. Installer/receipt вынесены
+в отдельный непубликуемый draft: 8 атомарных шагов и 17 fault/control cases;
+выполнение настоящим D1 ещё не принято. В приложение/PR99 этот draft не входит.
 
 Исходные четыре Sol-роли и четыре другие слепые Sol-роли завершены на своих
 зафиксированных snapshots; их 58 PNG, клики и решения о возвращении сохранены.

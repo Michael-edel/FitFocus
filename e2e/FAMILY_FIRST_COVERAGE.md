@@ -1,5 +1,25 @@
 # Family-first browser coverage migration
 
+## Acceptance snapshot, 23 October 2026 19:22 UTC+5
+
+C25 `f5f3d635f0cd827eb245131bcb733d9071578e83` / B3 `b8babb1` full archives
+passed50 local HTTP requests and12 requests /7 real-Wrangler rollout groups.
+Native WebKit on this exact pair passed rollback2/2 and fresh installation1/1,
+workers1/retries0, unchanged assertions/timeouts, Git-blob before/after and
+stoppedPID0 parent acceptance. An earlier fresh-install target is retained as
+an infrastructure failure after parent stdin loss; exit0 alone was not accepted.
+C23 menu19/session12/callbacks37 passed68/68; C20 native update3/3 and Android
+AI71passed/3platform skips apply to those revisions. C25 changes create/join
+backend and rollback source pins, not the client runtime last changed at f272639.
+Mobile engineering C20 now passed37/37 after fixing only an external async
+polling predicate. These technical checks do not add independent user roles or
+physical iOS/VoiceOver/3G acceptance. Full exact-head Family CI remains required.
+
+The source-edit inventory below is historical; its "not executed" statements
+describe the time of each edit, not this acceptance snapshot.
+
+## Source-edit inventory
+
 23 October 2026. Source changes only; no browser or Node run was performed on the host.
 
 `family-menu-durable.spec.ts` keeps the original durability, conflict, recovery,
@@ -61,8 +81,8 @@ Open migration boundaries at this source edit:
   compatibility and DOMPurify 3.4.17 changes and adds the single-batch prefix-aware
   create/join adapter. This pin is currently local; it has not been published.
   Earlier pair/browser results for B2 `a6b2048` remain historical B2 evidence and
-  do not establish B3 acceptance. The new C25/B3 artifact pair, actual HTTP and
-  native PWA rollback checks still require their own frozen-source execution.
+  do not establish B3 acceptance. The separate frozen-source C25/B3 checks are
+  recorded in the current acceptance snapshot above.
   This source edit makes no production-readiness claim. The former 98d artifact
   remains historical and must not be described as 0022 compatible.
 - `pwa-rollback.spec.ts` keeps pending/conflicted payload/opId/remote snapshot,

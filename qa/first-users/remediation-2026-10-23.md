@@ -323,3 +323,31 @@ B3 перенесён в локальную Family-ветку. Новый combin
 совместимого rollback ещё проверяются. Это не public HTTP/auth, Cloud D1 или
 разрешение рабочей миграции. Atomic installer/receipt, lifecycle/drain,
 backup/restore и live согласование остаются открыты; рабочая DB не менялась.
+
+### Приёмка 19:22: объединённый C25 и полный B3
+
+Локальный C25 `f5f3d635f0cd827eb245131bcb733d9071578e83`, tree
+`9415c6a4e2f97a50999b2c99360e926a8727ee63`, интегрирует fence-aware B3.
+`ff-check-4ac0ed0b099f`:1695 unit/234 файла, три types, guards, schema/privacy,
+frontend/PWA/Pages builds PASS. Архивы `ff-family-prepare-c43eaf154fd0`
+прошли полную упаковку. `ff-family-http-99be0cff12de`:50 HTTP-запросов
+C25→B3→C25 и12запросов/7групп штатного Wrangler rollout PASS: honest23ledger
+через0021, capability fail-closed, atomic create/join на0021, оригинальная0022,
+seed/menu/profile preservation и полный rollback при шестом участнике.
+Это не combined prerequisite/zero-prefix/0022 ledger proof.
+
+Native WebKit на этой паре: `ff-family-e2e-9c667f0b825c` rollback2/2 и
+`ff-family-e2e-9598d3a341e2` fresh installation1/1 PASS. Parent подтверждает
+профиль2CPU/3GiB/512PID, private namespace, Git blob до/после, PID0 и cleanup.
+Предыдущий `ff-family-e2e-c8b5fb161fa4` сохранён как infrastructure FAIL:
+при перезапуске tool service parent потерял stdin до promotion. Exit0 target
+не засчитан как приёмка. Новый parent запущен отдельно в скрытом устойчивом
+процессе; новая приёмка не переписывает старый FAIL.
+
+Installer/receipt подготовлены вне приложения: восемь шагов одним D1 batch,
+17случаев (8fault+8matched benign controls+success), независимое Sol review
+безP1/P2. Runner с настоящим локальным Wrangler baseline ещё не запускался.
+Общий zero-prefix+0022+actual ledger, lifecycle/HTTP drain, backup/restore,
+QA actor и exact-head CI остаются открыты. Шаблон человеческой проверки
+owner-son-acceptance.md подготовлен без подсказок; люди его ещё не проходили.
+11+27 прежних файлов и пять защищённых файлов сохранены; рабочая DB не менялась.
