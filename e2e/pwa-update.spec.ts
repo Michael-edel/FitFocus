@@ -1,3 +1,4 @@
+import { setPurchasedCheckbox } from './support/shoppingInteractions';
 import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { previousPwaDist } from './support/preparePwaFixture';
@@ -453,7 +454,7 @@ test('native structured day confirmation preserves retry intent across reload an
     expect(server.familyWrites.every(write => write.account === 'google-e2e-sub' && write.session === 'a'.repeat(64)
       && write.familyId === 'family-durable-e2e' && write.mutationKind === 'planning' && write.baseVersion === 1)).toBe(true);
     await navigate(page, 'Покупки');
-    await page.getByRole('checkbox', { name: 'Яблоко', exact: true }).check();
+    await setPurchasedCheckbox(page.getByRole('checkbox', { name: 'Яблоко', exact: true }), true);
     await expect.poll(() => server.counts.accepted).toBe(2);
     await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
     expect(server.familyWrites.at(-1)).toMatchObject({ mutationKind: 'purchases', baseVersion: 2,

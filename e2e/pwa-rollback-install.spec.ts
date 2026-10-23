@@ -1,3 +1,4 @@
+import { setPurchasedCheckbox } from './support/shoppingInteractions';
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -85,7 +86,7 @@ test('fresh rollback installation can explicitly update to the candidate and pre
     await expect.poll(() => server.counts.accepted, { timeout: 40_000 }).toBe(1);
     await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
     await navigate(page, 'Покупки');
-    await page.getByRole('checkbox', { name: 'Яблоко', exact: true }).check();
+    await setPurchasedCheckbox(page.getByRole('checkbox', { name: 'Яблоко', exact: true }), true);
     await expect.poll(() => server.counts.accepted, { timeout: 15_000 }).toBe(2);
     await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
     expect(server.familyWrites.at(-1)).toMatchObject({ mutationKind: 'purchases', baseVersion: 2,

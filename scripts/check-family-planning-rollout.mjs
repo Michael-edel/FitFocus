@@ -131,7 +131,7 @@ async function start(database) {
   });
   const origin = `http://127.0.0.1:${port}`, log = resolve(database.directory, 'worker.log');
   child = spawn(process.execPath, [cli, 'pages', 'dev', resolve(candidate, 'dist'), '--ip', '127.0.0.1', '--port', String(port),
-    '--inspector-port', '0', '--config', database.config, '--persist-to', database.state],
+    '--inspector-port', '0', '--persist-to', database.state],
   { cwd: database.directory, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', bytes => appendFileSync(log, bytes)); child.stderr.on('data', bytes => appendFileSync(log, bytes));
   child.once('error', error => appendFileSync(log, String(error)));

@@ -120,7 +120,9 @@ test('family reads, invitation, private profile and purchase CAS use the origina
   await page.getByLabel('Имя', { exact: true }).fill('Участник с проверенной сессией');
   await page.getByRole('button', { name: 'Сохранить профиль', exact: true }).click();
   await expect.poll(() => counts.profiles).toBe(1); await expect(page.getByText('Профиль сохранён на сервере.', { exact: true })).toBeVisible();
-  await navigate(page, 'Покупки'); await expect(rice(page)).toBeVisible(); await rice(page).check();
+  await navigate(page, 'Покупки'); await expect(rice(page)).toBeVisible();
+  // Controlled purchase state changes only after the durable IDB commit, not synchronously in onChange.
+  await expect(rice(page)).not.toBeChecked(); await rice(page).click(); await expect(rice(page)).toBeChecked();
   await expect.poll(() => counts.accepted).toBe(1); await expect(rice(page)).toBeChecked();
   noOldWrites(counts); await healthy(page, errors); await page.screenshot({ path: info.outputPath('family-scoped.png') });
 });
@@ -145,7 +147,8 @@ test('missing explicit-family capability blocks invitation; missing planning cap
 
 test('a purchase refusal preserves the durable local checkbox, pauses delivery and leaves accepted server quantities unchanged', async ({ page }) => {
   const { errors, counts, menus, firstDate } = await setup(page, 'purchase-refusal'); await ready(page); await navigate(page, 'Покупки');
-  await expect(rice(page)).toBeVisible(); await rice(page).check(); await expect.poll(() => counts.purchases).toBe(1);
+  await expect(rice(page)).toBeVisible(); await expect(rice(page)).not.toBeChecked();
+  await rice(page).click(); await expect(rice(page)).toBeChecked(); await expect.poll(() => counts.purchases).toBe(1);
   await expect(rice(page)).toBeChecked(); expect(counts.accepted).toBe(0);
   await expect(page.getByText('Изменения сохранены на устройстве. Войдите в свой аккаунт, чтобы продолжить синхронизацию.', { exact: true })).toBeVisible();
   expect(menus.get(firstDate())!.planningV1.purchasedQuantities.find(item => item.ingredientId === 'rice')!.quantity).toBe(0);
@@ -208,7 +211,8 @@ test('held purchase CAS keeps its original selected day across rollover and neve
   await page.clock.setFixedTime(new Date('2026-10-19T12:00:00.000Z'));
   const { errors, counts, release, purchaseDates, dates, setCurrentDate, menus } = await setup(page, 'held-day-purchase'); await ready(page);
   try {
-    const selectedDate = await page.getByLabel('Дата меню', { exact: true }).inputValue(); await navigate(page, 'Покупки'); await rice(page).check();
+    const selectedDate = await page.getByLabel('Дата меню', { exact: true }).inputValue(); await navigate(page, 'Покупки');
+    await expect(rice(page)).not.toBeChecked(); await rice(page).click(); await expect(rice(page)).toBeChecked();
     await expect.poll(() => counts.purchases).toBe(1); await rollover(page); release(); await expect.poll(() => counts.accepted).toBe(1);
     expect(purchaseDates).toEqual([selectedDate]); await expect(rice(page)).toBeChecked();
     const nextDate = '2026-10-26'; expect(nextDate).not.toBe(selectedDate); setCurrentDate(nextDate);

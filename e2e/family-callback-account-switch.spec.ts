@@ -1,3 +1,4 @@
+import { setPurchasedCheckbox } from './support/shoppingInteractions';
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
@@ -680,7 +681,7 @@ for (const boundary of ['another-account', 'same-account-new-session'] as const)
       await expect.poll(async () => (await saved(currentPage)).operations.length).toBe(0);
       await navigate(currentPage, 'Покупки');
       const purchase = currentPage.locator('.fp-shopping-list').getByRole('checkbox').first();
-      await expect(purchase).toBeEnabled(); await purchase.check();
+      await expect(purchase).toBeEnabled(); await setPurchasedCheckbox(purchase, true);
       await expect.poll(() => state.shoppingCheckRequests).toBe(1);
       await expect.poll(async () => (await saved(currentPage)).operations.length).toBe(0);
       expect(state.familyPurchaseMutations).toHaveLength(1);
@@ -1413,7 +1414,7 @@ test('a delayed family shopping response cannot trigger an achievement after ano
   await navigate(page, 'Покупки');
   const accountACheckbox = page.locator('.fp-shopping-list').getByRole('checkbox').first();
   await expect(accountACheckbox).toBeVisible();
-  await accountACheckbox.check();
+  await setPurchasedCheckbox(accountACheckbox, true);
   await expect.poll(() => state.shoppingCheckRequests).toBe(1);
   expect(state.shoppingCheckAccounts).toEqual([accountA.id]);
 
@@ -1459,7 +1460,7 @@ test('a delayed family shopping check from the previous same-account session is 
   await navigate(page, 'Покупки');
   const oldCheckbox = page.locator('.fp-shopping-list').getByRole('checkbox').first();
   await expect(oldCheckbox).toBeVisible();
-  await oldCheckbox.check();
+  await setPurchasedCheckbox(oldCheckbox, true);
   await expect.poll(() => state.shoppingCheckRequests).toBe(1);
   expect(state.shoppingCheckAccounts).toEqual([accountA.id]);
   expect(state.shoppingCheckSessions).toEqual([accountA.sid]);
@@ -1529,7 +1530,7 @@ test('a failed family purchase CAS preserves the newer durable intent until its 
     await expect.poll(() => activeAccount(page)).toBe(accountA.id);
     await navigate(page, 'Покупки');
     await expect(checkbox).toBeVisible(); await expect(checkbox).not.toBeChecked();
-    await checkbox.check();
+    await setPurchasedCheckbox(checkbox, true);
     await expect.poll(() => state.shoppingCheckRequests).toBe(1);
     await expect(checkbox).toBeChecked();
     // A pending generation cannot be raced by another purchase write.
@@ -1537,7 +1538,7 @@ test('a failed family purchase CAS preserves the newer durable intent until its 
     await page.waitForTimeout(250); expect(state.shoppingCheckRequests).toBe(1);
     fixture.releaseShoppingCheck();
     await expect(checkbox).toBeEnabled();
-    await checkbox.uncheck();
+    await setPurchasedCheckbox(checkbox, false);
     await expect.poll(() => state.failedShoppingCheckRequests ?? 0).toBeGreaterThan(0);
     await expect(checkbox).not.toBeChecked();
     await expect.poll(async () => (await saved(page)).operations.map(operation => operation.status)).toEqual(['pending']);

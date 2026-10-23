@@ -132,7 +132,9 @@ test('server preview becomes one durable family menu and purchases operation', a
   await navigate(page, 'Покупки');
   const purchases = page.getByText('Осталось купить 125 г', { exact: true });
   await purchases.scrollIntoViewIfNeeded(); await expect(purchases).toBeInViewport();
-  await page.getByRole('checkbox', { name: 'Яблоко', exact: true }).check();
+  const applePurchase = page.getByRole('checkbox', { name: 'Яблоко', exact: true });
+  // Purchase UI follows an asynchronous durable commit; a click does not synchronously update checked.
+  await expect(applePurchase).not.toBeChecked(); await applePurchase.click(); await expect(applePurchase).toBeChecked();
   await expect.poll(() => counts.accepted).toBe(2);
   await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
   expect((await saved(page)).menus[0].menu.planningV1.purchasedQuantities.find((item: { ingredientId: string }) => item.ingredientId === 'apple').quantity).toBe(125);
