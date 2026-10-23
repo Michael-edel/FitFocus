@@ -3410,12 +3410,12 @@ test('an open mobile navigation menu from account A is hidden after another tab 
   await waitForAccountOutboxIdle(page, accountA);
 
   await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await expect(page.getByText('Ещё разделы', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).toBeVisible();
 
   const switched = await openAccountB(context, state, true, '/#dashboard');
   await waitForAccountSwitch(page);
-  await expect(page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
-  await expect(switched.page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).not.toBeVisible();
+  await expect(switched.page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).not.toBeVisible();
   expect(errors).toEqual([]);
   expect(switched.errors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
@@ -3435,7 +3435,7 @@ test('an open mobile navigation menu from a retired session is hidden after same
   await waitForAccountOutboxIdle(page, accountA);
 
   await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await expect(page.getByText('Ещё разделы', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).toBeVisible();
   const beforeReauthentication = await readDurableSnapshot(page);
 
   const renewedAccountA = { id: accountA.id, sid: 'c'.repeat(64) };
@@ -3457,8 +3457,8 @@ test('an open mobile navigation menu from a retired session is hidden after same
   expect(afterReauthentication.activeSession?.sessionEpoch).not.toBe(beforeReauthentication.activeSession?.sessionEpoch);
 
   await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
-  await expect(page.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
-  await expect(reauthenticatedPage.getByText('Ещё разделы', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).not.toBeVisible();
+  await expect(reauthenticatedPage.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).not.toBeVisible();
   expect(errors).toEqual([]);
   expect(reauthenticatedErrors).toEqual([]);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
