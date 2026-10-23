@@ -2827,12 +2827,10 @@ test('AI activity cached for account A is hidden after another tab activates acc
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/);
   await expect.poll(async () => (await readDurableSnapshot(page)).activeSession?.accountId).toBe(accountA.id);
-  if (info.project.name.startsWith('desktop-')) {
-    await openAiActivity(page);
-    await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
-    await closeAiActivity(page);
-  }
+  await openAiActivity(page);
+  await expect(page.getByText('AI: online', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toBeVisible();
+  await closeAiActivity(page);
 
   const switched = await openAccountB(context, state);
   await waitForAccountSwitch(page);
@@ -2847,14 +2845,14 @@ test('AI activity cached for account A is hidden after another tab activates acc
   if (actionBAfterSwitch !== null) {
     expect(JSON.parse(actionBAfterSwitch).userId).toBe(accountB.id);
   }
-  if (info.project.name.startsWith('desktop-')) {
-    await openAiActivity(page);
-    await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true })).toHaveCount(0);
-    await expect(page.getByText('AI: готов', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
-    await closeAiActivity(page);
-  }
+  // This document is retired: its null UI scope rejects opening More.
+  await expect(page.getByRole('status')).toContainText('Сессия изменилась в другой вкладке');
+  await expect(page.getByRole('button', { name: 'Ещё', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true })).not.toBeVisible();
+  await expect(page.getByText('AI: online', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry: Coach', exact: true, includeHidden: true })).toHaveCount(0);
+  await expect(page.getByText('AI: готов', { exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Retry', exact: true, includeHidden: true })).toHaveCount(0);
   expect(switched.errors).toEqual([]);
 });
 
