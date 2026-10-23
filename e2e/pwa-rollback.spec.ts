@@ -215,7 +215,7 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
     await expect.poll(async () => (await selectionCache(page))?.value.selectionRecovery).toBeNull();
     expect((await selectionCache(page))?.value).toMatchObject({ selectionDraft: true, drafts: { date: selectedDate, selections: recovery.selections } });
     await openParticipation(page);
-    await expect(page.getByLabel('Порция: E2E User, Обед', { exact: true })).toHaveValue('0.75');
+    await expect(page.locator('label.fp-share').filter({ has: page.getByText('Порция: E2E User, Обед', { exact: true }) }).getByRole('combobox')).toHaveValue('0.75');
     expect(server.counts.preview).toBe(previewsBeforeRoundTrip);
     // Retries may occur, but restoring the cache must never manufacture another logical mutation.
     expect(server.familyWrites.every(write => write.mutationKind === 'planning' && write.weekStart === selectedDate)).toBe(true);
