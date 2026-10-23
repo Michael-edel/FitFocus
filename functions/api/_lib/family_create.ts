@@ -1,4 +1,5 @@
 import { nowMs, uuid } from './db';
+import { prepareFamilyPrefixBatch } from './family_prefix_fence';
 import { getActiveFamilyForUser } from './family_access';
 import { isJsonObject } from './json';
 import { requireFamilyPlan } from './plans';
@@ -42,24 +43,10 @@ export async function createFamily({
 
   const familyId = uuid();
   const createdAt = Math.floor(nowMs() / 1000);
-  await db.batch([db.prepare(`INSERT INTO families (id,name,owner_user_id,created_at)
-    SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM family_members m JOIN families f ON f.id=m.family_id
-      WHERE m.user_id=? AND m.is_active=1 AND m.status='active' AND f.is_active=1)
-    AND EXISTS(SELECT 1 FROM subscriptions WHERE user_id=? AND plan='family' AND status IN ('active','trialing') AND (current_period_end IS NULL OR current_period_end>?))`)
-      .bind(familyId,name,userId,createdAt,userId,userId,createdAt*1000), db.prepare(
-    `INSERT INTO family_members
-     (id, family_id, user_id, role, status, is_active, sex, age, height_cm, weight_kg, activity, goal, created_at, updated_at)
-     SELECT ?, ?, ?, 'owner', 'active', 1, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?
-     WHERE EXISTS(SELECT 1 FROM families WHERE id=?) AND NOT EXISTS (
-       SELECT 1
-       FROM family_members fm
-       JOIN families f ON f.id = fm.family_id
-       WHERE fm.user_id = ?
-         AND fm.status = 'active'
-         AND fm.is_active = 1
-         AND f.is_active = 1
-     )`,
-  ).bind(uuid(), familyId, userId, createdAt, createdAt, familyId, userId)]);
+  await db.batch(await prepareFamilyPrefixBatch(db, {
+    operation: 'create', verifiedUserId: userId, targetFamilyId: familyId,
+    requestId: uuid(), memberId: uuid(), name, nowSeconds: createdAt,
+  }));
 
   const accepted = await readActiveFamily(db,userId);
   if (accepted?.id === familyId) {
