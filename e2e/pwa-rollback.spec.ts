@@ -233,7 +233,11 @@ for (const status of ['pending', 'conflicted'] as const) test(`compatible artifa
       await expect.poll(() => server.counts.accepted, { timeout: recoveryTimeoutMs }).toBe(1);
       if (row?.status === 'pending') expect(server.counts.acceptedAtMs).toBeGreaterThanOrEqual(row.nextAttemptAtMs);
       await expect.poll(async () => (await saved(page)).operations.length).toBe(0);
+      await expect(page).toHaveURL(/#\/settings$/);
       await page.reload(); await page.waitForLoadState('load');
+      await expect(page).toHaveURL(/#\/settings$/);
+      await expect(page.getByPlaceholder('Как к вам обращаться')).toHaveValue('Профиль перед откатом');
+      await navigate(page, 'Меню семьи');
       await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
       expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(125);
       expect(await markers(page)).toEqual(before);
