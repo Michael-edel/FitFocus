@@ -165,3 +165,42 @@ admin bypass включены; Require approvals выключено. Поэто�
 остаются условиями будущей семейной публикации. Family merge/deploy не выполнены.
 Нового слепого 4+4 после этих инженерных исправлений не было; сохранённые
 58 PNG и оценки исходных восьми Sol-персон относятся к их прежним snapshot.
+
+### Обновление 17:26: native WebKit и AI navigation
+
+C20 `64bd7a260479114b3cc7b4d020f6e85f550d449d`:
+`ff-family-e2e-9130dd2a1043` — исходный `pwa-update.spec.ts` прошёл 3/3
+в Linux WebKit / iphone-safari, без skip/flaky/retries. Отдельный bounded
+acceptance профиль: 2 CPU / 3 GiB / 512 PID / 2 GiB scratch. Перед запуском
+подтверждены private netns, caps=0, NNP/seccomp, отсутствие внешней IPv4/IPv6
+сети, портов и host credentials; target оставался на trusted hold до проверки
+и подтверждения parent. Static native online probe завершён и закрыт до suite.
+До/после suite совпали сети и SHA256 исходного spec с immutable Git blob
+`6eae1a54152c6b1c05da7937a18b9f4628d9c081edc5678193a7b2a529971df9`.
+Все 110 resource snapshots доступны, memory/PID denial counters равны 0.
+Runtime и независимый parent proof равны true; promotion выполнен после PID0.
+Тесты, source assertions и timeouts не менялись. Это не physical iOS acceptance.
+
+Прежние FAIL остаются сохранены. Diagnostic 3 GiB / 512 PID / CPU1
+`ff-family-e2e-e0ed0f618dab`: 2 passed / 1 timeout финального screenshot.
+Отсутствие default route ранее давало native WebKit offline и retryCount=0;
+новая private network с terminal unreachable rule устраняет именно этот
+инфраструктурный дефект. Последний diagnostic `ff-family-e2e-19a6854abd22`
+остановился на static first-page-create, приложение не запускалось. Он не
+доказывает причины прежнего screenshot timeout. PASS CPU2 не переносится
+на CPU1 и не доказывает, что причиной был только CPU.
+
+C17 `ea386d5c3a3ac65ce898f7dce452aaa8d922f22b` AI Chromium:
+`ff-family-e2e-edb1f4fe4210` — 69 passed / 4 platform skip / 1 failed.
+Семь исправленных Retry-сценариев прошли; осталась попытка открыть More
+в retired A после активации B. Null UI scope намеренно отклоняет такой setter.
+C20 проверяет session-change notice, закрытое меню, отсутствие AI online и
+Retry даже в hidden DOM; исходные raw A/B ownership assertions сохранены.
+C18 обновил два mobile dialog selector, C19 убрал семь устаревших desktop-only
+skips: AI Retry теперь доступен через общее More на всех ширинах. Новых skip,
+таймеров или ослабления durable/session checks нет. Все эти коммиты test-only.
+
+Текущий C20 Android retest, WebKit rollback/fresh installation и семейные
+regressions выполняются строго по очереди; окончательные результаты пока
+не заявлены. Family CI 39945032316 относится к remote C16 и уже показывает
+старые navigation failures; исправления C17–C20 не выдаются за его результат.
