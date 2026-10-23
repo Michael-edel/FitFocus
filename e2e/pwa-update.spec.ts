@@ -93,7 +93,9 @@ test('a native profile refresh cancelled by reload stays handled in Safari', asy
   }
 });
 
-async function requestLegacyWriterFence(page: Page, timeoutMs = 750) {
+// Match checkLegacyWriterFence's production budget: the worker itself allows
+// 1500 ms for its all-window probe before it can return a complete/incomplete reply.
+async function requestLegacyWriterFence(page: Page, timeoutMs = 2_500) {
   return page.evaluate((timeout) => new Promise<unknown>((resolve) => {
     const worker = navigator.serviceWorker.controller;
     const buildId = localStorage.getItem('fitfocus.build.id');
@@ -106,7 +108,10 @@ async function requestLegacyWriterFence(page: Page, timeoutMs = 750) {
       settled = true; clearTimeout(timer); channel.port1.close(); channel.port2.close(); resolve(result);
     };
     const timer = setTimeout(() => finish(null), timeout);
-    channel.port1.onmessage = event => finish(event.data);
+    channel.port1.onmessage = event => {
+      if (event.data?.challengeId !== challengeId) return finish(null);
+      finish(event.data);
+    };
     worker.postMessage({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_CHECK', challengeId, buildId }, [channel.port2]);
   }), timeoutMs);
 }
@@ -333,11 +338,12 @@ test('real service worker waits for an explicit update and preserves durable fam
     await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).waiting === null)).toBe(true);
     await expect.poll(() => server.counts.put).toBeGreaterThan(0);
     const writerFence = await requestLegacyWriterFence(page) as {
-      type?: string; complete?: boolean; clients?: Array<{ buildId: string }>;
+      type?: string; complete?: boolean; workerBuildId?: string; clients?: Array<{ buildId: string }>;
     } | null;
     expect(writerFence).toMatchObject({ type: 'FITFOCUS_LEGACY_WRITER_FENCE_REPLY', complete: true });
     expect(writerFence?.clients?.length).toBeGreaterThanOrEqual(2);
     const currentBuildId = await localBuildId(page);
+    expect(writerFence?.workerBuildId).toBe(currentBuildId);
     expect(writerFence?.clients?.every(client => client.buildId === currentBuildId)).toBe(true);
     await expect.poll(async () => (await saved(page)).profiles[0]?.name).toBe('Черновик перед обновлением');
     // Current navigation retains its real hash route across activation. Reopen the family day explicitly.

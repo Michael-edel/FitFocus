@@ -52,4 +52,64 @@ CI `39927546667` для предыдущего `ff19614` остановился 
 соединения позволила прочитать Production binding: DB указывает на UUID
 `061ae786-9341-4bd7-8efe-025dd1bac6d5`, который в D1 называется `fitfocus-dev`.
 Владелец подтвердил, что это рабочая база, и разрешил подготовить отдельный
-план её миграции. SQL не выполнялся; полного production-пути нет.
+план её миграции. На том этапе SQL не выполнялся; полного production-пути нет.
+
+## Повторные проверки 23.10, до 15:34
+
+`3a52e4ad41409ee8e0c08ff2e95980534923dc66` (C10): семейное меню 19/19,
+без skipped/flaky, workers=1/retries=0. Полная пара архивов C10/B2 прошла
+50 HTTP-проверок и 12 проверок штатного migration runner на локальной D1,
+включая атомарный отказ и полный rollback при шести участниках. Источники:
+`ff-family-e2e-4520b3adbf44`, `ff-family-prepare-0ddb199d09e8`,
+`ff-family-http-91d156930c30` в отдельном infrastructure workspace.
+
+C10 callback-прогон дал 34/37. Два селектора смешивали личные и семейные
+checkboxes; третий тест запрещал допустимую новую sender-попытку уже сохранённого
+durable intent после входа того же аккаунта. На C11
+`e35ba9aa7d86b7bbf6089afb74be9c47c2087dd2` все 37/37 прошли. Теперь тест отдельно
+проверяет сохранённый opId, прежнюю семью/payload/CAS обеих попыток, свежий ACK
+и неизменность IDB после позднего старого ответа. Account/session guards,
+no-achievement и отсутствие воздействия на новую семью сохранены.
+
+Native PWA update на C11: 1 passed, 1 failed, 1 pre-existing Safari-only skip
+в Chromium. Проверка выявила скрытую внутри More причину legacy pause на Family.
+Это настоящий дефект видимости, а не разрешение обойти all-client fence:
+sender оставался закрытым, durable intent сохранялся. C12
+`f272639ba1ccc1a9b908d8a42c3ef635a040f497` оставляет один глобальный notice
+на Today/Family/Shopping с reserveSpace=false; idle сворачивается, личные экраны
+сохраняют прежнее резервирование места. Hooks/retry/fence не менялись.
+Recovery UI-тесты обращаются к видимому глобальному уведомлению. Полный повтор
+unit/types/build и выбранных Chromium/WebKit PWA/menu/session/callback проверок
+на C12 выполняется; предыдущие PASS не объявляются его полной приёмкой.
+
+После восстановления Chrome выполнены только read-only SELECT рабочей D1.
+Все 23 имени ledger точно совпали с исходниками до 0021, отсутствует только 0022.
+Пять основных и три дополнительных anomaly counts равны 0; ожидаемый seed — 2.
+Метаданные семи таблиц, 18 индексов и четырёх прежних barriers совместимы с 0022.
+Рассмотрено историческое отличие DEFAULT у family_members.status; полной
+идентичности всей схемы не заявлено. Time Travel показывает 7 дней, bookmark
+прочитан, restore не проверен. DDL/DML/restore и смены binding не выполнялись.
+Полные неперсональные записи сохранены вне исходников в
+`WORKING-DB-PREFLIGHT-20261023-1003Z.json` и
+`WORKING-DB-SCHEMA-20261023-1014Z.md`.
+
+Merge/deploy остаются закрыты до точного CI/review, окончательной пары
+артефактов и production hold/drain/backup/QA gates. Исходные 4+4 Sol и их PNG,
+клики, оценки и ответы о возвращении не переписывались. Инженерные повторы
+не выдаются за новую независимую пользовательскую группу.
+
+### Обновление 15:39
+
+На точном C12 прошли 1683 unit / 233 файла, три typecheck, guards, schema
+(24 миграции / 33 таблицы), privacy (30 таблиц), Vite/PWA и полный Pages build.
+Доказательство: `ff-check-12477e138188`, runtime.ok=true.
+
+Повтор PWA update C12 подтвердил видимость legacy pause, но остановился дальше:
+сырой writer-fence helper вернул null (1 passed / 1 failed / 1 Safari-only skip).
+Сохранён `ff-family-e2e-061c7f02d25f`. Найдено конкретное несоответствие бюджета
+теста: helper закрывал порт через 750 мс, SW допускает 1500 мс на client probe,
+production checkLegacyWriterFence ждёт 2500 мс. Фактическую задержку старый trace
+не доказывает. Test helper теперь использует тот же production budget 2500 мс,
+проверяет challengeId и workerBuildId; complete, количество клиентов и совпадение
+их builds остаются обязательными. SW, hooks, suite timeouts и retries не менялись.
+Исправление ещё требует native retest; null не переименован в PASS.
