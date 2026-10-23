@@ -1,9 +1,23 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
-import { saved, setup, navigate, healthy, preview, confirmPreview } from './support/familyHarness';
+import { saved, setup, navigate, healthy, preview, confirmPreview, breakfastPortion } from './support/familyHarness';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
+
+async function openFamilyRecovery(page: Page) {
+  const moreButton = page.getByRole('button', { name: 'Ещё', exact: true });
+  await expect(moreButton).toHaveAttribute('aria-expanded', 'false');
+  await moreButton.click();
+  const more = page.getByRole('dialog', { name: 'Личные разделы и настройки', exact: true });
+  await expect(more).toBeVisible();
+  const applicationState = more.locator('summary').filter({ hasText: /^Состояние приложения/ });
+  await expect(applicationState).toBeVisible(); await applicationState.click();
+  const recovery = more.locator('[data-state-notice-region] summary').filter({ hasText: 'Разрешить конфликт или повторить отправку' });
+  await expect(recovery).toBeVisible(); await recovery.click();
+  const group = more.getByRole('region', { name: 'Семейное меню', exact: true });
+  await expect(group).toBeVisible(); return group;
+}
 
 function filterReloadAccessControlAborts(errors: string[], projectName: string): string[] {
   const isWebKit = ['desktop-webkit', 'iphone-safari', 'iphone-pwa'].includes(projectName);
@@ -158,8 +172,7 @@ test('family recovery keeps the last local menu and sends it against the checked
   const { counts, errors, resolveConflict } = await setup(page, 'conflict');
   await confirmPreview(page);
   await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
-  await page.locator('[data-state-notice-region] details summary').click();
-  const group = page.getByRole('region', { name: 'Семейное меню' });
+  const group = await openFamilyRecovery(page);
   const keepLocal = group.getByRole('button', { name: 'Оставить последнюю локальную версию' });
   await expect(keepLocal).toBeVisible();
   resolveConflict();
@@ -177,8 +190,7 @@ test('family recovery accepts only the checked remote menu after explicit confir
   const { counts, errors } = await setup(page, 'conflict');
   await confirmPreview(page);
   await expect.poll(async () => (await saved(page)).operations[0]?.status).toBe('conflicted');
-  await page.locator('[data-state-notice-region] details summary').click();
-  const group = page.getByRole('region', { name: 'Семейное меню' });
+  const group = await openFamilyRecovery(page);
   const dialogHandled = page.waitForEvent('dialog').then(async (dialog) => {
     const message = dialog.message();
     await dialog.accept();
@@ -555,7 +567,7 @@ test('editing day selections while preview is pending preserves the prior menu',
   try {
     await navigate(page, 'Меню семьи'); await preview(page);
     await expect.poll(() => counts.ai).toBe(1);
-    await page.getByLabel('Порция: E2E User, Завтрак', { exact: true }).selectOption('1'); release();
+    await breakfastPortion(page).selectOption('1'); await expect(breakfastPortion(page)).toHaveValue('1'); release();
     await expect.poll(() => counts.fulfilled).toBe(1); await navigate(page, 'Меню семьи');
     await expect(page.getByText('Вы изменили выбор во время подготовки. Ваш ввод сохранён; запросите предпросмотр ещё раз.', { exact: true })).toBeVisible();
     expect(counts.put).toBe(0); expect(counts.achievements).toBe(0); expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(75);

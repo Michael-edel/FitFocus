@@ -152,18 +152,31 @@ export async function setup(page: Page, mode: 'normal' | 'offline' | 'conflict' 
   await expect(page.getByRole('heading', { name: 'Меню семьи', exact: true })).toBeVisible();
   await expect(page.getByText('Семья с постоянным меню', { exact: true })).toBeVisible();
   if (options.durable !== false) await expect.poll(async () => (await saved(page)).menus.length).toBe(1);
+  // The IDB refresh precedes the hook's final published/editor update and run() completion.
+  await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
   return { errors, counts, restore: () => { available = true; }, resolveConflict: () => { conflict = false; }, release, releasePreview,
     holdStateRead: () => { holdStateRead = true; }, releaseStateRead: releaseHeldStateRead, stateReadHeld: () => stateReadHeld,
   };
 }
 export { navigate };
 
+export function breakfastPortion(page: Page) {
+  // The wrapping label also contains option text, so getByLabel(..., exact:true) is not its exact name.
+  return page.locator('label.fp-share').filter({ has: page.getByText('Порция: E2E User, Завтрак', { exact: true }) }).getByRole('combobox');
+}
+
 export async function preview(page: Page) {
   await navigate(page, 'Меню семьи');
+  await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
   const selection = page.getByText('Кто ест и какие порции', { exact: true });
-  if (!await page.getByRole('button', { name: 'Посмотреть меню на день', exact: true }).isVisible()) await selection.click();
-  await page.getByLabel('Порция: E2E User, Завтрак', { exact: true }).selectOption('1.25');
-  await page.getByRole('button', { name: 'Посмотреть меню на день', exact: true }).click();
+  const editor = page.locator('details').filter({ has: selection });
+  if (await editor.getAttribute('open') === null) await selection.click();
+  await expect(editor).toHaveJSProperty('open', true);
+  const portion = breakfastPortion(page);
+  await expect(portion).toBeVisible(); await expect(portion).toBeEnabled();
+  await portion.selectOption('1.25'); await expect(portion).toHaveValue('1.25');
+  const generate = page.getByRole('button', { name: 'Посмотреть меню на день', exact: true });
+  await expect(generate).toBeEnabled(); await generate.click();
 }
 export async function confirmPreview(page: Page) {
   await preview(page);
