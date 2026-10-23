@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
-import { saved, setup, navigate, healthy, preview, confirmPreview, breakfastPortion } from './support/familyHarness';
+import { saved, setup, navigate, healthy, preview, confirmPreview, breakfastPortion, openDayEditor } from './support/familyHarness';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
 
 const switchAccount = { id: 'family-menu-switch-account-b', sid: 'b'.repeat(64) };
@@ -556,6 +556,7 @@ test('pagehide invalidates an old server preview attempt and pageshow restores t
       window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
       window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
     });
+    await openDayEditor(page);
     await expect(update).toBeEnabled(); release(); await expect.poll(() => counts.fulfilled).toBe(1);
     expect(counts.put).toBe(0); expect(counts.achievements).toBe(0); expect((await saved(page)).menus[0].menu.shoppingListItems[0].grams).toBe(75);
     expect((await saved(page)).operations).toEqual([]); await healthy(page, errors);

@@ -165,13 +165,17 @@ export function breakfastPortion(page: Page) {
   return page.locator('label.fp-share').filter({ has: page.getByText('Порция: E2E User, Завтрак', { exact: true }) }).getByRole('combobox');
 }
 
-export async function preview(page: Page) {
+export async function openDayEditor(page: Page) {
   await navigate(page, 'Меню семьи');
   await expect(page.getByLabel('Дата меню', { exact: true })).toBeEnabled();
   const selection = page.getByText('Кто ест и какие порции', { exact: true });
   const editor = page.locator('details').filter({ has: selection });
   if (await editor.getAttribute('open') === null) await selection.click();
   await expect(editor).toHaveJSProperty('open', true);
+}
+
+export async function preview(page: Page) {
+  await openDayEditor(page);
   const portion = breakfastPortion(page);
   await expect(portion).toBeVisible(); await expect(portion).toBeEnabled();
   await portion.selectOption('1.25'); await expect(portion).toHaveValue('1.25');
