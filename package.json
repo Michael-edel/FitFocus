@@ -59,7 +59,7 @@
     "wrangler": "4.149.0"
   },
   "overrides": {
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "fast-uri": "3.1.8",
     "source-map-js": "1.2.2",
     "minimatch@5": {
