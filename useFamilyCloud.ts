@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { FamilyWeeklyMenu, UserProfile } from './types';
 import { errorMessage } from './safeJson';
-import type { OutboxReadGuard } from './storage/durableOutbox';
+import { DurableOutbox, type OutboxReadGuard } from './storage/durableOutbox';
 import { familyErrorMessage, type FamilySession } from './services/familySession';
 import { SessionReadError } from './storage/sessionRead';
 import { FamilyActionScope } from './features/family/actionScope';
@@ -27,6 +27,8 @@ type UseFamilyCloudParams = {
 };
 
 export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, planScope, setPlanScope, weekStartISO }: UseFamilyCloudParams) {
+  const currentSessionRef = useRef({ currentUserId: currentUser?.id, loginGuard, isCurrentSession });
+  currentSessionRef.current = { currentUserId: currentUser?.id, loginGuard, isCurrentSession };
   const scope = useMemo(() => new FamilyActionScope(() => Boolean(loginGuard && loginGuard.accountId === currentUser?.id && isCurrentSession())),
     [currentUser?.id, isCurrentSession, loginGuard]);
   const onShowRef = useRef(() => {});
@@ -162,8 +164,19 @@ export function useFamilyCloud({ currentUser, loginGuard, isCurrentSession, plan
     } catch (error) { throw new Error(familyErrorMessage(error)); } finally { attempt.finish(); }
   }, [scope, session]);
   const createFamilyCloud = useCallback(() => runMutation(async (binding, current) => {
+    const captured = binding.guard;
+    const isCapturedSessionCurrent = () => {
+      const latest = currentSessionRef.current;
+      return current() && latest.currentUserId === captured.accountId
+        && latest.loginGuard?.accountId === captured.accountId
+        && latest.loginGuard.serverSessionId === captured.serverSessionId
+        && latest.loginGuard.sessionEpoch === captured.sessionEpoch
+        && latest.loginGuard.authFence === captured.authFence
+        && latest.isCurrentSession();
+    };
     await createFamily((familyNameDraft || 'Моя семья').trim().slice(0, 60), binding);
-    if (current()) await loadCloudFamily();
+    if (isCapturedSessionCurrent() && await (binding.outbox ?? new DurableOutbox()).isReadSessionCurrent(captured)
+      && isCapturedSessionCurrent()) await loadCloudFamily();
   }), [familyNameDraft, loadCloudFamily, runMutation]);
   const makeInviteCode = useCallback(() => runMutation(async (binding, current) => {
     const familyId = cloudFamily?.id;

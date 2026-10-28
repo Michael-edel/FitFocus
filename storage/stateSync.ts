@@ -563,6 +563,11 @@ export class StateSync {
         reportStateSyncPause(accountId, null);
         await this.migrateLegacyQueue(accountId, generation);
         if (generation !== this.generation || accountId !== this.accountId) return false;
+          // Migration may leave quarantined/conflicted operations while the
+          // legacy writer fence is still unavailable. Keep that durable queue
+          // visible even though the sender remains paused.
+          reportStateQueue(accountId, await this.outbox.list(accountId));
+          if (generation !== this.generation || accountId !== this.accountId) return false;
         if (await this.outbox.isReadSessionCurrent(accepted)) return true;
         this.session = undefined;
         this.readGuard = undefined;

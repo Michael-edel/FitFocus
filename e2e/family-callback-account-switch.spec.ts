@@ -836,6 +836,7 @@ test('a delayed family-create response from account A cannot publish success aft
   const familyName = page.getByLabel('Название семьи', { exact: true });
   await expect(familyName).toBeVisible();
   await familyName.fill('Семья A');
+  await expect.poll(() => state.familyLoadAccounts.filter(id => id === accountA.id).length).toBeGreaterThan(0);
   const accountAFamilyLoads = state.familyLoadAccounts.filter(id => id === accountA.id).length;
   await page.getByRole('button', { name: 'Создать семью', exact: true }).click();
   await expect.poll(() => state.createRequests).toBe(1);
