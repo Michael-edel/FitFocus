@@ -43,6 +43,49 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('manual sync restarts an exhausted window with fresh proof and the same payload', async () => {
+    const saved=await write(); let failing=true;
+    const {instance,fetchFn}=client(async()=>{if(failing)throw Error('offline');return ack();});
+    await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    expect((await outbox.list(account))[0]).toMatchObject({opId:saved.opId,status:'failed',reason:'retry-exhausted'});
+    failing=false;
+    await instance.connect(account);await instance.flush();
+    expect((await outbox.list(account))[0].status).toBe('failed');
+    const before=fetchFn.mock.calls.length;
+    expect(await instance.syncNow(account)).toBe(true);
+    expect(fetchFn.mock.calls.slice(before).map(([url])=>String(url))).toEqual(['/api/me','/api/state']);
+    expect(JSON.parse(String(fetchFn.mock.calls.at(-1)?.[1]?.body))).toEqual({items:[{key,value:'{"theme":"light"}',baseVersion:0}]});
+    expect(await outbox.list(account)).toEqual([]);
+    expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(1);
+  });
+
+  it('manual retry keeps its eight-attempt bound and automatic reconnect does not reset it', async () => {
+    await write();const {instance,fetchFn}=client(async()=>{throw Error('offline');});await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    expect(await instance.syncNow(account)).toBe(false);
+    expect((await outbox.list(account))[0]).toMatchObject({status:'pending',retryCount:1});
+    for(let i=1;i<8;i++){now=(await outbox.list(account))[0].nextAttemptAtMs;await instance.flush();}
+    expect((await outbox.list(account))[0]).toMatchObject({status:'failed',reason:'retry-exhausted'});
+    const before=fetchFn.mock.calls.length;await instance.connect(account);await instance.flush();
+    expect(fetchFn.mock.calls.length).toBe(before+1);
+    expect((await outbox.list(account))[0].status).toBe('failed');
+  });
+
+  it('does not reset exhausted data when fresh session verification fails', async () => {
+    await write();let authorized=true;const {instance}=client(async()=>{throw Error('offline');},()=>authorized?json(proof()):json({},401));
+    await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    const saved=await outbox.list(account);authorized=false;
+    expect(await instance.syncNow(account)).toBe(false);expect(await outbox.list(account)).toEqual(saved);
+  });
+
+  it('does not reset permanent failures through the general sync button', async () => {
+    await write();const {instance,fetchFn}=client(async()=>json({},400));await instance.connect(account);await instance.flush();
+    const saved=await outbox.list(account);const before=fetchFn.mock.calls.length;
+    expect(await instance.syncNow(account)).toBe(false);expect(await outbox.list(account)).toEqual(saved);
+    expect(fetchFn.mock.calls.slice(before).map(([url])=>String(url))).toEqual(['/api/me']);
+  });
   it('does not start a state write when an outbox claim finishes after beforeunload', async () => {
     const target = new EventTarget();
     vi.stubGlobal('window', target);

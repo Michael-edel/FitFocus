@@ -14,6 +14,7 @@ const messages = {
   blocked: 'Хранилище ожидает обновления. Закройте другие вкладки FitFocus и повторите действие.',
   error: 'Не удалось сохранить изменения на устройстве. Не закрывайте эту вкладку. Освободите место и повторите действие.',
   conflict: 'Обнаружен конфликт данных. Ваша правка сохранена отдельно и требует разрешения; синхронизация ещё не завершена.',
+  exhausted: 'Попытки отправки исчерпаны. Данные сохранены на устройстве. После восстановления связи откройте Настройки и нажмите «Синхронизировать сейчас» или выберите «Повторить отправку» ниже.',
   failed: 'Не удалось отправить изменения. Данные сохранены на устройстве; требуется проверка ошибки синхронизации.',
   auth: 'Изменения сохранены на устройстве. Войдите в свой аккаунт, чтобы продолжить синхронизацию.',
   access: 'Изменения сохранены на устройстве. Для синхронизации требуется доступ к FitFocus.',
@@ -115,7 +116,7 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
             : pause === 'protocol' ? messages.protocol
               : pause === 'legacy' ? `${messages.legacy}${legacyMigrationNotice ? ` ${messages.legacyPartial}` : ''}`
                 : legacyMigrationNotice ? messages.legacyPartial
-                : ownQueue?.failed ? messages.failed : messages.pending;
+                : ownQueue?.failed ? (ownOperations.some(operation => operation.status === 'failed' && operation.reason === 'retry-exhausted') ? messages.exhausted : messages.failed) : messages.pending;
 
   async function resolve(group: RecoveryGroup, choice: RecoveryChoice): Promise<void> {
     if (!accountId) return;

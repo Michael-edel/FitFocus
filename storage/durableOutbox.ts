@@ -811,7 +811,7 @@ export class DurableOutbox {
 
   /** A user retry starts a new bounded retry window without altering the saved payload. */
   async retryFailedGroup(input: {
-    accountId: string; key: string; expectedOpIds: readonly string[]; readGuard: OutboxReadGuard; nowMs: number;
+    accountId: string; key: string; expectedOpIds: readonly string[]; readGuard: OutboxReadGuard; nowMs: number; retryExhaustedOnly?: boolean;
   }): Promise<boolean> {
     requireOwnedKey(input.accountId, input.key);
     if (!finiteInteger(input.nowMs) || input.readGuard.accountId !== input.accountId
@@ -842,6 +842,7 @@ export class DurableOutbox {
           || !operations.some((operation) => operation.status === 'failed')
           || operations.some((operation) => operation.status === 'conflicted' || operation.status === 'sending'
             || hasLegacyProvenance(operation))) return false;
+        if (input.retryExhaustedOnly && operations.some(operation => operation.status !== 'failed' || operation.reason !== 'retry-exhausted')) return false;
         for (const operation of operations) {
           if (operation.status !== 'failed') continue;
           const retry: OutboxOperation = { ...operation, status: 'pending', retryCount: 0, nextAttemptAtMs: input.nowMs, updatedAtMs: input.nowMs };

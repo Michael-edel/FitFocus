@@ -364,6 +364,19 @@ describe('explicit queue recovery', () => {
     expect(await second.list(accountId)).toEqual([expect.objectContaining({ opId: operation.opId, status: 'conflicted', migrationSourceKey: 'legacy-queue' })]);
   });
 
+  it.each(['FORBIDDEN_KEYSPACE','http-400'])('exhausted-only recovery rejects changed permanent reason %s transactionally',async reason=>{
+    const op=await write('saved locally');const sending=await claim(first,{sessionEpoch:guard.sessionEpoch});
+    await first.finish(sending,{kind:'failed',reason});
+    expect(await first.retryFailedGroup({accountId,key,expectedOpIds:[op.opId],readGuard:guard,nowMs:50,retryExhaustedOnly:true})).toBe(false);
+    expect((await second.list(accountId))[0]).toMatchObject({opId:op.opId,status:'failed',reason,value:'saved locally'});
+  });
+  it('exhausted-only recovery preserves identity and rejects a stale auth fence',async()=>{
+    const op=await write('saved locally');const sending=await claim(first,{sessionEpoch:guard.sessionEpoch});
+    await first.finish(sending,{kind:'failed',reason:'retry-exhausted'});
+    expect(await first.retryFailedGroup({accountId,key,expectedOpIds:[op.opId],readGuard:{...guard,authFence:guard.authFence+1},nowMs:50,retryExhaustedOnly:true})).toBe(false);
+    expect(await first.retryFailedGroup({accountId,key,expectedOpIds:[op.opId],readGuard:guard,nowMs:50,retryExhaustedOnly:true})).toBe(true);
+    expect((await second.list(accountId))[0]).toMatchObject({opId:op.opId,status:'pending',value:'saved locally',retryCount:0,baseVersion:op.baseVersion});
+  });
   it('retries only failed operations and preserves their local payload', async () => {
     const operation = await write('saved locally');
     const sending = await claim(first, { sessionEpoch: guard.sessionEpoch });

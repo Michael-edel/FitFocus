@@ -219,7 +219,20 @@ export class StateSync {
   async syncNow(accountId: string): Promise<boolean> {
     if (this.accountId !== accountId) return false;
     const generation = this.generation;
-    if (!await this.verify(generation)) return false;
+    if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard) return false;
+    const guard = { ...this.readGuard };
+    const groups = new Map<string, Awaited<ReturnType<DurableOutbox['list']>>>();
+    for (const operation of await this.outbox.list(accountId)) {
+      const group = groups.get(operation.key) ?? [];
+      group.push(operation); groups.set(operation.key, group);
+    }
+    for (const [key, operations] of groups) {
+      if (!operations.every(operation => operation.status === 'failed' && operation.reason === 'retry-exhausted')) continue;
+      if (generation !== this.generation || this.accountId !== accountId) return false;
+      // The transaction rechecks reason, exact operation set, epoch and auth fence.
+      if (!await this.outbox.retryFailedGroup({ accountId, key, expectedOpIds: operations.map(operation => operation.opId),
+        readGuard: guard, nowMs: this.now(), retryExhaustedOnly: true })) return false;
+    }
     return this.drainAndCheck(accountId, generation);
   }
 
