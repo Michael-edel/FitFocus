@@ -1,9 +1,10 @@
 import { isRecord } from './safeJson';
 import type { FamilyWeeklyMenu } from './types';
+import { isFamilyPlanningMenu, type FamilyPlanningMutationKind } from './domain/familyPlanning';
 
 export type FamilyMenuTarget = { familyId: string; weekStart: string };
 export type FamilyMenuSnapshot = FamilyMenuTarget & { version: number; menu: FamilyWeeklyMenu | null };
-export type FamilyMenuIntent = FamilyMenuTarget & { menu: FamilyWeeklyMenu };
+export type FamilyMenuIntent = FamilyMenuTarget & { menu: FamilyWeeklyMenu; mutationKind?: FamilyPlanningMutationKind };
 export const familyMenuStorageKey = (accountId: string, target: FamilyMenuTarget) =>
   `fitfocus_data_${accountId}_family_menu:${JSON.stringify([target.familyId, target.weekStart])}`;
 
@@ -16,6 +17,7 @@ const text = (value: unknown, max: number): value is string => typeof value === 
 
 /** Explicit empty generations are valid; a missing/corrupt structured list is never empty. */
 export function isFamilyMenuPayload(value: unknown, week: string): value is FamilyWeeklyMenu {
+  if (isRecord(value) && 'planningV1' in value) return isFamilyPlanningMenu(value, week);
   if (!isRecord(value) || value.weekStart !== week || !isRecord(value.prefs)
     || !Array.isArray(value.days) || ![0, 7].includes(value.days.length)
     || !Array.isArray(value.shoppingList) || !value.shoppingList.every(item => typeof item === 'string')
@@ -42,7 +44,15 @@ export function isFamilyMenuPayload(value: unknown, week: string): value is Fami
 
 export function isFamilyMenuIntent(value: unknown): value is FamilyMenuIntent {
   return isRecord(value) && text(value.familyId, 256) && isFamilyWeek(value.weekStart)
+    && (value.mutationKind === undefined || value.mutationKind === 'planning' || value.mutationKind === 'purchases')
     && isFamilyMenuPayload(value.menu, value.weekStart);
+}
+
+/** Stored server snapshots have no command. A new structured write must retain its command through retry. */
+export function isFamilyMenuWriteIntent(value: unknown): value is FamilyMenuIntent {
+  return isFamilyMenuIntent(value) && (value.menu.planningV1
+    ? value.mutationKind === 'planning' || value.mutationKind === 'purchases'
+    : value.mutationKind !== 'purchases');
 }
 
 export function isFamilyMenuSnapshot(value: unknown): value is FamilyMenuSnapshot {

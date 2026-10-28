@@ -1,4 +1,5 @@
 import { familyMenuStateReady } from './family_menu_state';
+import { familyPlanningReady } from './family_dining';
 // Account deletion helpers (B2C-safe): soft delete + scheduled hard delete
 // NOTE: D1/SQLite. Use db.batch for atomic-ish multi-statement operations.
 
@@ -114,6 +115,7 @@ export async function deleteUserAccountAndAllData(
   options: DeleteUserAccountOptions = {},
 ): Promise<DeleteUserResult> {
   const hasFamilyMenuGenerations = await familyMenuStateReady(db);
+  const hasDiningProfiles = await familyPlanningReady(db);
   const stmts: ReturnType<D1Database["prepare"]>[] = [];
 
   const isActiveAdmin = await db
@@ -198,6 +200,7 @@ export async function deleteUserAccountAndAllData(
   }
 
   stmts.push(db.prepare("UPDATE sessions SET revoked = 1 WHERE user_id = ?").bind(userId));
+  if(hasDiningProfiles) stmts.push(db.prepare("DELETE FROM family_dining_profiles WHERE user_id=? OR family_id IN(SELECT id FROM families WHERE owner_user_id=?)").bind(userId,userId));
 
   const ownedFam = await db
     .prepare("SELECT id FROM families WHERE owner_user_id = ? LIMIT 1")
@@ -293,6 +296,7 @@ export async function logSelfServiceAccountDeletion(db: D1Database, userId: stri
 
 export async function softDeleteAccount(db: D1Database, userId: string): Promise<void> {
   const hasFamilyMenuGenerations = await familyMenuStateReady(db);
+  const hasDiningProfiles = await familyPlanningReady(db);
   const now = new Date().toISOString();
 
   const updateResult = await db.prepare(`
@@ -343,6 +347,7 @@ export async function softDeleteAccount(db: D1Database, userId: string): Promise
     .first<SingleValueRow>();
 
   const cleanupStmts: D1PreparedStatement[] = [];
+  if(hasDiningProfiles) cleanupStmts.push(db.prepare("DELETE FROM family_dining_profiles WHERE user_id=? OR family_id IN(SELECT id FROM families WHERE owner_user_id=?)").bind(userId,userId));
   if (fam?.id) {
     cleanupStmts.push(
       db.prepare("UPDATE families SET is_active = 0 WHERE id = ?").bind(fam.id),

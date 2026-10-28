@@ -32,11 +32,18 @@ async function signJwt(payload: Record<string, unknown>) {
   return `${data}.${b64url(sig)}`;
 }
 
-function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: number; existingFamilyAfterConflict?: string | null } = {}) {
+function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: number; existingFamilyAfterConflict?: string | null; metadataReadError?: boolean } = {}) {
   const runs: Array<{ sql: string; binds: unknown[] }> = [];
+  const batches: string[][] = [];
   let familyAccessReadCount = 0;
+  let inserted=false;
   return {
-    runs,
+    runs, batches,
+    async batch(statements:Array<{sql:string;run:()=>Promise<unknown>}>) {
+      batches.push(statements.map(statement=>statement.sql));
+      if(options.memberInsertChanges===0&&!options.existingFamilyAfterConflict) throw new Error('FAMILY_LIMIT');
+      const results=[];for(const statement of statements)results.push(await statement.run());return results;
+    },
     prepare(sql: string) {
       const stmt = {
         sql,
@@ -62,20 +69,27 @@ function makeDb(options: { inviteClaimChanges?: number; memberInsertChanges?: nu
             return { id: 'family-1', owner_user_id: 'owner-1' };
           }
           if (sql.includes('FROM subscriptions')) return { plan: 'family' };
+          if(sql.includes('FROM family_invites i JOIN families')) return {family_id:'family-1',owner_user_id:'owner-1'};
+          if(sql.includes('SELECT family_id FROM family_members WHERE id=')) return inserted?{family_id:'family-1'}:null;
           if (sql.includes('COUNT(*) as c FROM family_members')) return { c: 4 };
           return null;
         },
         async all() {
-          if (sql.includes('FROM user_roles')) return { results: [{ role: 'user' }] };
-          return { results: [] };
+          if(sql.includes('FROM sqlite_master')) {
+            if(options.metadataReadError) throw new Error('synthetic metadata read failure');
+            return {success:true,results:[]}; // Successful absence, never an error fallback.
+          }
+          if (sql.includes('FROM user_roles')) return { success:true, results: [{ role: 'user' }] };
+          return { success:true, results: [] };
         },
         async run() {
           runs.push({ sql, binds: this.binds });
-          if (sql.includes('UPDATE family_invites SET used_by_user_id = ?, used_at = ?')) {
+          if (sql.includes('UPDATE family_invites SET used_by_user_id=')) {
             return { success: true, meta: { changes: options.inviteClaimChanges ?? 1 } };
           }
           if (sql.includes('INSERT INTO family_members')) {
-            return { success: true, meta: { changes: options.memberInsertChanges ?? 1 } };
+            inserted=(options.memberInsertChanges??1)===1&&(options.inviteClaimChanges??1)===1;
+            return { success: true, meta: { changes: inserted ? 1 : 0 } };
           }
           return { success: true, meta: { changes: 1 } };
         },
@@ -105,16 +119,28 @@ async function postJoin(db: ReturnType<typeof makeDb>, requestId?: string) {
 }
 
 describe('/api/family/join', () => {
-  it('claims an invite with a conditional update before inserting the member', async () => {
+  it('fails closed on prefix metadata read failure without membership/claim or a retry batch', async () => {
+    const db=makeDb({metadataReadError:true});
+    const response=await postJoin(db);
+    expect(response.status).toBe(400);
+    expect(db.batches).toEqual([]);
+    expect(db.runs.some(run=>/INSERT INTO family_members|UPDATE family_invites/.test(run.sql))).toBe(false);
+  });
+  it('atomically inserts an eligible membership before conditionally claiming its invite', async () => {
     const db = makeDb();
     const response = await postJoin(db, 'family-join-request-1');
 
     expect(response.status).toBe(200);
+    expect(db.batches).toHaveLength(1);
+    expect(db.batches[0]).toHaveLength(3);
+    expect(db.batches[0][0]).toContain('INSERT INTO family_members');
+    expect(db.batches[0][1]).toContain('UPDATE family_invites');
+    expect(db.batches[0][2]).toContain('ELSE abs(-9223372036854775808)');
     expect(response.headers.get('X-Request-ID')).toBe('family-join-request-1');
     const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-1');
-    expect(db.runs.some((run) => run.sql.includes('WHERE code = ? AND used_by_user_id IS NULL'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('WHERE code=? AND family_id=? AND used_by_user_id IS NULL'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('i.expires_at>=?'))).toBe(true);
     expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
@@ -125,18 +151,18 @@ describe('/api/family/join', () => {
     expect(response.status).toBe(400);
     const body = await response.json() as FamilyJoinBody;
     expect(body.error.code).toBe('INVITE_INVALID');
-    expect(db.runs.some((run) => run.sql.includes('AND expires_at >= ?'))).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(false);
+    expect(db.runs.some((run) => run.sql.includes('i.expires_at>=?'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('INSERT INTO family_members'))).toBe(true);
   });
 
-  it('releases the invite when the conditional member insert fails on family limit', async () => {
+  it('rolls back the join on quota failure without a separate release operation', async () => {
     const db = makeDb({ memberInsertChanges: 0 });
     const response = await postJoin(db);
 
     expect(response.status).toBe(400);
     const body = await response.json() as FamilyJoinBody;
-    expect(body.error.code).toBe('FAMILY_JOIN_CONFLICT');
-    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
+    expect(body.error.code).toBe('FAMILY_LIMIT');
+    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites'))).toBe(false);
   });
 
   it('returns the latest family when the user loses a concurrent join race', async () => {
@@ -147,6 +173,6 @@ describe('/api/family/join', () => {
     const body = await response.json() as FamilyJoinBody;
     expect(body.familyId).toBe('family-2');
     expect(body.alreadyMember).toBe(true);
-    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(true);
+    expect(db.runs.some((run) => run.sql.includes('UPDATE family_invites SET used_by_user_id = NULL'))).toBe(false);
   });
 });

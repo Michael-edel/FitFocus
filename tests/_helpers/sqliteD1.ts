@@ -18,9 +18,11 @@ export function sqliteD1(schema = readFileSync(new URL('../../db/schema.sql', im
         async all() {
           statements.push(sql);
           hooks.before?.(sql, this.binds);
+          const before = Number(sqlite.prepare('SELECT total_changes() AS n').get()?.n ?? 0);
           const results = sqlite.prepare(sql).all(...this.binds);
+          const changes = Number(sqlite.prepare('SELECT total_changes() AS n').get()?.n ?? 0) - before;
           hooks.after?.(sql, this.binds);
-          return { success: true, results };
+          return { success: true, results, meta: { changes } };
         },
         async first(column?: string) {
           statements.push(sql);
@@ -41,11 +43,11 @@ export function sqliteD1(schema = readFileSync(new URL('../../db/schema.sql', im
       };
       return statement;
     },
-    async batch(batch: Array<{ run: () => Promise<unknown> }>) {
+    async batch(batch: Array<{ all: () => Promise<unknown> }>) {
       sqlite.exec('BEGIN');
       try {
         const results = [];
-        for (const statement of batch) results.push(await statement.run());
+        for (const statement of batch) results.push(await statement.all());
         sqlite.exec('COMMIT');
         return results;
       } catch (error) {

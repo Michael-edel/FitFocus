@@ -29,6 +29,7 @@ EXPECTED_USER_RELATED_TABLES = {
     "invite_redemptions",
     "families",
     "family_members",
+    "family_dining_profiles",
     "family_menus",
     "recipes",
     "family_invites",

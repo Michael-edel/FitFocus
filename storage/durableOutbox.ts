@@ -1,7 +1,7 @@
 import { StateDatabase, STATE_STORES, StateStorageError, afterIndexedRequests, indexedRequest, stateTransaction, userStateDatabase } from './stateDatabase';
 import { LEGACY_QUEUE_SOURCE_KEY, LEGACY_MIGRATION_META_ID, legacyMigrationItemId, legacyFingerprintFields,
   legacyDeletedAccountMetaId, type LegacyMigrationResolution } from './legacyQueue';
-import { familyMenuStorageKey, isFamilyMenuIntent } from '../familyMenuValidation';
+import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuWriteIntent } from '../familyMenuValidation';
 import { isUserProfilePayload } from '../profileValidation';
 
 export type OutboxIntent = { type: 'put'; key: string; value: string } | { type: 'delete'; key: string };
@@ -138,7 +138,7 @@ export function writeOutboxInTransaction(
   if (input.resource === 'familyMenu') {
     let value: unknown;
     try { value = input.intent.type === 'put' ? JSON.parse(input.intent.value) : null; } catch {}
-    if (!isFamilyMenuIntent(value) || input.intent.key !== familyMenuStorageKey(input.accountId, value)) throw new Error('OUTBOX_INVALID_FAMILY_MENU_INTENT');
+    if (!isFamilyMenuWriteIntent(value) || input.intent.key !== familyMenuStorageKey(input.accountId, value)) throw new Error('OUTBOX_INVALID_FAMILY_MENU_INTENT');
   }
   const metaStore = tx.objectStore(STATE_STORES.meta);
   const outbox = tx.objectStore(STATE_STORES.outbox);
@@ -316,7 +316,7 @@ function validResolvedLocalIntent(accountId: string, key: string, operation: Out
   if (operation.resource === 'familyMenu') {
     let intent: unknown;
     try { intent = JSON.parse(operation.value); } catch { return false; }
-    return isFamilyMenuIntent(intent) && familyMenuStorageKey(accountId, intent) === key;
+    return isFamilyMenuWriteIntent(intent) && familyMenuStorageKey(accountId, intent) === key;
   }
   return true;
 }
@@ -450,6 +450,36 @@ export class DurableOutbox {
     const database = await this.connection.open();
     return stateTransaction(database, [STATE_STORES.outbox], 'readonly', (tx) =>
       indexedRequest(tx.objectStore(STATE_STORES.outbox).index('accountId').getAll(accountId)) as Promise<OutboxOperation[]>);
+  }
+
+  /** One scoped observation; a disappearing operation alone is never an acknowledgement. */
+  async deliverySnapshot(accountId: string, key: string, guard: OutboxReadGuard): Promise<{
+    value: string | null; revision: number; confirmedVersion: number; operations: OutboxOperation[];
+    acknowledged?: { opId: string; writerId: string; revision: number };
+  }> {
+    requireOwnedKey(accountId, key);
+    if (guard.accountId !== accountId) throw new Error('OUTBOX_READ_SESSION_CHANGED');
+    const database = await this.connection.open();
+    return stateTransaction(database, [STATE_STORES.values, STATE_STORES.meta, STATE_STORES.outbox], 'readonly', async tx => {
+      const metadata = tx.objectStore(STATE_STORES.meta);
+      const requests = [metadata.get('active-session'), metadata.get('auth-fence'), metadata.get(outboxKeyOwnerId(key)),
+        metadata.get(keyStateId(accountId, key)), tx.objectStore(STATE_STORES.values).get(key),
+        tx.objectStore(STATE_STORES.outbox).index('accountKey').getAll([accountId, key])];
+      const [activeRaw, fenceRaw, ownerRaw, metaRaw, valueRaw, operationsRaw] = await Promise.all(requests.map(request => indexedRequest(request)));
+      const active = activeRaw as ActiveOutboxSession | undefined;
+      const fence = fenceRaw as { revision: number } | undefined;
+      if (active?.accountId !== accountId || active.serverSessionId !== guard.serverSessionId
+        || active.sessionEpoch !== guard.sessionEpoch || active.pause || (fence?.revision ?? 0) !== guard.authFence) throw new Error('OUTBOX_READ_SESSION_CHANGED');
+      const owner = ownerRaw as { accountId: string } | undefined;
+      const value = valueRaw as { value: string; accountId?: string } | undefined;
+      if (owner && owner.accountId !== accountId || value && (owner?.accountId !== accountId || value.accountId !== accountId)) throw new Error('OUTBOX_KEY_OWNERSHIP');
+      const meta = metaRaw as KeyState | undefined;
+      const acknowledged = meta?.acknowledgedOpId && meta.acknowledgedWriterId
+        && typeof meta.acknowledgedRevision === 'number' && finiteInteger(meta.acknowledgedRevision)
+        ? { opId: meta.acknowledgedOpId, writerId: meta.acknowledgedWriterId, revision: meta.acknowledgedRevision } : undefined;
+      return { value: value?.value ?? null, revision: meta?.valueRevision ?? 0, confirmedVersion: meta?.confirmedVersion ?? 0,
+        operations: operationsRaw as OutboxOperation[], ...(acknowledged ? { acknowledged } : {}) };
+    });
   }
 
   /** A completion status must observe the session and every remaining intent atomically. */

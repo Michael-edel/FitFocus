@@ -7,7 +7,7 @@ const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javasc
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
 /** Native HTTP is required: page.route cannot stand in for SW install/precache traffic. */
-export async function startPwaReleaseServer(previous: string, current: string, options: { retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
+export async function startPwaReleaseServer(previous: string, current: string, options: { familyPlanning?: boolean; retryAfterSeconds?: number; unauthenticated?: boolean; familyPutDelayMs?: number; retryFamilyPutDelayMs?: number; conflictFirstFamilyPut?: boolean; stateUnavailable?: boolean; currentStateUnavailable?: boolean;
   achievementCheckGate?: { started: (scope: { method: string | undefined; account: string | undefined; session: string | undefined }) => void; wait: Promise<void> };
   profileGetGate?: { shouldHold: () => boolean; started: () => void; wait: Promise<void> } } = {}) {
   let directory = resolve(previous);
@@ -37,7 +37,7 @@ export async function startPwaReleaseServer(previous: string, current: string, o
   if (!address || typeof address === 'string') throw new Error('No PWA fixture address');
   return { origin: `http://127.0.0.1:${address.port}`, unexpectedApi: api.unexpectedApi, counts: api.counts,
     stateWriteKeys: api.stateWriteKeys, stateWriteItems: api.stateWriteItems,
-    pushRequests: api.pushRequests, setActiveSessionId: api.setActiveSessionId,
+    pushRequests: api.pushRequests, familyWrites: api.familyWrites, setActiveSessionId: api.setActiveSessionId,
     setStateWriteDisconnected: api.setStateWriteDisconnected,
     release: () => { directory = resolve(current); },
     rollback: () => { directory = resolve(previous); },

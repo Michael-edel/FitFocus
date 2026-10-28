@@ -1,4 +1,7 @@
 import { familyMenuStateReady } from './family_menu_state';
+import { familyPlanningReady } from './family_dining';
+import { safeLegacyFamilyMenu } from './family_planning_archive';
+import { isFamilyPlanningMenu } from '../../../domain/familyPlanning';
 import type { SessionUser } from './auth';
 import { safeJsonParse } from './json';
 import { parseAttachmentsJson, type SupportAttachmentRecord } from './support_attachments';
@@ -11,6 +14,7 @@ type SupportMessageExportRow = Record<string, unknown> & { attachments_json?: st
 /** Collects the current user's portable data while deliberately excluding admin and push credentials. */
 export async function buildUserDataExport(db: D1Database, user: SessionUser) {
   const userId = user.sub;
+  const hasPlanning=await familyPlanningReady(db);
   const dbUser = await db
     .prepare('SELECT id, email, name, picture, created_at, updated_at, deleted_at, deletion_scheduled_at, is_active FROM users WHERE id = ?')
     .bind(userId)
@@ -34,8 +38,10 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
   const inviteRedemptions = await allRows(db, 'SELECT code, redeemed_at FROM invite_redemptions WHERE user_id = ? ORDER BY redeemed_at DESC', userId);
   const familyMemberships = await allRows(db, 'SELECT id, family_id, role, status, display_name, restrictions_json, is_active, updated_at, sex, age, height_cm, weight_kg, activity, goal, created_at FROM family_members WHERE user_id = ? ORDER BY created_at DESC', userId);
   const ownedFamilies = await allRows(db, 'SELECT id, name, is_active, created_at FROM families WHERE owner_user_id = ? ORDER BY created_at DESC', userId);
-  const familyMenus = await allRows(db, "SELECT id, family_id, menu_json, created_at FROM family_menus WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT fm.family_id FROM family_members fm JOIN families f ON f.id = fm.family_id WHERE fm.user_id = ? AND fm.status = 'active' AND fm.is_active = 1 AND f.is_active = 1)", userId, userId);
+  const familyMenus = await allRows(db, "SELECT id, family_id, week_start, menu_json, created_at FROM family_menus WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT fm.family_id FROM family_members fm JOIN families f ON f.id = fm.family_id WHERE fm.user_id = ? AND fm.status = 'active' AND fm.is_active = 1 AND f.is_active = 1)", userId, userId);
   const familyMenuGenerations = await familyMenuStateReady(db) ? await allRows(db, "SELECT family_id, week_start, version, menu_json, updated_at FROM family_menu_generations WHERE family_id IN (SELECT id FROM families WHERE owner_user_id = ? UNION SELECT fm.family_id FROM family_members fm JOIN families f ON f.id = fm.family_id WHERE fm.user_id = ? AND fm.status = 'active' AND fm.is_active = 1 AND f.is_active = 1)", userId, userId) : [];
+  const diningProfiles=hasPlanning?await allRows(db,"SELECT family_id,id,kind,user_id,display_name,profile_json,version,active,created_at,updated_at FROM family_dining_profiles WHERE user_id=? OR (kind='managed' AND family_id IN(SELECT id FROM families WHERE owner_user_id=?))",userId,userId):[];
+  const familyArchives=hasPlanning?await allRows(db,"SELECT family_id,week_start,legacy_menu_json AS menu_json FROM family_menu_generations WHERE legacy_menu_json IS NOT NULL AND family_id IN(SELECT id FROM families WHERE owner_user_id=? UNION SELECT m.family_id FROM family_members m JOIN families f ON f.id=m.family_id WHERE m.user_id=? AND m.is_active=1 AND m.status='active' AND f.is_active=1)",userId,userId):[];
   const familyInvitesCreated = await allRows(db, 'SELECT code, family_id, expires_at, created_by_user_id, created_at, used_by_user_id, used_at FROM family_invites WHERE created_by_user_id = ? ORDER BY created_at DESC', userId);
   const familyInvitesUsed = await allRows(db, 'SELECT code, family_id, expires_at, created_by_user_id, created_at, used_by_user_id, used_at FROM family_invites WHERE used_by_user_id = ? ORDER BY used_at DESC', userId);
   const recipes = await allRows(db, 'SELECT id, title, source_food_name, calories, protein, fat, carbs, ingredients_json, steps_json, allergens_json, created_at FROM recipes WHERE user_id = ? ORDER BY created_at DESC', userId);
@@ -71,20 +77,28 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
     invite_redemptions: inviteRedemptions,
     family_memberships: familyMemberships,
     owned_families: ownedFamilies,
-    family_menus: familyMenus,
-    family_menu_generations: familyMenuGenerations,
+    family_menus: familyMenus.map(safeOldMenuExport),
+    family_menu_generations: familyMenuGenerations.map(safeMenuExport),
+    family_dining_profiles: diningProfiles,
+    family_menu_archives: familyArchives.map(safeMenuExport),
     family_invites_created: familyInvitesCreated,
     family_invites_used: familyInvitesUsed,
     recipes,
     weekly_menu_items: weeklyMenuItems,
     personal_menu_projections: personalMenuProjections,
-    weekly_menus_created: weeklyMenusCreated,
+    weekly_menus_created: weeklyMenusCreated.map(safeOldMenuExport),
     weekly_menu_portions: weeklyMenuPortions,
     shopping_checked: shoppingChecked,
     family_shopping_checked: familyShoppingChecked,
     support_feedback: publicSupportFeedbackRows(supportFeedback),
     support_messages: publicSupportMessageRows(supportMessages),
   };
+}
+
+function safeMenuExport(row:Record<string,unknown>) {
+  const date=String(row.week_start||'');
+  const menu=typeof row.menu_json==='string'?safeJsonParse(row.menu_json):null;
+  return {...row,menu_json:JSON.stringify(isFamilyPlanningMenu(menu,date)?menu:safeLegacyFamilyMenu(menu,date))};
 }
 
 function publicAttachments(value: unknown): PublicSupportAttachment[] {
@@ -112,4 +126,8 @@ async function allRows<T = Record<string, unknown>>(db: D1Database, sql: string,
   const stmt = binds.length ? db.prepare(sql).bind(...binds) : db.prepare(sql);
   const { results } = await stmt.all<T>();
   return results || [];
+}
+
+function safeOldMenuExport(row:Record<string,unknown>) {
+  try { return safeMenuExport(row); } catch { return {...row,menu_json:null,format:'unrecognized-legacy'}; }
 }

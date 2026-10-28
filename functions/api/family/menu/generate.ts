@@ -4,7 +4,8 @@ import { requireScopedStateUser, withSessionGuard } from '../../_lib/state_sessi
 import { ensureUserRow, requireDB, toApiError } from '../../_lib/db';
 import { familyResponse } from '../../_lib/family_response';
 import { defaultFamilyMenuWeekStart } from '../../_lib/family_menu';
-import { generateFamilyMenu } from '../../_lib/family_menu_generate';
+import { generateFamilyMenu, previewFamilyDay } from '../../_lib/family_menu_generate';
+import { planningErrorStatus } from '../../_lib/family_planning_handler';
 import { requestIdFor } from '../../_lib/observability';
 import { readJsonRequest, RequestBodyTooLargeError } from '../../_lib/request_body';
 import { isRecord } from '../../../../safeJson';
@@ -19,6 +20,11 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
     await ensureUserRow(db, user);
     const weekStart = new URL(request.url).searchParams.get('week') || defaultFamilyMenuWeekStart();
     const body = await readJsonRequest(request, 16 * 1024);
+    if(isRecord(body)&&('date' in body||'selections' in body)) {
+      const exactDate=new URL(request.url).searchParams.get('week');
+      if(!exactDate) throw new Error('BAD_DATE');
+      return familyResponse('family.menu.generate',requestId,await previewFamilyDay(db,user.sub,exactDate,body),200);
+    }
     const result = await generateFamilyMenu({ db, userId: user.sub, weekStart,
       ...(isRecord(body) ? { preview: body.preview === true, familyId: typeof body.familyId === 'string' ? body.familyId : undefined } : {}),
     });
@@ -37,7 +43,7 @@ const handlePost: PagesFunction<Env> = async ({ request, env }) => {
   } catch (error: unknown) {
     if (error instanceof RequestBodyTooLargeError) return familyResponse('family.menu.generate', requestId, { error: 'PAYLOAD_TOO_LARGE' }, 413);
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.generate', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.generate', requestId, { error: apiErr }, planningErrorStatus(apiErr.code));
   }
 };
 

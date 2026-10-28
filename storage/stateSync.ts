@@ -6,7 +6,7 @@ import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
 import { LegacyQueueMigration } from './legacyMigration';
 import { checkLegacyWriterFence, type LegacyWriterFenceProof } from './legacyWriterFence';
 import { isUserProfilePayload } from '../profileValidation';
-import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuSnapshot } from '../familyMenuValidation';
+import { familyMenuStorageKey, isFamilyMenuIntent, isFamilyMenuWriteIntent, isFamilyMenuSnapshot } from '../familyMenuValidation';
 import { USER_STATE_KEYS, type UserStateKey } from './userStateRepository';
 
 import { requestJson, type JsonResponse } from './sessionTransport';
@@ -101,6 +101,7 @@ export class StateSync {
   private profileProtocol = false;
   private profileProjectionProtocol = false;
   private familyMenuProtocol = false;
+  private familyPlanningProtocol = false;
   private readonly requests = new Set<AbortController>();
   private readonly readGuardListeners = new Set<(guard: OutboxReadGuard) => void>();
   private running?: Promise<void>;
@@ -190,6 +191,7 @@ export class StateSync {
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
     this.familyMenuProtocol = false;
+    this.familyPlanningProtocol = false;
     for (const request of this.requests) request.abort();
     this.requests.clear();
     if (this.timer) clearInterval(this.timer);
@@ -525,6 +527,7 @@ export class StateSync {
     this.profileProtocol = false;
     this.profileProjectionProtocol = false;
     this.familyMenuProtocol = false;
+    this.familyPlanningProtocol = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const before = await this.outbox.sessionState();
       if (generation !== this.generation || accountId !== this.accountId) return false;
@@ -556,9 +559,15 @@ export class StateSync {
         this.profileProjectionProtocol = isRecord(body.profileSync) && body.profileSync.weeklyMenuProjection === 1;
         this.familyMenuProtocol = isRecord(body.familyMenuSync) && body.familyMenuSync.protocol === 1
           && body.familyMenuSync.guard === 1 && body.familyMenuSync.cas === 1;
+        this.familyPlanningProtocol = isRecord(body.familyPlanning) && body.familyPlanning.version === 1;
         reportStateSyncPause(accountId, null);
         await this.migrateLegacyQueue(accountId, generation);
         if (generation !== this.generation || accountId !== this.accountId) return false;
+          // Migration may leave quarantined/conflicted operations while the
+          // legacy writer fence is still unavailable. Keep that durable queue
+          // visible even though the sender remains paused.
+          reportStateQueue(accountId, await this.outbox.list(accountId));
+          if (generation !== this.generation || accountId !== this.accountId) return false;
         if (await this.outbox.isReadSessionCurrent(accepted)) return true;
         this.session = undefined;
         this.readGuard = undefined;
@@ -619,6 +628,14 @@ export class StateSync {
           await this.finish(claim, { kind: 'retry', reason: 'family-menu-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
           continue;
         }
+        if (claim.resource === 'familyMenu' && claim.type === 'put' && !this.familyPlanningProtocol) {
+          let intent: unknown;
+          try { intent = JSON.parse(claim.value); } catch {}
+          if (isFamilyMenuIntent(intent) && intent.menu.planningV1) {
+            await this.finish(claim, { kind: 'retry', reason: 'family-planning-protocol-required', pause: 'protocol', nextAttemptAtMs: this.now() });
+            continue;
+          }
+        }
         const controller = new AbortController(); this.requests.add(controller);
         let outcome: OutboxOutcome;
         try {
@@ -630,7 +647,7 @@ export class StateSync {
           if (claim.resource === 'familyMenu' && claim.type === 'put') { try { family = JSON.parse(claim.value); } catch {} }
           if (claim.resource === 'profile' && (!isUserProfilePayload(profile) || profile.id !== accountId || claim.key !== `fitfocus_data_${accountId}_profile`)) {
             outcome = { kind: 'failed', reason: 'invalid-profile-intent' };
-          } else if (claim.resource === 'familyMenu' && (!isFamilyMenuIntent(family) || claim.key !== familyMenuStorageKey(accountId, family))) {
+          } else if (claim.resource === 'familyMenu' && (!isFamilyMenuWriteIntent(family) || claim.key !== familyMenuStorageKey(accountId, family))) {
             outcome = { kind: 'failed', reason: 'invalid-family-menu-intent' };
           } else {
             const url = claim.resource === 'familyMenu' ? '/api/family/menu/state' : claim.resource === 'profile' ? '/api/profile' : claim.type === 'put' ? '/api/state' : `/api/state?key=${encodeURIComponent(claim.key)}&baseVersion=${claim.baseVersion}`;

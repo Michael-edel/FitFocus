@@ -1,5 +1,9 @@
 # Контракты API, критичные для синхронизации
 
+## Локальное дополнение 23.10.2026: familyPlanning v1
+
+[Полный контракт](docs/family-planning.md): dining-profiles/dining-profile, preview/date и прежний menu/state. Structured write требует mutationKind planning/purchases, точную дату, roster/profile versions и свежий session proof. Read snapshot не содержит команду. Purchase-only участник меняет только уже существующие купленные количества; структура и автор меню сохраняются. Capability появляется после0022. Это неопубликованная ветка; старые результаты CI ниже её не проверяют.
+
 Обновлено: 15.10.2026. State описывает серверный компонент P0.7
 в `fix/state-generations` после миграции 0019; profile включает guard/capability
 интеграционной ветки `fix/durable-outbox`.

@@ -35,7 +35,7 @@ const handleGet: PagesFunction<Env> = async ({ request, env }) => {
     }, 200);
   } catch (error: unknown) {
     const apiErr = toApiError(error);
-    return familyResponse('family.menu.read', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : 400);
+    return familyResponse('family.menu.read', requestId, { error: apiErr }, ['UNAUTH', 'STATE_SESSION_CHANGED', 'STATE_SESSION_REQUIRED'].includes(apiErr.code) ? 401 : apiErr.code === 'PLAN_REQUIRED_FAMILY' ? 402 : apiErr.code==='FAMILY_PLANNING_STATE_REQUIRED'?409:400);
   }
 };
 

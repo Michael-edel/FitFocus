@@ -135,6 +135,7 @@ export type FamilyWeeklyMenuDay = {
 };
 
 export type FamilyWeeklyMenu = {
+  planningV1?: import('./domain/familyPlanning').FamilyPlanningV1;
   prefs: FamilyMenuPrefs;
   days: FamilyWeeklyMenuDay[];
   shoppingList: string[];

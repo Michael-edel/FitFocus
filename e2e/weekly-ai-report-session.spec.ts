@@ -1,3 +1,4 @@
+import { navigate } from './support/navigation';
 import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { buildMockProfile, mockApp, openApp } from './support/appHarness';
@@ -130,10 +131,7 @@ async function setup(page: Page, holdAI: boolean, expectAbortOnUnload = false) {
 }
 
 async function openSettings(page: Page) {
-  const button = page.getByRole('button', { name: 'Настройки', exact: true });
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await button.scrollIntoViewIfNeeded();
-  await button.click();
+  await navigate(page, 'Настройки');
   await expect(page.getByPlaceholder('Как к вам обращаться')).toBeVisible();
 }
 

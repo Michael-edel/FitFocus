@@ -1,3 +1,4 @@
+import { navigate } from './support/navigation';
 import { expect, type Page } from '@playwright/test';
 import { test } from './support/mockTest';
 import { mockApp, openApp, buildMockProfile } from './support/appHarness';
@@ -61,14 +62,10 @@ async function setup(page: Page, mode: 'normal' | 'held-read' | 'held-check') {
   });
   await openApp(page, '/#dashboard');
   await expect(page).toHaveTitle(/FitFocus/); await expect(page).toHaveURL(/#dashboard$/);
-  await expect(page.getByRole('button', { name: 'Обзор', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Прогресс действий', exact: true })).toBeVisible();
   return { errors, counts, release, restore: () => { restored = true; } };
 }
-async function navigate(page: Page, name: string) {
-  const button = page.getByRole('button', { name, exact: true });
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await button.scrollIntoViewIfNeeded(); await button.click();
-}
+
 async function generate(page: Page) {
   await navigate(page, 'План'); page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Обновить план', exact: true }).click();

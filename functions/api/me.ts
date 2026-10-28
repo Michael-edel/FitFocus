@@ -7,13 +7,15 @@ import { stateSessionId } from './_lib/state_session';
 import { logApiEvent, requestIdFor, withRequestId } from './_lib/observability';
 import { personalMenuProjectionReady } from './_lib/personal_menu_projection';
 import { familyMenuStateReady } from './_lib/family_menu_state';
+import { familyPlanningReady } from './_lib/family_dining';
 
 const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const u = await requireUser(request, env);
     const hasAccess = await hasBetaAccess(env, u);
-    const [menuProjection, familyMenuState] = await Promise.all([
+    const [menuProjection, familyMenuState, familyPlanning] = await Promise.all([
       personalMenuProjectionReady(env.DB), env.DB ? familyMenuStateReady(env.DB).catch(() => false) : Promise.resolve(false),
+      familyPlanningReady(env.DB).catch(()=>false),
     ]);
     return json({ user: { sub: u.sub, email: u.email, name: u.name, picture: u.picture, roles: u.roles }, hasAccess,
       stateSync: { protocol: 2, guard: 1, accountId: u.sub, sessionId: await stateSessionId(u) },
@@ -21,6 +23,7 @@ const handleMeGet: PagesFunction<Env> = async ({ request, env }) => {
       inviteSync: { protocol: 1, guard: 1 }, bootstrapSync: { protocol: 1, guard: 1 },
       aiSync: { protocol: 1, guard: 1 }, weeklyMenuSync: { protocol: 1, guard: 1 },
       familySync: { protocol: 1, guard: 1, target: 1 }, ...(familyMenuState ? { familyMenuSync: { protocol: 1, guard: 1, cas: 1 } } : {}),
+      ...(familyPlanning ? {familyPlanning:{version:1}} : {}),
       achievementSync: { protocol: 1, guard: 1 }, huaweiSync: { protocol: 1, guard: 1 },
       billingSync: { protocol: 1, guard: 1 },
       pushSync: { protocol: 1, guard: 1 } }, 200);

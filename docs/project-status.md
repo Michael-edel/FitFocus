@@ -1,3 +1,75 @@
+## Семейный кандидат, 23.10.2026, 19:22 Asia/Yekaterinburg
+
+Текущий main — `a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`: security-only
+PR #100 слит обычным merge; в Cloudflare подтверждён успешный Production/main
+deployment этого SHA. [Exact main CI 39942447140](https://github.com/Michael-edel/FitFocus/actions/runs/39942447140)
+завершён SUCCESS: 1608 unit / 226 файлов, 1658 browser passed / 78 reported
+skips / 0 failed, HTTP/CAS 23/23; browser и rollback artifacts загружены.
+Исторический rollback 98d4910 содержит DOMPurify 3.4.16 и не принят как security
+rollback. Family B2 a6b2048, main и текущий кандидат содержат 3.4.17.
+Family и миграция 0022 в опубликованный security выпуск не входят.
+
+Семейная ветка опубликована как [draft PR #99](https://github.com/Michael-edel/FitFocus/pull/99)
+и интегрирует текущий main. На момент снимка опубликованный head C24 —
+`3230c81`; его CI `39961299287` ещё выполняется и не подтверждает новый код.
+Локальный C25 `f5f3d635f0cd827eb245131bcb733d9071578e83` интегрирует B3 adapter
+атомарного создания/присоединения и новый rollback pin. Он прошёл 1695 unit /
+234 файла, три typecheck, guards, schema/privacy и frontend/PWA/Pages build.
+Последнее изменение интерфейса — `f272639ba1ccc1a9b908d8a42c3ef635a040f497`.
+C22/C23 меняют только ожидание
+готовности rollback editor и относительный summary selector recovery helper;
+исходные assertions, timeouts, workers=1/retries=0 сохранены.
+
+На C23 Chromium family menu 19/19, session 12/12, callbacks 37/37 — без skip,
+flaky и retries. Полные архивы C25/B3 упакованы и проверены: 50 HTTP-запросов
+при C25→B3→C25 и 12 запросов / 7 групп штатного локального D1 rollout PASS.
+Native WebKit на новой паре: C25 rollback 2/2 и fresh installation 1/1 PASS;
+предыдущий C20 PWA update 3/3 относится к своей ревизии. Git blob до/после,
+private network, resource gates и stopped PID0 подтверждены независимым parent;
+профиль 2 CPU / 3 GiB / 512 PID. Один предыдущий fresh-install запуск потерял
+stdin доверенного parent при перезапуске tool service; он сохранён как
+infrastructure FAIL, а не принят по exit0 target. Новый отдельный запуск PASS.
+Android AI C20: 71 passed / 3 предусмотренных platform skip / 0 failed/flaky/retries.
+Это результаты указанных ревизий; полной exact-head CI приёмки Family ещё нет.
+
+Дополнительная native WebKit mobile engineering проверка C20 сохраняет 12 PNG
+на 375/390/430. Три прогона дали 36/37 checks: один focus check после покупки
+на375 не прошёл. Диагностика `ff-mobile-c20-67cf7ea1b9e3` опровергла
+прежнюю трактовку повторной блокировки после готовности: маркер готовности
+вообще не достигнут. В Playwright 1.64.1 async-предикат завершает опрос
+через truthy Promise, даже если его результат false. Серверный ACK и IDB
+receipt подтверждены; ошибка ожидания находится во внешнем QA harness.
+Отдельный static proof `ff-wk-predicate-ed4e19a27185` подтвердил этот механизм.
+После исправления только QA harness `ff-mobile-c20-502f559ef725` прошёл37/37
+checks и12PNG, включая focus на375 после реального ready marker. Focus/inside/hit,
+strict enabled/connected и прежний20sbudget сохранены. Это не новый
+пользовательский агент и не physical iOS/VoiceOver/
+native zoom/3G acceptance.
+
+Prefix prototype находится отдельно от PR/app/migrations: SQLite 18 групп и
+JS-binding 5 проверок PASS. Новый matched local workerd/D1 differential proof
+create/join прошёл: 6 пар / 12 вариантов / 18 runtime opens; контроль отличается
+ровно FK-reference clause. Positive batches сохраняют exact rows, отрицательные
+варианты дают exact durable rollback. Прежний diagnostic остаётся FAIL с четырьмя
+error-string assertions: workerd возвращает generic internal error. Его успешные
+state observations и новый отдельный proof не переименовывают тот FAIL.
+Cloud D1 не проверен. Fence-aware B3 `b8babb1` отдельно прошёл1680 unit/232файла,
+все types/guards/builds,52 actual compiled local-D1 cases до/после0022 и4 managed
+capacity cases. Он перенесён в локальную Family-ветку; совместные архивы,
+HTTP и native rollback/fresh-install C25/B3 приняты. Installer/receipt вынесены
+в отдельный непубликуемый draft: 8 атомарных шагов и 17 fault/control cases;
+выполнение настоящим D1 ещё не принято. В приложение/PR99 этот draft не входит.
+
+Исходные четыре Sol-роли и четыре другие слепые Sol-роли завершены на своих
+зафиксированных snapshots; их 58 PNG, клики и решения о возвращении сохранены.
+Последующие инженерные проверки не считаются новой слепой группой. 11+27
+прежних файлов сохранены отдельно и не применялись; пять защищённых файлов
+не изменены. Рабочая DB проверялась только на чтение. Семейный merge/deploy
+закрыт до безопасного old-writer barrier и B3, atomic installer/receipt,
+lifecycle/HTTP drain, backup/restore-check, QA actor и exact-head CI.
+Точные результаты и ограничения — в [журнале исправлений](../qa/first-users/remediation-2026-10-23.md)
+и [контракте](family-planning.md). Исторические записи ниже не описывают текущий HEAD.
+
 ## PR98 profile refresh notice follow-up, 22 October 2026
 
 Head8964f134 CI39746942675 completed/failure:1608unit passed, audit0,

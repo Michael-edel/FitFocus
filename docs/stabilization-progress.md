@@ -1,3 +1,7 @@
+## Локальный family-first этап, 23.10.2026
+
+[Один законченный семейный день](family-planning.md) — текущая реализация. Исходные четыре роли пройдены на неизменном main, исправления проверяются отдельно. Unit/type/build/schema/privacy результаты привязываются к tree/archive кандидата; ни старый успешный CI, ни наличие API не доказывают UX. Повторная группа будет новой и слепой; реальные владелец/сын ещё не тестировали. Внешние рабочие сервисы не используются.
+
 ## Second-pass cache race regression, 22 October 2026
 
 A Firefox diagnostic series reproduced duplicate Save twice in ten attempts.

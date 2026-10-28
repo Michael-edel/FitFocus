@@ -51,7 +51,10 @@ export async function readShoppingList({
     await requireFamilyPlan(db, family.owner_user_id);
     const [rows, checkedRows] = await Promise.all([
       await familyMenuStateReady(db)
-        ? readFamilyMenuGeneration(db, familyId, weekStart).then(snapshot => ({ results: snapshot.menu?.shoppingListItems ?? [] }))
+        ? readFamilyMenuGeneration(db, familyId, weekStart).then(snapshot => {
+          if(snapshot.menu?.planningV1) throw new Error('FAMILY_PLANNING_STATE_REQUIRED');
+          return { results: snapshot.menu?.shoppingListItems ?? [] };
+        })
         : db
         .prepare(
           `SELECT w.ingredient_name as name, w.grams as grams

@@ -1,5 +1,14 @@
 # Карта кода FitFocus
 
+## Локальная семейная ветка, 23.10.2026
+
+- FamilyPlanningScreen.tsx и features/familyPlanning: три ежедневных входа, профили, preview/confirm, замена, участие, покупки.
+- domain/familyPlanning.ts и familyPlanningCatalog.ts: строгая схема и детерминированные количества.
+- functions/api/family/dining-*.ts, семейные use cases и migrations/0022_family_planning.sql: права, quota, версии, SQL barriers.
+- storage/familyMenuRepository.ts, durableOutbox.ts, stateSync.ts: прежняя доставка с mutationKind и точным ACK.
+
+[Контракт и ограничения](family-planning.md). Все прежние SHA/CI ниже описывают прежние версии.
+
 Сверено: 19.10.2026. Фото-рецепт защищён на `71d2ca4`. Код bootstrap/hydration — `dac2de2`, исправление
 уведомления — `3550cc8`, серверный AI/items guard — `16d3c34`.
 Базовая проверенная ревизия кода — `8fc0b1b`, ветка `fix/durable-outbox`.
