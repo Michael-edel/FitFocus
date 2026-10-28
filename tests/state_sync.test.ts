@@ -43,6 +43,16 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('stops cooperative completion when verified legacy import becomes required',async()=>{
+    await write();let release!:(r:Response)=>void;let legacy=false;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb),legacyPending:()=>legacy});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn).toHaveBeenCalledTimes(2));
+    legacy=true;expect(await b).toBe(false);release(ack());expect(await a).toBe(true);
+    expect(mutation).toHaveBeenCalledTimes(1);
+  });
   it.each(['general','per-key'] as const)('joins the other tab claim during simultaneous %s recovery without another write',async action=>{
     const saved=await write();const exhaust=client(async()=>{throw Error('offline');});await exhaust.instance.connect(account);
     for(let i=0;i<8;i++){await exhaust.instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}exhaust.instance.stop();

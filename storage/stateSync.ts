@@ -333,20 +333,20 @@ export class StateSync {
     if (settled) return true;
     // Per-key recovery reports an accepted reset, not a cloud ACK; pending retries remain visible.
     const current = retried && await this.outbox.isReadSessionCurrent(guard);
-    return generation === this.generation && this.accountId === accountId && current;
+    return generation === this.generation && this.accountId === accountId && !this.legacyPending() && current;
   }
 
   /** A simultaneous explicit retry may join another owner's exact attempt, never reset it again. */
   private async settleManualDrain(accountId: string, generation: number, guard: OutboxReadGuard, observed: readonly OutboxOperation[], mayFlush = true): Promise<boolean> {
-    if (generation !== this.generation || this.accountId !== accountId || !await this.outbox.isReadSessionCurrent(guard)) return false;
+    if (generation !== this.generation || this.accountId !== accountId || this.legacyPending() || !await this.outbox.isReadSessionCurrent(guard)) return false;
     if (mayFlush && await this.drainAndCheck(accountId, generation)) {
       const current = await this.outbox.isReadSessionCurrent(guard);
-      return generation === this.generation && this.accountId === accountId && current;
+      return generation === this.generation && this.accountId === accountId && !this.legacyPending() && current;
     }
     const expected = new Map(observed.map(operation => [operation.opId, operation]));
     const limit = Math.min(240, Math.max(1, Math.ceil(this.timeoutMs / 50)));
     for (let tick = 0; tick < limit; tick += 1) {
-      if (generation !== this.generation || this.accountId !== accountId || !await this.outbox.isReadSessionCurrent(guard)) return false;
+      if (generation !== this.generation || this.accountId !== accountId || this.legacyPending() || !await this.outbox.isReadSessionCurrent(guard)) return false;
       const current = await this.outbox.list(accountId);
       if (current.length === 0) {
         for (const operation of observed) {
@@ -354,14 +354,14 @@ export class StateSync {
         }
         const drained = await this.outbox.isDrained(accountId, guard.sessionEpoch);
         const current = await this.outbox.isReadSessionCurrent(guard);
-        return generation === this.generation && this.accountId === accountId && drained && current;
+        return generation === this.generation && this.accountId === accountId && !this.legacyPending() && drained && current;
       }
       if (current.some(operation => {
         const previous = expected.get(operation.opId);
         return !previous || previous.key !== operation.key || previous.accountId !== operation.accountId
           || previous.revision !== operation.revision || previous.baseVersion !== operation.baseVersion
           || previous.type !== operation.type || (previous.type === 'put' && operation.type === 'put' && previous.value !== operation.value)
-          || (operation.status !== 'sending' && !(tick < 20 && operation.status === 'pending' && operation.retryCount === 0))
+          || (operation.status !== 'sending' && !(operation.status === 'pending' && operation.retryCount === 0))
           || (operation.status === 'sending' && operation.attempt?.owner === this.owner);
       })) return false;
       await new Promise<void>(resolve => setTimeout(resolve, 50));
