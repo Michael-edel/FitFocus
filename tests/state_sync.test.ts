@@ -43,6 +43,17 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('joins its own scheduled claim after manual sync awaited an older empty drain',async()=>{
+    await write();let releaseEmpty!:()=>void;let release!:(r:Response)=>void;
+    vi.spyOn(outbox,'claim').mockImplementationOnce(()=>new Promise(resolve=>{releaseEmpty=()=>resolve(null);}));
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));const {instance,fetchFn}=client(mutation);
+    await instance.connect(account);const older=instance.flush();await vi.waitFor(()=>expect(releaseEmpty).toBeTypeOf('function'));
+    const manual=instance.syncNow(account);await vi.waitFor(()=>expect(fetchFn).toHaveBeenCalledTimes(2));
+    releaseEmpty();await older;await new Promise(resolve=>setTimeout(resolve,100));
+    const scheduled=instance.flush();await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    let settled=false;void manual.then(()=>{settled=true;});await new Promise(resolve=>setTimeout(resolve,100));
+    expect(settled).toBe(false);release(ack());await scheduled;expect(await manual).toBe(true);expect(mutation).toHaveBeenCalledTimes(1);
+  });
   it('joins an existing focus proof without treating transient legacy readiness as a failure',async()=>{
     const target=new EventTarget();vi.stubGlobal('window',target);
     await write();let release!:(r:Response)=>void;let releaseProof!:(r:Response)=>void;let hold=false,verifying=false;

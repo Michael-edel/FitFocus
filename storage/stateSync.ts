@@ -348,7 +348,7 @@ export class StateSync {
     }
     return false;
   }
-  /** A simultaneous explicit retry may join another owner's exact attempt, never reset it again. */
+  /** A simultaneous explicit retry may join the exact active attempt, never reset it again. */
   private async settleManualDrain(accountId: string, generation: number, guard: OutboxReadGuard, observed: readonly OutboxOperation[], mayFlush = true): Promise<boolean> {
     if (!await this.manualGuardCurrent(accountId, generation, guard)) return false;
     if (mayFlush && await this.drainAndCheck(accountId, generation)) {
@@ -372,8 +372,7 @@ export class StateSync {
         return !previous || previous.key !== operation.key || previous.accountId !== operation.accountId
           || previous.revision !== operation.revision || previous.baseVersion !== operation.baseVersion
           || previous.type !== operation.type || (previous.type === 'put' && operation.type === 'put' && previous.value !== operation.value)
-          || (operation.status !== 'sending' && !(operation.status === 'pending' && operation.retryCount === 0))
-          || (operation.status === 'sending' && operation.attempt?.owner === this.owner);
+          || (operation.status !== 'sending' && !(operation.status === 'pending' && operation.retryCount === 0));
       })) return false;
       await new Promise<void>(resolve => setTimeout(resolve, 50));
     }
