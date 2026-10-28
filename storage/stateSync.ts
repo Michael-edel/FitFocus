@@ -336,25 +336,36 @@ export class StateSync {
     return generation === this.generation && this.accountId === accountId && !this.legacyPending() && current;
   }
 
+  /** Focus can recheck the same session while a manual action waits; join only that existing proof. */
+  private async manualGuardCurrent(accountId: string, generation: number, guard: OutboxReadGuard): Promise<boolean> {
+    for (let check = 0; check < 2; check += 1) {
+      if (generation !== this.generation || this.accountId !== accountId) return false;
+      const verifying = this.verification;
+      if (verifying?.generation === generation && !await verifying.promise) return false;
+      const current = await this.outbox.isReadSessionCurrent(guard);
+      if (this.verification?.generation === generation && this.verification !== verifying) continue;
+      return generation === this.generation && this.accountId === accountId && current && !this.legacyPending();
+    }
+    return false;
+  }
   /** A simultaneous explicit retry may join another owner's exact attempt, never reset it again. */
   private async settleManualDrain(accountId: string, generation: number, guard: OutboxReadGuard, observed: readonly OutboxOperation[], mayFlush = true): Promise<boolean> {
-    if (generation !== this.generation || this.accountId !== accountId || this.legacyPending() || !await this.outbox.isReadSessionCurrent(guard)) return false;
+    if (!await this.manualGuardCurrent(accountId, generation, guard)) return false;
     if (mayFlush && await this.drainAndCheck(accountId, generation)) {
-      const current = await this.outbox.isReadSessionCurrent(guard);
-      return generation === this.generation && this.accountId === accountId && !this.legacyPending() && current;
+      return this.manualGuardCurrent(accountId, generation, guard);
     }
     const expected = new Map(observed.map(operation => [operation.opId, operation]));
     const limit = Math.min(240, Math.max(1, Math.ceil(this.timeoutMs / 50)));
     for (let tick = 0; tick < limit; tick += 1) {
-      if (generation !== this.generation || this.accountId !== accountId || this.legacyPending() || !await this.outbox.isReadSessionCurrent(guard)) return false;
+      if (!await this.manualGuardCurrent(accountId, generation, guard)) return false;
       const current = await this.outbox.list(accountId);
       if (current.length === 0) {
         for (const operation of observed) {
           if ((await this.outbox.snapshot(accountId, operation.key)).confirmedVersion <= operation.baseVersion) return false;
         }
         const drained = await this.outbox.isDrained(accountId, guard.sessionEpoch);
-        const current = await this.outbox.isReadSessionCurrent(guard);
-        return generation === this.generation && this.accountId === accountId && !this.legacyPending() && drained && current;
+        const current = await this.manualGuardCurrent(accountId, generation, guard);
+        return generation === this.generation && this.accountId === accountId && drained && current;
       }
       if (current.some(operation => {
         const previous = expected.get(operation.opId);

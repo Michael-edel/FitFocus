@@ -43,6 +43,20 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('joins an existing focus proof without treating transient legacy readiness as a failure',async()=>{
+    const target=new EventTarget();vi.stubGlobal('window',target);
+    await write();let release!:(r:Response)=>void;let releaseProof!:(r:Response)=>void;let hold=false,verifying=false;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation);
+    const follower=client(mutation,()=>hold?new Promise<Response>(resolve=>{verifying=true;releaseProof=r=>{verifying=false;resolve(r);};}):json(proof()),{outbox:new DurableOutbox(secondDb),legacyPending:()=>verifying});
+    await owner.instance.connect(account);const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    let ready=false;const unsubscribe=follower.instance.subscribeReadGuard(()=>{ready=true;});
+    follower.instance.start(account);await vi.waitFor(()=>expect(ready).toBe(true));unsubscribe();
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await new Promise(resolve=>setTimeout(resolve,100));hold=true;target.dispatchEvent(new Event('focus'));
+    await vi.waitFor(()=>expect(releaseProof).toBeTypeOf('function'));await new Promise(resolve=>setTimeout(resolve,100));
+    releaseProof(json(proof()));release(ack());expect(await Promise.all([a,b])).toEqual([true,true]);expect(mutation).toHaveBeenCalledTimes(1);
+  });
   it('stops cooperative completion when verified legacy import becomes required',async()=>{
     await write();let release!:(r:Response)=>void;let legacy=false;
     const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
