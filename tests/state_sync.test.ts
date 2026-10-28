@@ -43,6 +43,40 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it.each(['general','per-key'] as const)('joins the other tab claim during simultaneous %s recovery without another write',async action=>{
+    const saved=await write();const exhaust=client(async()=>{throw Error('offline');});await exhaust.instance.connect(account);
+    for(let i=0;i<8;i++){await exhaust.instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}exhaust.instance.stop();
+    let release!:(r:Response)=>void;const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const first=client(mutation),second=client(mutation,undefined,{outbox:new DurableOutbox(secondDb)});
+    await first.instance.connect(account);await second.instance.connect(account);
+    const run=(instance:StateSync)=>action==='general'?instance.syncNow(account):instance.retryFailedKey(account,key,[saved.opId]);
+    const a=run(first.instance);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=run(second.instance);let settled=false;void b.then(()=>{settled=true;});
+    await new Promise(resolve=>setTimeout(resolve,100));expect(settled).toBe(false);expect(mutation).toHaveBeenCalledTimes(1);
+    release(ack());expect(await Promise.all([a,b])).toEqual([true,true]);expect(await outbox.list(account)).toEqual([]);
+    expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(1);
+  });
+
+  it('bounds the wait for another tab and does not take over its live claim',async()=>{
+    const saved=await write();let release!:(r:Response)=>void;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb),timeoutMs:100});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    expect(await follower.instance.syncNow(account)).toBe(false);
+    expect((await outbox.list(account))[0]).toMatchObject({opId:saved.opId,status:'sending'});expect(mutation).toHaveBeenCalledTimes(1);
+    release(ack());expect(await a).toBe(true);
+  });
+
+  it('cancels a cooperative wait on logout and fences the late owner response',async()=>{
+    const saved=await write();let release!:(r:Response)=>void;const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb)});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn).toHaveBeenCalledTimes(2));
+    await follower.instance.invalidate();expect(await b).toBe(false);release(ack());expect(await a).toBe(false);
+    expect((await outbox.list(account))[0].opId).toBe(saved.opId);expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(0);
+  });
   it('manual sync restarts an exhausted window with fresh proof and the same payload', async () => {
     const saved=await write(); let failing=true;
     const {instance,fetchFn}=client(async()=>{if(failing)throw Error('offline');return ack();});
