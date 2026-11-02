@@ -67,7 +67,6 @@ body { font-family: 'Inter', sans-serif; }
 }
 
 /* Keep active navigation labels readable on the light theme surface. */
-:root[data-ff-theme="light"] .ff-navigation,
 :root[data-ff-theme="light"] .ff-navigation-menu {
   background-color: var(--ff-bg) !important;
 }
