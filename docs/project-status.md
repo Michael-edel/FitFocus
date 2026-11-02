@@ -1,3 +1,26 @@
+## Local main sync recovery candidate, 2 November 2026
+
+Branch `fix/main-sync-recovery-20261102` starts at current GitHub main
+`a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`. Code candidate `a83472f`
+selectively transfers exhausted-retry recovery and two-tab manual-sync fixes;
+the older rollback tree is not substituted for main. DOMPurify 3.4.17,
+current navigation, family code, dependency lock, migrations and CI are retained.
+Source-archive build history also receives an explicit TypeScript element type.
+
+Local checks: 1623 unit tests in 227 files; all three typechecks, admin/auth/API
+guards, schema/privacy checks, frontend/SW and compiled Worker builds passed.
+Four sequential Linux Chromium/WebKit phone profiles passed both general and
+per-key concurrent retry with native HTTP and a real SW: one accepted write,
+both tabs preserve data through reload, 32 screenshots, no retries/skips.
+This is emulation, not physical-device acceptance or the complete browser suite.
+The pale green success-note text on light theme remains a separate UI issue.
+
+Main CI39942447140 passed on `a42b9de`, including browser/CAS/rollback artifact
+steps; it does not validate this local candidate. No push, PR, merge, deployment,
+remote DB, host settings or permissions change was performed. Original and saved
+877-file snapshots and the 35-file sidebar package remain intact. Full CI for
+the published candidate and separate release authorization remain required.
+
 ## PR98 profile refresh notice follow-up, 22 October 2026
 
 Head8964f134 CI39746942675 completed/failure:1608unit passed, audit0,

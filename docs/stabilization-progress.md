@@ -8208,3 +8208,28 @@ page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
 В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
 Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
 retries. Точный CI текущего коммита ожидает следующей публикации.
+## Local current-main recovery verification, 2 November 2026
+
+Tested code: `a83472f93ddf4dd6a98e672e41da12c99fb642c6`, based on main
+`a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`. Local branch:
+`fix/main-sync-recovery-20261102`. Final isolated matrix R3:
+Android Chromium, iPhone WebKit, Android PWA and iPhone PWA, sequentially;
+both manual-retry actions in two same-origin tabs after native retry exhaustion.
+4/4 profiles passed, zero failures/skips/retries, 32 screenshots. A native HTTP
+latch proves overlapping /me calls and exactly one claim/write per original
+intent; both tabs retain payload/profile and confirmedVersion after reload.
+
+Full unit suite: 1623/1623 across 227 files. All three typechecks, frontend/SW
+build, compiled Pages Worker, admin/auth/API guards, schema and privacy checks
+passed. A new no-Git source-archive regression covers generated build-history
+typing; initial packaging diagnostics were not counted as accepted browser runs.
+Evidence is stored outside the source checkout in local `qa-main-sync-20261102`,
+including `main-sync-final.json`, immutable source bindings and runtime proofs.
+
+Network-none disposable containers, synthetic loopback HTTP only, read-only
+host inputs and no credentials were used. Old containers were not started;
+original/saved files matched 877/877 and the static package 35/35. New runtime
+containers and volumes were removed. No remote publication or data mutation.
+Known limitation: pale green success-note text in light theme; neutral follower
+status is not claimed to be a shared last-sync timestamp. Full unrelated browser
+suite, physical devices and new candidate CI remain unverified.
