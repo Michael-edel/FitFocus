@@ -80,6 +80,12 @@ body { font-family: 'Inter', sans-serif; }
 }
 
 /* Inputs & placeholders */
+:root[data-ff-theme="light"] .ff-sync-note-success {
+  color: #065f46;
+  background-color: #d1fae5;
+  border-color: #047857;
+}
+
 input, textarea, select {
   color: var(--ff-text);
 }

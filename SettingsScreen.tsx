@@ -2178,7 +2178,7 @@ export default function SettingsScreen({
                           ? 'border-rose-500/20 bg-rose-500/10 text-rose-100'
                           : syncState === 'saving'
                             ? 'border-indigo-500/20 bg-indigo-500/10 text-indigo-100'
-                            : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
+                            : 'ff-sync-note-success border-emerald-500/20 bg-emerald-500/10 text-emerald-100'
                       }`}>
                         {syncNote}
                       </div>
