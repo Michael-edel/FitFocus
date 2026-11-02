@@ -8208,6 +8208,31 @@ page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
 В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
 Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
 retries. Точный CI текущего коммита ожидает следующей публикации.
+## Dependency security verification for PR103, 2 November 2026
+
+Tested code `e6d1f660f73a45b260c21708f88e6f8064d723c2`: updated dependency
+chains plus a documented three-write deepmerge source patch. No audit severity
+filter, audit exception, forced install, security-check removal or schema change.
+The strict packaging check now requires Wrangler 4.156.1 exactly.
+
+Clean Linux installation succeeded. Full audit reported 0 advisories. In an
+OS-isolated network-none environment: 1625/1625 unit tests in 228 files (including
+the installed Rollup consumer's prototype and compatibility regressions), all
+three typechecks, frontend/SW and compiled Worker builds passed. Native HTTP
+smoke passed 23 requests with synthetic accounts and local D1, including CAS
+after a same-candidate restart; this does not claim cross-version rollback.
+Four sequential Chromium/WebKit phone profiles with real SW/native HTTP passed
+both concurrent manual-retry actions: 4/4, no retries/skips, 32 PNG, one write per
+intent, durable data through reload, 40 contrast measurements >=4.5:1.
+
+Evidence is outside source in `qa-deps-103-20261102/dependencies-final.json`,
+audit JSON, `check-r2.log`, `current-http.log` and runtime-R2-A. R1 retained its
+lockfile CRLF mismatch as failed packaging diagnostics; LF normalization restored
+exact lock equality without allowing installs in the test environment. Existing
+static/source snapshots and retained rollback archives were preserved. GitHub CI
+must validate the exact new PR head, including the unchanged original rollback
+check. Physical devices and live services were not tested; no merge or deploy.
+
 ## Success-note contrast verification, 2 November 2026
 
 Executable candidate `603719e87cba5b7ea6953ce3bd5ccf908a5e2936` fixes the

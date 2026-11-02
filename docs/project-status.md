@@ -1,3 +1,25 @@
+## PR103 dependency security follow-up, 2 November 2026
+
+Code candidate `e6d1f66` resolves the dependency-audit failure on `8928ae2`.
+Vite is 6.4.5, Wrangler is pinned to 4.156.1, fast-uri to 3.1.9, glob to
+14.0.3 and the off-main-thread Rollup plugin to 4.0.0. Compatible lock updates
+remove the remaining affected dependency chains. deepmerge has no published
+upstream fix at this review date: the explicitly marked local build
+`4.3.1+fitfocus.1` replaces three unsafe destination writes with own data-property
+definitions. The MIT license, upstream provenance and installed-consumer security
+and compatibility tests are retained; see [the patch notes](../vendor/deepmerge/README.md).
+This is not an audit suppression or a claim that upstream 4.3.1 is safe.
+
+Local checks: clean Linux npm ci with scripts disabled, audit 0, 1625 tests in
+228 files, all three typechecks, app/SW/compiled Worker builds, 23 native local
+HTTP/CAS requests against two synthetic accounts, and four sequential phone
+profiles (32 PNG, 40 contrast measurements, minimum 6.775:1). The HTTP smoke
+restarts the same candidate; the original cross-version rollback check remains
+unchanged for CI. No workflows, schema, migrations, host permissions or settings
+were changed. Exact published-head CI is checked separately in PR103; historical
+CI results below do not validate this dependency update. Merge and deploy are
+outside the task; Cloudflare Pages is skipped by the commit prefix.
+
 ## Sync success contrast follow-up, 2 November 2026
 
 The pale green sync success-note text is fixed in code candidate `603719e`.
