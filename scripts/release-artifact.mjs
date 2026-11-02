@@ -55,7 +55,7 @@ export function buildReleaseArtifact({ sourceSha, output, project = process.cwd(
   const require = createRequire(resolve(project, 'package.json'));
   wranglerCli ??= resolve(dirname(require.resolve('wrangler/package.json')), 'bin/wrangler.js');
   const wranglerVersion = execFileSync(process.execPath, [wranglerCli, '--version'], { encoding: 'utf8' }).trim();
-  if (wranglerVersion !== '4.149.0') throw new Error('Use the pinned Wrangler 4.149.0 toolchain');
+  if (wranglerVersion !== '4.156.1') throw new Error('Use the pinned Wrangler 4.156.1 toolchain');
   const npm = process.env.npm_execpath;
   if (!npm) throw new Error('Run through npm so the configured Node/npm toolchain is preserved');
   mkdirSync(output, { recursive: true });

@@ -42,7 +42,7 @@ http://localhost:8788; в Docker-режиме цель — http://wrangler:8788.
 
 Конфигурация Pages/D1 находится в `wrangler.toml`, binding базы — `DB`,
 миграции — в `migrations/`. Компонент [артефакта отката](docs/release-artifacts.md)
-закрепляет Wrangler 4.149.0 как devDependency, устанавливаемую через `npm ci`.
+закрепляет Wrangler 4.156.1 как devDependency, устанавливаемую через `npm ci`.
 Используйте локальный CLI, чтобы сборка полного Pages Worker и HTTP/D1-проверка
 сохраняли одну инструментальную среду.
 
