@@ -1,6 +1,6 @@
 import { isRecord } from '../safeJson';
 import { DurableOutbox, legacyRecoveryResource, type ActiveOutboxSession, type OutboxClaim, type OutboxOutcome,
-  type OutboxIntent, type OutboxReadGuard } from './durableOutbox';
+  type OutboxIntent, type OutboxOperation, type OutboxReadGuard } from './durableOutbox';
 import { reportStateLegacyMigrationNotice, reportStateOperation, reportStateQueue, reportStateSaveIssue, reportStateSyncPause, subscribeStateSaveIssues } from './stateSaveStatus';
 import { LEGACY_QUEUE_SOURCE_KEY, normalizeLegacyRecord } from './legacyQueue';
 import { LegacyQueueMigration } from './legacyMigration';
@@ -217,8 +217,22 @@ export class StateSync {
   async syncNow(accountId: string): Promise<boolean> {
     if (this.accountId !== accountId) return false;
     const generation = this.generation;
-    if (!await this.verify(generation)) return false;
-    return this.drainAndCheck(accountId, generation);
+    if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard) return false;
+    const guard = { ...this.readGuard };
+    const groups = new Map<string, Awaited<ReturnType<DurableOutbox['list']>>>();
+    const observed = await this.outbox.list(accountId);
+    for (const operation of observed) {
+      const group = groups.get(operation.key) ?? [];
+      group.push(operation); groups.set(operation.key, group);
+    }
+    for (const [key, operations] of groups) {
+      if (!operations.every(operation => operation.status === 'failed' && operation.reason === 'retry-exhausted')) continue;
+      if (generation !== this.generation || this.accountId !== accountId) return false;
+      // The transaction rechecks reason, exact operation set, epoch and auth fence.
+      if (!await this.outbox.retryFailedGroup({ accountId, key, expectedOpIds: operations.map(operation => operation.opId),
+        readGuard: guard, nowMs: this.now(), retryExhaustedOnly: true })) return this.settleManualDrain(accountId, generation, guard, observed, false);
+    }
+    return this.settleManualDrain(accountId, generation, guard, observed);
   }
 
   /** Explicitly rebase the latest local snapshot or accept a checked server snapshot for one key. */
@@ -305,20 +319,63 @@ export class StateSync {
   async retryFailedKey(accountId: string, key: string, expectedOpIds: readonly string[]): Promise<boolean> {
     if (this.accountId !== accountId) return false;
     const generation = this.generation;
+    const observed = (await this.outbox.list(accountId)).filter(operation => operation.key === key);
+    if (observed.length !== expectedOpIds.length || observed.some(operation => !expectedOpIds.includes(operation.opId))) return false;
     if (!await this.verify(generation) || generation !== this.generation || this.accountId !== accountId || !this.readGuard) return false;
     const guard = { ...this.readGuard };
     const retried = await this.outbox.retryFailedGroup({
       accountId, key, expectedOpIds: [...expectedOpIds], readGuard: guard, nowMs: this.now(),
     });
-    if (!retried) {
-      reportStateQueue(accountId, await this.outbox.list(accountId));
-      return false;
-    }
     reportStateQueue(accountId, await this.outbox.list(accountId));
-    if (generation === this.generation && this.accountId === accountId) await this.flush();
-    return true;
+    const settled = await this.settleManualDrain(accountId, generation, guard, observed, retried);
+    if (settled) return true;
+    // Per-key recovery reports an accepted reset, not a cloud ACK; pending retries remain visible.
+    const current = retried && await this.outbox.isReadSessionCurrent(guard);
+    return generation === this.generation && this.accountId === accountId && !this.legacyPending() && current;
   }
 
+  /** Focus can recheck the same session while a manual action waits; join only that existing proof. */
+  private async manualGuardCurrent(accountId: string, generation: number, guard: OutboxReadGuard): Promise<boolean> {
+    for (let check = 0; check < 2; check += 1) {
+      if (generation !== this.generation || this.accountId !== accountId) return false;
+      const verifying = this.verification;
+      if (verifying?.generation === generation && !await verifying.promise) return false;
+      const current = await this.outbox.isReadSessionCurrent(guard);
+      if (this.verification?.generation === generation && this.verification !== verifying) continue;
+      return generation === this.generation && this.accountId === accountId && current && !this.legacyPending();
+    }
+    return false;
+  }
+  /** A simultaneous explicit retry may join the exact active attempt, never reset it again. */
+  private async settleManualDrain(accountId: string, generation: number, guard: OutboxReadGuard, observed: readonly OutboxOperation[], mayFlush = true): Promise<boolean> {
+    if (!await this.manualGuardCurrent(accountId, generation, guard)) return false;
+    if (mayFlush && await this.drainAndCheck(accountId, generation)) {
+      return this.manualGuardCurrent(accountId, generation, guard);
+    }
+    const expected = new Map(observed.map(operation => [operation.opId, operation]));
+    const limit = Math.min(240, Math.max(1, Math.ceil(this.timeoutMs / 50)));
+    for (let tick = 0; tick < limit; tick += 1) {
+      if (!await this.manualGuardCurrent(accountId, generation, guard)) return false;
+      const current = await this.outbox.list(accountId);
+      if (current.length === 0) {
+        for (const operation of observed) {
+          if ((await this.outbox.snapshot(accountId, operation.key)).confirmedVersion <= operation.baseVersion) return false;
+        }
+        const drained = await this.outbox.isDrained(accountId, guard.sessionEpoch);
+        const current = await this.manualGuardCurrent(accountId, generation, guard);
+        return generation === this.generation && this.accountId === accountId && drained && current;
+      }
+      if (current.some(operation => {
+        const previous = expected.get(operation.opId);
+        return !previous || previous.key !== operation.key || previous.accountId !== operation.accountId
+          || previous.revision !== operation.revision || previous.baseVersion !== operation.baseVersion
+          || previous.type !== operation.type || (previous.type === 'put' && operation.type === 'put' && previous.value !== operation.value)
+          || (operation.status !== 'sending' && !(operation.status === 'pending' && operation.retryCount === 0));
+      })) return false;
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+    }
+    return false;
+  }
   /** Automatic edits wake the existing session; a debounce must not obtain proof or clear an auth pause. */
   flushPending(accountId: string): Promise<boolean> {
     return this.drainAndCheck(accountId, this.generation);

@@ -43,6 +43,118 @@ async function importLegacyConflict(targetKey = key, value = '{"theme":"light"}'
 }
 
 describe('durable HTTP sender', () => {
+  it('joins its own scheduled claim after manual sync awaited an older empty drain',async()=>{
+    await write();let releaseEmpty!:()=>void;let release!:(r:Response)=>void;
+    vi.spyOn(outbox,'claim').mockImplementationOnce(()=>new Promise(resolve=>{releaseEmpty=()=>resolve(null);}));
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));const {instance,fetchFn}=client(mutation);
+    await instance.connect(account);const older=instance.flush();await vi.waitFor(()=>expect(releaseEmpty).toBeTypeOf('function'));
+    const manual=instance.syncNow(account);await vi.waitFor(()=>expect(fetchFn).toHaveBeenCalledTimes(2));
+    releaseEmpty();await older;await new Promise(resolve=>setTimeout(resolve,100));
+    const scheduled=instance.flush();await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    let settled=false;void manual.then(()=>{settled=true;});await new Promise(resolve=>setTimeout(resolve,100));
+    expect(settled).toBe(false);release(ack());await scheduled;expect(await manual).toBe(true);expect(mutation).toHaveBeenCalledTimes(1);
+  });
+  it('joins an existing focus proof without treating transient legacy readiness as a failure',async()=>{
+    const target=new EventTarget();vi.stubGlobal('window',target);
+    await write();let release!:(r:Response)=>void;let releaseProof!:(r:Response)=>void;let hold=false,verifying=false;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation);
+    const follower=client(mutation,()=>hold?new Promise<Response>(resolve=>{verifying=true;releaseProof=r=>{verifying=false;resolve(r);};}):json(proof()),{outbox:new DurableOutbox(secondDb),legacyPending:()=>verifying});
+    await owner.instance.connect(account);const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    let ready=false;const unsubscribe=follower.instance.subscribeReadGuard(()=>{ready=true;});
+    follower.instance.start(account);await vi.waitFor(()=>expect(ready).toBe(true));unsubscribe();
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await new Promise(resolve=>setTimeout(resolve,100));hold=true;target.dispatchEvent(new Event('focus'));
+    await vi.waitFor(()=>expect(releaseProof).toBeTypeOf('function'));await new Promise(resolve=>setTimeout(resolve,100));
+    releaseProof(json(proof()));release(ack());expect(await Promise.all([a,b])).toEqual([true,true]);expect(mutation).toHaveBeenCalledTimes(1);
+  });
+  it('stops cooperative completion when verified legacy import becomes required',async()=>{
+    await write();let release!:(r:Response)=>void;let legacy=false;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb),legacyPending:()=>legacy});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn).toHaveBeenCalledTimes(2));
+    legacy=true;expect(await b).toBe(false);release(ack());expect(await a).toBe(true);
+    expect(mutation).toHaveBeenCalledTimes(1);
+  });
+  it.each(['general','per-key'] as const)('joins the other tab claim during simultaneous %s recovery without another write',async action=>{
+    const saved=await write();const exhaust=client(async()=>{throw Error('offline');});await exhaust.instance.connect(account);
+    for(let i=0;i<8;i++){await exhaust.instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}exhaust.instance.stop();
+    let release!:(r:Response)=>void;const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const first=client(mutation),second=client(mutation,undefined,{outbox:new DurableOutbox(secondDb)});
+    await first.instance.connect(account);await second.instance.connect(account);
+    const run=(instance:StateSync)=>action==='general'?instance.syncNow(account):instance.retryFailedKey(account,key,[saved.opId]);
+    const a=run(first.instance);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=run(second.instance);let settled=false;void b.then(()=>{settled=true;});
+    await new Promise(resolve=>setTimeout(resolve,100));expect(settled).toBe(false);expect(mutation).toHaveBeenCalledTimes(1);
+    release(ack());expect(await Promise.all([a,b])).toEqual([true,true]);expect(await outbox.list(account)).toEqual([]);
+    expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(1);
+  });
+
+  it('bounds the wait for another tab and does not take over its live claim',async()=>{
+    const saved=await write();let release!:(r:Response)=>void;
+    const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb),timeoutMs:100});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    expect(await follower.instance.syncNow(account)).toBe(false);
+    expect((await outbox.list(account))[0]).toMatchObject({opId:saved.opId,status:'sending'});expect(mutation).toHaveBeenCalledTimes(1);
+    release(ack());expect(await a).toBe(true);
+  });
+
+  it('cancels a cooperative wait on logout and fences the late owner response',async()=>{
+    const saved=await write();let release!:(r:Response)=>void;const mutation=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve;}));
+    const owner=client(mutation),follower=client(mutation,undefined,{outbox:new DurableOutbox(secondDb)});
+    await owner.instance.connect(account);await follower.instance.connect(account);
+    const a=owner.instance.syncNow(account);await vi.waitFor(()=>expect(mutation).toHaveBeenCalledTimes(1));
+    const b=follower.instance.syncNow(account);await vi.waitFor(()=>expect(follower.fetchFn).toHaveBeenCalledTimes(2));
+    await follower.instance.invalidate();expect(await b).toBe(false);release(ack());expect(await a).toBe(false);
+    expect((await outbox.list(account))[0].opId).toBe(saved.opId);expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(0);
+  });
+  it('manual sync restarts an exhausted window with fresh proof and the same payload', async () => {
+    const saved=await write(); let failing=true;
+    const {instance,fetchFn}=client(async()=>{if(failing)throw Error('offline');return ack();});
+    await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    expect((await outbox.list(account))[0]).toMatchObject({opId:saved.opId,status:'failed',reason:'retry-exhausted'});
+    failing=false;
+    await instance.connect(account);await instance.flush();
+    expect((await outbox.list(account))[0].status).toBe('failed');
+    const before=fetchFn.mock.calls.length;
+    expect(await instance.syncNow(account)).toBe(true);
+    expect(fetchFn.mock.calls.slice(before).map(([url])=>String(url))).toEqual(['/api/me','/api/state']);
+    expect(JSON.parse(String(fetchFn.mock.calls.at(-1)?.[1]?.body))).toEqual({items:[{key,value:'{"theme":"light"}',baseVersion:0}]});
+    expect(await outbox.list(account)).toEqual([]);
+    expect((await outbox.snapshot(account,key)).confirmedVersion).toBe(1);
+  });
+
+  it('manual retry keeps its eight-attempt bound and automatic reconnect does not reset it', async () => {
+    await write();const {instance,fetchFn}=client(async()=>{throw Error('offline');});await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    expect(await instance.syncNow(account)).toBe(false);
+    expect((await outbox.list(account))[0]).toMatchObject({status:'pending',retryCount:1});
+    for(let i=1;i<8;i++){now=(await outbox.list(account))[0].nextAttemptAtMs;await instance.flush();}
+    expect((await outbox.list(account))[0]).toMatchObject({status:'failed',reason:'retry-exhausted'});
+    const before=fetchFn.mock.calls.length;await instance.connect(account);await instance.flush();
+    expect(fetchFn.mock.calls.length).toBe(before+1);
+    expect((await outbox.list(account))[0].status).toBe('failed');
+  });
+
+  it('does not reset exhausted data when fresh session verification fails', async () => {
+    await write();let authorized=true;const {instance}=client(async()=>{throw Error('offline');},()=>authorized?json(proof()):json({},401));
+    await instance.connect(account);
+    for(let i=0;i<8;i++){await instance.flush();now=(await outbox.list(account))[0].nextAttemptAtMs;}
+    const saved=await outbox.list(account);authorized=false;
+    expect(await instance.syncNow(account)).toBe(false);expect(await outbox.list(account)).toEqual(saved);
+  });
+
+  it('does not reset permanent failures through the general sync button', async () => {
+    await write();const {instance,fetchFn}=client(async()=>json({},400));await instance.connect(account);await instance.flush();
+    const saved=await outbox.list(account);const before=fetchFn.mock.calls.length;
+    expect(await instance.syncNow(account)).toBe(false);expect(await outbox.list(account)).toEqual(saved);
+    expect(fetchFn.mock.calls.slice(before).map(([url])=>String(url))).toEqual(['/api/me']);
+  });
   it('does not start a state write when an outbox claim finishes after beforeunload', async () => {
     const target = new EventTarget();
     vi.stubGlobal('window', target);

@@ -43,7 +43,7 @@ body { font-family: 'Inter', sans-serif; }
    ========================= */
 
 /* Main surfaces */
-.bg-slate-950, .bg-slate-950\/90, .bg-slate-950\/80, .bg-slate-950\/70, .bg-slate-950\/60, .bg-slate-950\/55, .bg-slate-950\/50, .bg-slate-950\/40 {
+.bg-slate-950, .bg-slate-950\/95, .bg-slate-950\/90, .bg-slate-950\/80, .bg-slate-950\/70, .bg-slate-950\/60, .bg-slate-950\/55, .bg-slate-950\/50, .bg-slate-950\/45, .bg-slate-950\/40, .bg-slate-950\/35, .bg-slate-950\/30 {
   background-color: var(--ff-surface) !important;
 }
 .bg-slate-900, .bg-slate-900\/90, .bg-slate-900\/80, .bg-slate-900\/70, .bg-slate-900\/60, .bg-slate-900\/55, .bg-slate-900\/50, .bg-slate-900\/40, .bg-slate-900\/30, .bg-slate-900\/20 {
@@ -67,8 +67,16 @@ body { font-family: 'Inter', sans-serif; }
 }
 
 /* Keep active navigation labels readable on the light theme surface. */
-:root[data-ff-theme="light"] .ff-navigation .ff-navigation-active {
+:root[data-ff-theme="light"] .ff-navigation,
+:root[data-ff-theme="light"] .ff-navigation-menu {
+  background-color: var(--ff-bg) !important;
+}
+:root[data-ff-theme="light"] .ff-navigation .ff-navigation-active,
+:root[data-ff-theme="light"] .ff-navigation-menu .ff-navigation-active {
   color: #4f46e5;
+}
+:root[data-ff-theme="light"] .ff-navigation-menu .text-rose-300 {
+  color: #be123c;
 }
 
 /* Inputs & placeholders */

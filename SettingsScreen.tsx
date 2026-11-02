@@ -162,7 +162,7 @@ const syncStateLabel = (state: SyncState | undefined) => {
     case 'error':
       return 'Ошибка синхронизации — изменения остались локально';
     default:
-      return 'Локальные изменения ждут синхронизации';
+      return 'Нет активной синхронизации';
   }
 };
 

@@ -2,6 +2,18 @@ import React from 'react';
 import { Apple, ArrowRight, Cloud, Footprints, ShieldCheck, Sparkles, TrendingUp, Utensils, Watch } from 'lucide-react';
 import OAuthSignInButton from './OAuthSignInButton';
 
+function subscribeConnectivity(onChange: () => void): () => void {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
+
+const getOnlineSnapshot = () => navigator.onLine;
+const getServerOnlineSnapshot = () => true;
+
 type IntroCard = {
   title: string;
   text: string;
@@ -61,6 +73,8 @@ export default function AuthChoiceScreen({
   inviteChecking,
   onOpenVersionInfo,
 }: AuthChoiceScreenProps) {
+  const online = React.useSyncExternalStore(subscribeConnectivity, getOnlineSnapshot, getServerOnlineSnapshot);
+
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
       <div className="max-w-5xl w-full space-y-8 text-center relative">
@@ -78,6 +92,19 @@ export default function AuthChoiceScreen({
           </div>
         </div>
         <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
+        {!online ? (
+          <div
+            role="status"
+            aria-label="Состояние подключения"
+            className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-left text-amber-100"
+          >
+            <p className="font-bold">Нет подключения к сети</p>
+            <p className="mt-2 text-sm leading-6">
+              Для открытия профиля дождитесь подключения. Сессия проверится автоматически.
+              Уже сохранённые на устройстве изменения останутся на месте.
+            </p>
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 text-left">
           {introCards.map((card) => {
             const Icon = card.icon;
