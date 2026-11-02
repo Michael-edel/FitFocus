@@ -8208,6 +8208,28 @@ page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
 В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
 Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
 retries. Точный CI текущего коммита ожидает следующей публикации.
+## Success-note contrast verification, 2 November 2026
+
+Executable candidate `603719e87cba5b7ea6953ce3bd5ccf908a5e2936` fixes the
+success-note contrast from the preceding run. The four-profile native HTTP/SW
+matrix was rerun sequentially: 4/4 passed, no failures/skips/retries, 32 PNG.
+Both tabs' success notice passed five palette checks each: 40 measurements,
+minimum 6.775076:1. Both general and per-key manual retry, one shared claim/write,
+durable ACK and reload preservation were retained. Full unit suite: 1623/1623
+in 227 files; normal/storage types and app/SW/Worker builds passed.
+
+Contrast assertions run against the real successful note in both tabs, with
+five palette measurements per tab. Evidence remains outside the source
+checkout in `qa-sync-contrast-20261102/contrast-final.json` and its runtime
+directories. Test-fixture refinements and documentation follow the tested app
+commit; they do not change the app code tested by the native matrix. An extra
+experimental preview test was not accepted or included: the same startup-writes
+expectation failed on unmodified main (9 /me calls, no mutation requests).
+This does not establish an application regression or a resolved preview defect.
+GitHub CI must validate the exact final PR head using the standard project suite.
+Cloudflare deployment is skipped by commit prefix; merge and deployment are
+not authorized. Emulation is not physical-phone acceptance.
+
 ## Local current-main recovery verification, 2 November 2026
 
 Tested code: `a83472f93ddf4dd6a98e672e41da12c99fb642c6`, based on main

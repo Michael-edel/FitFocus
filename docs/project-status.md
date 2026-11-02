@@ -1,3 +1,23 @@
+## Sync success contrast follow-up, 2 November 2026
+
+The pale green sync success-note text is fixed in code candidate `603719e`.
+Only successful notes receive a dedicated class; the light palette uses opaque
+mint with dark green text. Error/progress styling and other themes are retained.
+Local network-isolated checks passed: 1623 unit tests, types, frontend/SW and
+compiled Worker builds; 4 sequential phone profiles, both concurrent retry
+actions, 32 screenshots and 40 contrast measurements across five theme palettes
+and both tabs. Minimum contrast: 6.775:1. These are Linux Chromium/WebKit
+emulations, not physical devices. Contrast assertions remain in that isolated
+native browser matrix. An additional experimental preview test also failed on
+unmodified main before any writes; it is not counted as accepted coverage or
+included in the PR. The cause of that preview setup remains unconfirmed.
+
+Publication is limited to a separate branch and PR. Exact published-head CI must
+be checked independently; no merge or deployment is part of this task.
+`[CF-Pages-Skip]` prevents the Cloudflare Pages deployment without changing its
+configuration or skipping GitHub Actions. Production data and host settings are
+outside this work. Earlier candidate results below retain their original scope.
+
 ## Local main sync recovery candidate, 2 November 2026
 
 Branch `fix/main-sync-recovery-20261102` starts at current GitHub main
