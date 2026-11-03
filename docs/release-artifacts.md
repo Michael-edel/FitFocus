@@ -70,7 +70,7 @@ trace desktop-webkit fresh install: pageerror старого sender возник
 
 `scripts/release-artifact.mjs` берёт исходники через `git archive` точного
 40-символьного commit SHA, собирает Vite/PWA и компилирует все Pages Functions
-через закреплённый Wrangler 4.149.0. Артефакт содержит:
+через закреплённый Wrangler 4.156.1. Артефакт содержит:
 
 - `dist/`: клиент, настоящий SW, `_headers`, `_routes.json`,
   скомпилированный Pages Worker `_worker.js/index.js` и остальные assets;

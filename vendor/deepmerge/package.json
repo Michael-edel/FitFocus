@@ -1,0 +1,9 @@
+{
+  "name": "deepmerge",
+  "version": "4.3.1+fitfocus.1",
+  "private": true,
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "description": "deepmerge 4.3.1 with own-data-property writes to prevent returned-object prototype poisoning"
+}

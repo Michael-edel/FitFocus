@@ -8208,3 +8208,75 @@ page/console errors для `/api/me`, `/api/family`, `/api/family/menu` и
 В обоих сценариях старый ответ не гидратирует меню, а ошибки не возникают.
 Сценарии прошли **6/6** на desktop WebKit, iPhone Safari и iPhone PWA без
 retries. Точный CI текущего коммита ожидает следующей публикации.
+## Dependency security verification for PR103, 2 November 2026
+
+Tested code `e6d1f660f73a45b260c21708f88e6f8064d723c2`: updated dependency
+chains plus a documented three-write deepmerge source patch. No audit severity
+filter, audit exception, forced install, security-check removal or schema change.
+The strict packaging check now requires Wrangler 4.156.1 exactly.
+
+Clean Linux installation succeeded. Full audit reported 0 advisories. In an
+OS-isolated network-none environment: 1625/1625 unit tests in 228 files (including
+the installed Rollup consumer's prototype and compatibility regressions), all
+three typechecks, frontend/SW and compiled Worker builds passed. Native HTTP
+smoke passed 23 requests with synthetic accounts and local D1, including CAS
+after a same-candidate restart; this does not claim cross-version rollback.
+Four sequential Chromium/WebKit phone profiles with real SW/native HTTP passed
+both concurrent manual-retry actions: 4/4, no retries/skips, 32 PNG, one write per
+intent, durable data through reload, 40 contrast measurements >=4.5:1.
+
+Evidence is outside source in `qa-deps-103-20261102/dependencies-final.json`,
+audit JSON, `check-r2.log`, `current-http.log` and runtime-R2-A. R1 retained its
+lockfile CRLF mismatch as failed packaging diagnostics; LF normalization restored
+exact lock equality without allowing installs in the test environment. Existing
+static/source snapshots and retained rollback archives were preserved. GitHub CI
+must validate the exact new PR head, including the unchanged original rollback
+check. Physical devices and live services were not tested; no merge or deploy.
+
+## Success-note contrast verification, 2 November 2026
+
+Executable candidate `603719e87cba5b7ea6953ce3bd5ccf908a5e2936` fixes the
+success-note contrast from the preceding run. The four-profile native HTTP/SW
+matrix was rerun sequentially: 4/4 passed, no failures/skips/retries, 32 PNG.
+Both tabs' success notice passed five palette checks each: 40 measurements,
+minimum 6.775076:1. Both general and per-key manual retry, one shared claim/write,
+durable ACK and reload preservation were retained. Full unit suite: 1623/1623
+in 227 files; normal/storage types and app/SW/Worker builds passed.
+
+Contrast assertions run against the real successful note in both tabs, with
+five palette measurements per tab. Evidence remains outside the source
+checkout in `qa-sync-contrast-20261102/contrast-final.json` and its runtime
+directories. Test-fixture refinements and documentation follow the tested app
+commit; they do not change the app code tested by the native matrix. An extra
+experimental preview test was not accepted or included: the same startup-writes
+expectation failed on unmodified main (9 /me calls, no mutation requests).
+This does not establish an application regression or a resolved preview defect.
+GitHub CI must validate the exact final PR head using the standard project suite.
+Cloudflare deployment is skipped by commit prefix; merge and deployment are
+not authorized. Emulation is not physical-phone acceptance.
+
+## Local current-main recovery verification, 2 November 2026
+
+Tested code: `a83472f93ddf4dd6a98e672e41da12c99fb642c6`, based on main
+`a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`. Local branch:
+`fix/main-sync-recovery-20261102`. Final isolated matrix R3:
+Android Chromium, iPhone WebKit, Android PWA and iPhone PWA, sequentially;
+both manual-retry actions in two same-origin tabs after native retry exhaustion.
+4/4 profiles passed, zero failures/skips/retries, 32 screenshots. A native HTTP
+latch proves overlapping /me calls and exactly one claim/write per original
+intent; both tabs retain payload/profile and confirmedVersion after reload.
+
+Full unit suite: 1623/1623 across 227 files. All three typechecks, frontend/SW
+build, compiled Pages Worker, admin/auth/API guards, schema and privacy checks
+passed. A new no-Git source-archive regression covers generated build-history
+typing; initial packaging diagnostics were not counted as accepted browser runs.
+Evidence is stored outside the source checkout in local `qa-main-sync-20261102`,
+including `main-sync-final.json`, immutable source bindings and runtime proofs.
+
+Network-none disposable containers, synthetic loopback HTTP only, read-only
+host inputs and no credentials were used. Old containers were not started;
+original/saved files matched 877/877 and the static package 35/35. New runtime
+containers and volumes were removed. No remote publication or data mutation.
+Known limitation: pale green success-note text in light theme; neutral follower
+status is not claimed to be a shared last-sync timestamp. Full unrelated browser
+suite, physical devices and new candidate CI remain unverified.

@@ -107,7 +107,20 @@ const builtAt = new Date().toISOString();
 const recentCommits = pickRecentCommits();
 const recentBuilds = pickRecentBuilds();
 
-const file = `export const BUILD_SOURCE = ${JSON.stringify(
+const file = `export const BUILD_SOURCE: {
+  readonly branch: string;
+  readonly sha: string;
+  readonly shortSha: string;
+  readonly commitCount: number;
+  readonly builtAt: string;
+  readonly recentCommits: readonly string[];
+  readonly recentBuilds: readonly {
+    readonly sha: string;
+    readonly shortSha: string;
+    readonly committedAt: string;
+    readonly subject: string;
+  }[];
+} = ${JSON.stringify(
   {
     branch,
     sha,

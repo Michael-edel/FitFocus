@@ -1,3 +1,68 @@
+## PR103 dependency security follow-up, 2 November 2026
+
+Code candidate `e6d1f66` resolves the dependency-audit failure on `8928ae2`.
+Vite is 6.4.5, Wrangler is pinned to 4.156.1, fast-uri to 3.1.9, glob to
+14.0.3 and the off-main-thread Rollup plugin to 4.0.0. Compatible lock updates
+remove the remaining affected dependency chains. deepmerge has no published
+upstream fix at this review date: the explicitly marked local build
+`4.3.1+fitfocus.1` replaces three unsafe destination writes with own data-property
+definitions. The MIT license, upstream provenance and installed-consumer security
+and compatibility tests are retained; see [the patch notes](../vendor/deepmerge/README.md).
+This is not an audit suppression or a claim that upstream 4.3.1 is safe.
+
+Local checks: clean Linux npm ci with scripts disabled, audit 0, 1625 tests in
+228 files, all three typechecks, app/SW/compiled Worker builds, 23 native local
+HTTP/CAS requests against two synthetic accounts, and four sequential phone
+profiles (32 PNG, 40 contrast measurements, minimum 6.775:1). The HTTP smoke
+restarts the same candidate; the original cross-version rollback check remains
+unchanged for CI. No workflows, schema, migrations, host permissions or settings
+were changed. Exact published-head CI is checked separately in PR103; historical
+CI results below do not validate this dependency update. Merge and deploy are
+outside the task; Cloudflare Pages is skipped by the commit prefix.
+
+## Sync success contrast follow-up, 2 November 2026
+
+The pale green sync success-note text is fixed in code candidate `603719e`.
+Only successful notes receive a dedicated class; the light palette uses opaque
+mint with dark green text. Error/progress styling and other themes are retained.
+Local network-isolated checks passed: 1623 unit tests, types, frontend/SW and
+compiled Worker builds; 4 sequential phone profiles, both concurrent retry
+actions, 32 screenshots and 40 contrast measurements across five theme palettes
+and both tabs. Minimum contrast: 6.775:1. These are Linux Chromium/WebKit
+emulations, not physical devices. Contrast assertions remain in that isolated
+native browser matrix. An additional experimental preview test also failed on
+unmodified main before any writes; it is not counted as accepted coverage or
+included in the PR. The cause of that preview setup remains unconfirmed.
+
+Publication is limited to a separate branch and PR. Exact published-head CI must
+be checked independently; no merge or deployment is part of this task.
+`[CF-Pages-Skip]` prevents the Cloudflare Pages deployment without changing its
+configuration or skipping GitHub Actions. Production data and host settings are
+outside this work. Earlier candidate results below retain their original scope.
+
+## Local main sync recovery candidate, 2 November 2026
+
+Branch `fix/main-sync-recovery-20261102` starts at current GitHub main
+`a42b9de1be296dd97ba23ee160d3b8ab68a5bf6e`. Code candidate `a83472f`
+selectively transfers exhausted-retry recovery and two-tab manual-sync fixes;
+the older rollback tree is not substituted for main. DOMPurify 3.4.17,
+current navigation, family code, dependency lock, migrations and CI are retained.
+Source-archive build history also receives an explicit TypeScript element type.
+
+Local checks: 1623 unit tests in 227 files; all three typechecks, admin/auth/API
+guards, schema/privacy checks, frontend/SW and compiled Worker builds passed.
+Four sequential Linux Chromium/WebKit phone profiles passed both general and
+per-key concurrent retry with native HTTP and a real SW: one accepted write,
+both tabs preserve data through reload, 32 screenshots, no retries/skips.
+This is emulation, not physical-device acceptance or the complete browser suite.
+The pale green success-note text on light theme remains a separate UI issue.
+
+Main CI39942447140 passed on `a42b9de`, including browser/CAS/rollback artifact
+steps; it does not validate this local candidate. No push, PR, merge, deployment,
+remote DB, host settings or permissions change was performed. Original and saved
+877-file snapshots and the 35-file sidebar package remain intact. Full CI for
+the published candidate and separate release authorization remain required.
+
 ## PR98 profile refresh notice follow-up, 22 October 2026
 
 Head8964f134 CI39746942675 completed/failure:1608unit passed, audit0,
