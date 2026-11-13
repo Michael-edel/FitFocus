@@ -75,6 +75,7 @@ function setup() {
       return { status: 'pending' } as OutboxOperation;
     }),
     showInsight: vi.fn(insight => calls.push(`insight:${insight.id}:${insight.insight.calories}`)),
+    showRejection: vi.fn(),
     logError: vi.fn(error => calls.push(`error:${(error as Error).message}`)),
   };
   return {
@@ -87,6 +88,14 @@ function setup() {
 }
 
 describe('food photo feature', () => {
+  it('does not save a rejected photo even when the response contains nutrition values', async () => {
+    const { input } = setup();
+    vi.mocked(input.analyzePhoto).mockResolvedValue({ ...analysis, nonFood: true });
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+    expect(input.addFoodToDiary).not.toHaveBeenCalled();
+    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringContaining('не видно еды'));
+  });
   it('keeps non-food scans out of nutrition totals', () => {
     expect(buildFoodInsight({
       ...analysis,

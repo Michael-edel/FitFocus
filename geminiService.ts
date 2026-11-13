@@ -6,6 +6,7 @@ import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 import { postScopedAiJson, type AiSession } from './services/aiSession';
 import { SessionReadError } from './storage/sessionRead';
+import { assertRealFoodPhoto, FOOD_PHOTO_KIND_SCHEMA, FOOD_PHOTO_RULE } from './services/foodPhotoGuard';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -1047,7 +1048,7 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         },
       },
       {
-        text: 'Определи, является ли изображение едой или напитком для человека. Если это не еда и не напиток, верни nonFood=true, calories=0, protein=0, fat=0, carbs=0, ingredients=[] и notes с кратким объяснением НА РУССКОМ; не оценивай калорийность непищевого объекта. Если это еда или напиток, анализируй блюдо. Верни JSON с полями: nonFood (boolean), name (название НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
+        text: FOOD_PHOTO_RULE + ' Укажи nonFood=false только для real_food. Для настоящего блюда оцени КБЖУ и доли ингредиентов. Название, ингредиенты и заметки пиши по-русски. Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
@@ -1056,6 +1057,7 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
       type: "OBJECT",
       properties: {
         name: { type: "STRING" },
+        photoKind: FOOD_PHOTO_KIND_SCHEMA,
         nonFood: { type: "BOOLEAN" },
         calories: { type: "NUMBER" },
         protein: { type: "NUMBER" },
@@ -1073,10 +1075,12 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         },
         notes: { type: "ARRAY", items: { type: "STRING" } }
       },
-      required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
+      required: ["name", "photoKind", "nonFood", "calories", "protein", "fat", "carbs", "ingredients", "notes"]
     }
   }, session);
-  return normalizeFoodPhotoAnalysis(safeJsonObject(response.text));
+  const result = safeJsonObject(response.text);
+  assertRealFoodPhoto(result);
+  return normalizeFoodPhotoAnalysis(result);
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
@@ -1084,6 +1088,8 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
       const schema = {
         type: "OBJECT",
         properties: {
+          photoKind: FOOD_PHOTO_KIND_SCHEMA,
+          nonFood: { type: "BOOLEAN" },
           name: { type: "STRING" },
           calories: { type: "NUMBER" },
           protein: { type: "NUMBER" },
@@ -1103,11 +1109,11 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
           portionGrams: { type: "NUMBER" },
           modelConfidence: { type: "NUMBER" }
         },
-        required: ["name","calories","protein","fat","carbs","ingredients","notes"]
+        required: ["photoKind","nonFood","name","calories","protein","fat","carbs","ingredients","notes","portionGrams","modelConfidence"]
       };
 
-      const prompt = `Ты — эксперт по нутрициологии и пищевому анализу по фото.
-Проанализируй изображение максимально детально.
+      const prompt = `${FOOD_PHOTO_RULE}
+Укажи nonFood=false только для real_food. Продолжай анализ только для real_food.
 Обязательно:
 - Оцени примерный вес порции (portionGrams) в граммах
 - Раздели крем/соусы по типу, если применимо
@@ -1131,7 +1137,9 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         responseSchema: schema,
       }, session);
 
-      return normalizeEnhancedFoodPhotoAnalysis(safeJsonObject(response.text));
+      const result = safeJsonObject(response.text);
+      assertRealFoodPhoto(result);
+      return normalizeEnhancedFoodPhotoAnalysis(result);
     }
 
 /**
@@ -1346,13 +1354,15 @@ export async function getRecipeFromPhoto(photoBase64: string, session: AiSession
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
-      { text: 'Напиши пошаговый рецепт этого блюда на русском. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк). Для каждого ингредиента указывай amount как короткую измеримую строку: например "200 г", "1 шт.", "150 мл", "1 ст. л.". Если точный вес по фото неизвестен, дай реалистичную оценку, но не оставляй amount пустым без необходимости.' }
+      { text: FOOD_PHOTO_RULE + ' Укажи nonFood=false только для real_food. Только для real_food напиши пошаговый рецепт на русском. Указывай количество каждого ингредиента в измеримых единицах, например "200 г" или "150 мл".' }
     ]
   }, 'recipe', {
     responseMimeType: "application/json",
     responseSchema: {
       type: "OBJECT",
       properties: {
+        photoKind: FOOD_PHOTO_KIND_SCHEMA,
+        nonFood: { type: "BOOLEAN" },
         title: { type: "STRING" },
         servings: { type: "NUMBER" },
         timeMinutes: { type: "NUMBER" },
@@ -1379,8 +1389,10 @@ export async function getRecipeFromPhoto(photoBase64: string, session: AiSession
         },
         tips: { type: "ARRAY", items: { type: "STRING" } }
       },
-      required: ["title", "ingredients", "steps"]
+      required: ["photoKind", "nonFood", "title", "servings", "timeMinutes", "ingredients", "steps", "tips"]
     }
   }, session);
-  return normalizeRecipe(safeJsonObject(response.text));
+  const result = safeJsonObject(response.text);
+  assertRealFoodPhoto(result);
+  return normalizeRecipe(result);
 }

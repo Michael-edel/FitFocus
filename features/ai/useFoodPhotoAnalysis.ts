@@ -7,6 +7,7 @@ import type { FoodPhotoAnalysisResult } from '../../geminiService';
 import type { FastLogItem } from '../../storage/foodDiary';
 import type { FoodInsight, FoodItem } from '../../types';
 import { AiActionScope } from './actionScope';
+import { RejectedFoodPhotoError } from '../../services/foodPhotoGuard';
 
 export type FoodPhotoInsight = {
   id: string;
@@ -80,6 +81,7 @@ export type FoodPhotoAnalysisRunParams = {
   ) => Promise<FoodItem | undefined>;
   incrementUsage: (guard: OutboxCommitGuard) => Promise<OutboxOperation | null>;
   showInsight: (insight: FoodPhotoInsight) => void;
+  showRejection: (message: string | null) => void;
   logError?: (error: unknown) => void;
   prepareSession?: typeof prepareAiSession;
   assertSession?: typeof assertAiSession;
@@ -111,6 +113,7 @@ export async function processFoodPhotoFiles({
   addFoodToDiary,
   incrementUsage,
   showInsight,
+  showRejection,
   logError = console.error,
   prepareSession = prepareAiSession,
   assertSession = assertAiSession,
@@ -128,6 +131,7 @@ export async function processFoodPhotoFiles({
   const batch = unlimited ? files : files.slice(0, Math.floor(remainingScans));
   let processed = 0;
   let session: AiSession | undefined;
+  showRejection(null);
   setScanning(true);
   try {
     session = await prepareSession(userId, controller, current, { previous: loginGuard });
@@ -142,6 +146,7 @@ export async function processFoodPhotoFiles({
         const result = await analyzePhoto(photo.base64, session);
         if (!current() || !await stillCurrent(session, current, assertSession)) break;
         if (!result) continue;
+        if (result.nonFood !== false) throw new RejectedFoodPhotoError('non_food');
 
         const guard: OutboxCommitGuard = { readGuard: session.guard, canCommit: current };
         const item = buildPhotoDiaryItem(result, photo);
@@ -162,7 +167,8 @@ export async function processFoodPhotoFiles({
         processed += 1;
       } catch (error) {
         if (current() && (!session || await stillCurrent(session, current, assertSession))) {
-          if (!isExpectedAiSessionFailure(error)) logError(error);
+          if (error instanceof RejectedFoodPhotoError) showRejection(error.message);
+          else if (!isExpectedAiSessionFailure(error)) logError(error);
         }
       }
     }
@@ -189,6 +195,7 @@ export function useFoodPhotoAnalysis({
   addFoodToDiary,
   incrementUsage,
   showInsight,
+  showRejection,
   logError,
   prepareSession,
   assertSession,
@@ -229,10 +236,11 @@ export function useFoodPhotoAnalysis({
       addFoodToDiary,
       incrementUsage,
       showInsight: insight => { if (attempt.isCurrent()) showInsight(insight); },
+      showRejection: message => { if (attempt.isCurrent()) showRejection(message); },
       logError,
       prepareSession,
       assertSession,
     }).finally(attempt.finish);
   }, [addFoodToDiary, analyzePhoto, assertSession, compressPhoto, incrementUsage, isCurrentSession, loginGuard, logError,
-    openPaywall, prepareSession, remainingScans, scope, setScanning, showInsight, userId]);
+    openPaywall, prepareSession, remainingScans, scope, setScanning, showInsight, showRejection, userId]);
 }

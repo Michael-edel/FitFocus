@@ -595,6 +595,7 @@ const App: React.FC = () => {
   }, [planScope, cloudFamily?.id, loadFamilyShopping]);
 
   const { value: isScanning, setValue: setIsScanning } = useAccountScopedUiState(rootAccountSessionScope, false);
+  const { value: photoRejection, setValue: setPhotoRejection } = useAccountScopedUiState<string | null>(rootAccountSessionScope, null);
   const { value: cameraOpen, setValue: setCameraOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
   const { cameraFacing, setCameraFacing } = useCameraFacingPreference(currentUser?.id, allowCachedUiStateRestore);
   const {
@@ -1236,6 +1237,7 @@ const App: React.FC = () => {
     addFoodToDiary: addFoodToDiaryGuarded,
     incrementUsage: incrementPhotoUsage,
     showInsight: setInsightModal,
+    showRejection: setPhotoRejection,
   });
 
   const {
@@ -1990,6 +1992,12 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
       {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
+      {allowCachedUiStateRestore && photoRejection && !isScanning && (
+        <div role="alert" className="fixed inset-x-4 bottom-24 z-[100] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-white shadow-xl">
+          <p>{photoRejection}</p>
+          <button type="button" className="mt-2 underline" onClick={() => setPhotoRejection(null)}>Закрыть</button>
+        </div>
+      )}
       {allowCachedUiStateRestore && isScanning && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[200] flex flex-col items-center justify-center">
           <div className="w-20 h-20 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6" />
