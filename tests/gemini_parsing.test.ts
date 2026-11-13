@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { assertRealFoodPhoto, RejectedFoodPhotoError } from '../services/foodPhotoGuard';
 import {
   extractTextFromGemini,
   normalizeCoachAdvice,
@@ -43,6 +44,21 @@ describe('weekly shopping list normalization', () => {
 });
 
 describe('food photo response normalization', () => {
+  it.each([
+    { photoKind: 'depiction', nonFood: true, name: 'Рамен', calories: 550 },
+    { photoKind: 'real_food', nonFood: false, name: 'Золотистый ретривер (не блюдо)', calories: 400 },
+    { photoKind: 'real_food', nonFood: true },
+    { photoKind: 'uncertain', nonFood: false },
+    { photoKind: 'real_food', nonFood: false, title: 'Запечённая целая птица с горошком' },
+    { photoKind: 'real_food', nonFood: false, ingredients: [{ name: 'индейка целая' }] },
+    { nonFood: false, name: 'Рамен' },
+  ])('rejects a photo without a consistent real-food verdict: %j', result => {
+    expect(() => assertRealFoodPhoto(result)).toThrow(RejectedFoodPhotoError);
+  });
+
+  it('accepts a photo with actual visible food and consistent classification', () => {
+    expect(() => assertRealFoodPhoto({ photoKind: 'real_food', nonFood: false, name: 'Рамен' })).not.toThrow();
+  });
   it('forces non-food payloads to zero nutrition', () => {
     expect(normalizeFoodPhotoAnalysis({
       name: 'Золотистый ретривер',

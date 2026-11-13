@@ -6,6 +6,7 @@ import { assertAiSession, prepareAiSession, type AiSession } from '../../service
 import type { OutboxCommitGuard, OutboxReadGuard } from '../../storage/durableOutbox';
 import { isSoftWeeklyAiError } from '../../services/frontendErrors';
 import { AiActionScope } from './actionScope';
+import { RejectedFoodPhotoError } from '../../services/foodPhotoGuard';
 
 export type PhotoRecipeCommit = (
   insight: FoodInsight,
@@ -128,8 +129,8 @@ export function usePhotoRecipeGeneration({
         insight,
         commitInsight,
       });
-    } catch {
-      if (attempt.isCurrent()) setError('Не удалось получить рецепт');
+    } catch (error) {
+      if (attempt.isCurrent()) setError(error instanceof RejectedFoodPhotoError ? error.message : 'Не удалось получить рецепт');
       return false;
     } finally {
       if (attempt.isCurrent()) setLoading(false);

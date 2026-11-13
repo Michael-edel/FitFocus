@@ -29,6 +29,7 @@ type FixtureState = {
   holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
   holdProfileWrite?: { active: boolean; started: () => void; wait: Promise<void> };
   unauthorizedAiFeature?: string;
+  foodPhotoResponse?: Record<string, unknown>;
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -235,18 +236,18 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
               })
               : feature === 'foodphoto'
                 ? JSON.stringify({
-                  name: 'Поздняя еда A', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
+                  name: 'Поздняя еда A', photoKind: 'real_food', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
                   ingredients: [{ name: 'Старые данные A', percent: 100 }], notes: ['Поздний анализ аккаунта A'],
                 })
                 : feature === 'foodphoto_enhanced'
                   ? JSON.stringify({
-                    name: 'Поздний рецепт A', calories: 412, protein: 24, fat: 18, carbs: 39,
+                    name: 'Поздний рецепт A', photoKind: 'real_food', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
                     ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
                     notes: ['Поздний анализ рецепта'], portionGrams: 200, modelConfidence: 0.95,
                   })
                 : feature === 'recipe'
                   ? JSON.stringify({
-                    title: 'Поздний пошаговый рецепт A', servings: 2, timeMinutes: 15,
+                    title: 'Поздний пошаговый рецепт A', photoKind: 'real_food', nonFood: false, servings: 2, timeMinutes: 15,
                     ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
                     steps: [{ n: 1, text: 'Старый ответ аккаунта A', timeMin: 5 }], tips: [],
                   })
@@ -258,18 +259,18 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
         return;
       }
       const text = feature === 'foodphoto'
-        ? JSON.stringify({
-          name: 'Тестовый омлет', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
+        ? JSON.stringify(state.foodPhotoResponse ?? {
+          name: 'Тестовый омлет', photoKind: 'real_food', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
           ingredients: [{ name: 'Яйца', percent: 70 }], notes: ['Оценка по фото'],
         })
         : feature === 'foodphoto_enhanced'
           ? JSON.stringify({
-            name: 'Тестовый рецепт', calories: 320, protein: 23, fat: 21, carbs: 4,
+            name: 'Тестовый рецепт', photoKind: 'real_food', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
             ingredients: [{ name: 'Яйца', amount: '100 г' }], notes: [], portionGrams: 200, modelConfidence: 0.95,
           })
           : feature === 'recipe'
             ? JSON.stringify({
-              title: 'Пошаговый тестовый рецепт', servings: 2, timeMinutes: 15,
+              title: 'Пошаговый тестовый рецепт', photoKind: 'real_food', nonFood: false, servings: 2, timeMinutes: 15,
               ingredients: [{ name: 'Яйца', amount: '100 г' }],
               steps: [{ n: 1, text: 'Приготовить блюдо', timeMin: 5 }], tips: [],
             })
@@ -3640,6 +3641,35 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
     return JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]')
       .map((item: { name: string }) => item.name);
   }).toEqual(['Исправленное блюдо']);
+});
+
+test('food photo analysis rejects a depiction before saving nutrition', async ({ page }) => {
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    foodPhotoResponse: { name: 'Рамен', photoKind: 'depiction', nonFood: true, calories: 550 },
+  };
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const keys = [diaryKey(accountA.id), historyKey(accountA.id), profileKey(accountA.id)];
+  const writesBefore = fixture.counts.stateWrites.filter(key => keys.includes(key));
+  const profileWritesBefore = [...fixture.counts.profileWrites];
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'illustration.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('На фото изображение или муляж еды. Сфотографируйте настоящее блюдо.')).toBeVisible();
+  await expect(page.getByText('Рамен', { exact: true })).toHaveCount(0);
+  const after = await readDurableSnapshot(page);
+  for (const key of keys) {
+    expect(rawValue(after, key)).toBe(rawValue(before, key));
+  }
+  expect(fixture.counts.stateWrites.filter(key => keys.includes(key))).toEqual(writesBefore);
+  expect(fixture.counts.profileWrites).toEqual(profileWritesBefore);
 });
 
 test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
