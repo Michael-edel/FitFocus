@@ -8,6 +8,7 @@ import { postScopedAiJson, type AiSession } from './services/aiSession';
 import { SessionReadError } from './storage/sessionRead';
 import { assertRealFoodPhoto, FOOD_PHOTO_KIND_SCHEMA, FOOD_PHOTO_RULE, RejectedFoodPhotoError } from './services/foodPhotoGuard';
 import { getLocalWeekStart } from './dateUtils';
+import { NUTRITION_AGE_ERROR, supportsNutritionTargets } from './domain/nutritionAge';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -703,6 +704,7 @@ export const getLastAiAction = (userId?: string | null): AiActionRecord | null =
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
 export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, session: AiSession): Promise<WeeklyMenu> {
+  if (!supportsNutritionTargets(user.age)) throw new Error(NUTRITION_AGE_ERROR);
   if (session.guard.accountId !== user.id) throw new Error('LOGIN_SESSION_CHANGED');
   const weekStart = getLocalWeekStart(new Date());
   const schema = {
@@ -812,7 +814,7 @@ export async function generateFamilyWeeklyMenu(
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
   const allProfiles = Array.from(uniqueById.values());
   const allPeople = allProfiles.map(p => {
-    const targets = p.aiPlan?.dailyKpi || calculateDailyTargets(p);
+    const targets = supportsNutritionTargets(p.age) ? p.aiPlan?.dailyKpi || calculateDailyTargets(p) : null;
     return {
       id: p.id,
       name: p.name,
@@ -931,10 +933,11 @@ const dietaryBlock = (() => {
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const peopleLine = people.map(p => {
     const t = p.targets;
+    if (!t) return `${p.name} (ID: ${p.id}): только общие блюда, без индивидуальной граммовки или калорий.`;
     return `${p.name} (${p.gender}, ${p.age} лет): цель ${t?.calories ?? "?"} ккал/день; Б${t?.protein ?? "?"} Ж${t?.fat ?? "?"} У${t?.carbs ?? "?"}`;
   }).join("\n");
 
-  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
+  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- Для участника с заданной целью укажи (1) общий вес порции и (2) примерные калории. Для участника без цели укажи только общее блюдо без граммовки и калорий.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
 
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "family_menu", {
     responseMimeType: "application/json",
@@ -949,7 +952,7 @@ const dietaryBlock = (() => {
     const portions = asRecord(meal.portions);
     const normPortions: Record<string, string> = {};
     for (const p of people) {
-      normPortions[p.id] = stringValue(portions[p.id]).trim();
+      normPortions[p.id] = p.targets ? stringValue(portions[p.id]).trim() : 'Общее блюдо без расчёта порции и калорий';
     }
     return { base: stringValue(meal.base).trim(), portions: normPortions };
   };
@@ -1165,6 +1168,7 @@ export async function getCoachAdvice(data: unknown, session: AiSession): Promise
  * Генерация персонального плана (используется Gemini Pro)
  */
 export async function generatePersonalPlan(user: UserProfile, session: AiSession): Promise<AIPlan> {
+  if (!supportsNutritionTargets(user.age)) throw new Error(NUTRITION_AGE_ERROR);
   const schema = {
     type: "OBJECT",
     properties: {

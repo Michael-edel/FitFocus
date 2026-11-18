@@ -2,8 +2,10 @@ import { Goal, type UserProfile } from './types';
 import { calculateTDEE } from './profileMath';
 import { DEFAULT_DEFICIT, DEFAULT_SURPLUS, AGGRESSIVE_DEFICIT, AGGRESSIVE_SURPLUS, MIN_DEFICIT, MAX_DEFICIT, MIN_SURPLUS, MAX_SURPLUS } from './constants';
 
-export const REGISTRATION_MIN_AGE = 1;
-export const REGISTRATION_MAX_AGE = 130;
+import { MIN_NUTRITION_AGE, MAX_NUTRITION_AGE, NUTRITION_AGE_ERROR, supportsNutritionTargets } from './domain/nutritionAge';
+
+export const REGISTRATION_MIN_AGE = MIN_NUTRITION_AGE;
+export const REGISTRATION_MAX_AGE = MAX_NUTRITION_AGE;
 export const TARGET_WEIGHT_MIN = 25;
 export const TARGET_WEIGHT_MAX = 350;
 
@@ -38,7 +40,7 @@ export function registrationErrors(data: RegistrationInput) {
   const errors: Partial<Record<'weight' | 'height' | 'age' | 'activity' | 'offset' | 'anthro' | 'targetWeight', string>> = {};
   if (!Number.isFinite(data.weight) || data.weight < 25 || data.weight > 350) errors.weight = 'Укажите вес от 25 до 350 кг.';
   if (!Number.isFinite(data.height) || data.height < 120 || data.height > 230) errors.height = 'Укажите рост от 120 до 230 см.';
-  if (!Number.isInteger(data.age) || data.age < REGISTRATION_MIN_AGE || data.age > REGISTRATION_MAX_AGE) errors.age = 'Укажите возраст целым числом от 1 до 130 лет.';
+  if (!supportsNutritionTargets(data.age)) errors.age = NUTRITION_AGE_ERROR;
   if (!Number.isFinite(data.activityLevel) || data.activityLevel <= 0) errors.activity = 'Выберите уровень активности.';
   if (!errors.weight && !errors.height) {
     const bmi = data.weight / (data.height / 100) ** 2;

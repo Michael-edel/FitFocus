@@ -88,6 +88,7 @@ export async function migrateLegacyStateToCurrentUser(db: D1Database, fromUserId
   const replaceTables: Array<{ sql: string; binds: (string | number)[] }> = [
     { sql: "UPDATE user_profiles SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE subscriptions SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
+    { sql: "UPDATE stripe_subscriptions SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE user_roles SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE invite_redemptions SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },
     { sql: "UPDATE usage_daily SET user_id = ? WHERE user_id = ?", binds: [toUserId, fromUserId] },

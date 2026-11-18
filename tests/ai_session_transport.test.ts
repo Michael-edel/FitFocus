@@ -267,7 +267,7 @@ it('generates through the captured proof without a hidden items write', async ()
 it('does not retry an unavailable default model or fall back to an unscoped request', async () => {
   const fetchImpl = vi.fn<typeof fetch>(async url => String(url).startsWith('/api/me') ? json(me())
     : json({ error: { message: 'model not found' } }, headers(), 404));
-  const user = { id: account, name: 'Test', aiPlan: { dailyKpi: {} } } as UserProfile;
+  const user = { id: account, name: 'Test', age: 30, aiPlan: { dailyKpi: {} } } as UserProfile;
   await expect(generateWeeklyMenu(user, user.aiPlan!, await prepare(fetchImpl))).rejects.toThrow('model not found');
   expect(fetchImpl).toHaveBeenCalledTimes(2);
 });

@@ -548,3 +548,19 @@ CREATE TRIGGER IF NOT EXISTS family_items_legacy_update_block
 BEFORE UPDATE ON weekly_menu_items WHEN NEW.family_id IS NOT NULL OR OLD.family_id IS NOT NULL BEGIN
   SELECT RAISE(ABORT, 'FAMILY_MENU_STATE_REQUIRED');
 END;
+
+-- 0022_stripe_subscriptions.sql
+CREATE TABLE IF NOT EXISTS stripe_subscriptions (
+  stripe_subscription_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  stripe_customer_id TEXT,
+  plan TEXT NOT NULL,
+  status TEXT NOT NULL,
+  current_period_end INTEGER,
+  stripe_created INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  revision TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_stripe_subscriptions_user_id ON stripe_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_stripe_subscriptions_customer_id ON stripe_subscriptions(stripe_customer_id);

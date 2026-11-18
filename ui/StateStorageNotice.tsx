@@ -91,7 +91,7 @@ function recoveryReason(operations: readonly StateQueueOperation[]): string {
   return labels[reason] ?? `Причина: ${reason}`;
 }
 
-export function StateStorageNotice({ accountId }: { accountId?: string }) {
+export function StateStorageNotice({ accountId, reserveSpace = true }: { accountId?: string; reserveSpace?: boolean }) {
   const issues = useSyncExternalStore(subscribeStateSaveIssues, getStateSaveIssues, getStateSaveIssues);
   const queues = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueSummaries, getStateQueueSummaries);
   const queueOperations = useSyncExternalStore(subscribeStateSaveIssues, getStateQueueOperations, getStateQueueOperations);
@@ -167,18 +167,21 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
     }
   }
 
+  const showRecovery = status === 'ready' && recoveryGroups.length > 0;
+  if (!reserveSpace && !visible && !showRecovery) return null;
+
   return (
     <div className="grid" data-state-notice-region>
       {/* Reserve both the largest notice and the recovery disclosure so async status changes do not shift controls. */}
-      {Object.entries(messages).map(([key, text]) => (
+      {reserveSpace && Object.entries(messages).map(([key, text]) => (
         <div key={key} aria-hidden="true" data-notice-text={text}
           className={`${noticeClass} invisible pointer-events-none select-none after:content-[attr(data-notice-text)]`} />
       ))}
-      <div aria-hidden="true" className={`${noticeClass} invisible pointer-events-none select-none`}>
+      {reserveSpace && <div aria-hidden="true" className={`${noticeClass} invisible pointer-events-none select-none`}>
         <div>{messages.conflict}</div>
         <div className="mt-3">{messages.recovery}</div>
-      </div>
-      {(!!visible || (status === 'ready' && recoveryGroups.length > 0)) && (
+      </div>}
+      {(!!visible || showRecovery) && (
         <div className={`${noticeClass} relative z-50 border-amber-400/50 bg-slate-900 text-slate-100`}>
           {!!visible && <p role={status === 'blocked' || ownIssues.length || ownQueue?.failed || conflict || pause === 'auth' || pause === 'access' ? 'alert' : 'status'}>
             {message}
@@ -198,7 +201,7 @@ export function StateStorageNotice({ accountId }: { accountId?: string }) {
               </p>
             </details>
           )}
-          {status === 'ready' && recoveryGroups.length > 0 && (
+          {showRecovery && (
             <details className={visible ? 'mt-3' : ''}>
               <summary className="cursor-pointer font-bold">{messages.recovery}</summary>
               <div className="mt-3 space-y-3">

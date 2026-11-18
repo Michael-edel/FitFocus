@@ -9,6 +9,7 @@ import { writeProfileCas } from './profile_cas';
 import { isProjectableWeeklyMenu } from './personal_menu_projection';
 import { normalizeProfileRecord } from './profile_contract';
 import { isAllowedStateKey } from './state_keyspace';
+import { supportsNutritionTargets } from '../../../domain/nutritionAge';
 
 export type ProfileWriteUser = {
   sub: string;
@@ -30,6 +31,7 @@ export type ProfileWriteOutcome =
   | { kind: 'empty-patch' }
   | { kind: 'bad-base-version' }
   | { kind: 'invalid-weekly-menu' }
+  | { kind: 'invalid-nutrition-age' }
   | { kind: 'conflict'; profile: JsonObject; version: number };
 
 const EDITABLE_PROFILE_FIELDS = new Set([
@@ -165,6 +167,7 @@ export async function writeProfile(
   if (stateItems.length) return { kind: 'state-items-not-supported' };
 
   const updatedFields = Object.keys(patch);
+  if ('age' in body && patch.age === undefined) return { kind: 'invalid-nutrition-age' };
   if (mode === 'patch' && !updatedFields.length) return { kind: 'empty-patch' };
 
   const baseVersion = parseBaseVersion(body.baseVersion);
@@ -176,6 +179,10 @@ export async function writeProfile(
   const refreshedMeta = currentMeta.profile ? currentMeta : await loadProfileMeta(db, user.sub);
   if (refreshedMeta.profile && (baseVersion === 0 || refreshedMeta.version !== baseVersion)) {
     return conflict(user, refreshedMeta.profile, refreshedMeta.version);
+  }
+  if ('age' in body && !supportsNutritionTargets(patch.age)
+      && patch.age !== refreshedMeta.profile?.age) {
+    return { kind: 'invalid-nutrition-age' };
   }
 
   const directPlan = await loadActivePlan(db, user.sub);

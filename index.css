@@ -1,6 +1,22 @@
 @import "tailwindcss";
 @config "./tailwind.config.js";
 
+@custom-variant desktop-nav {
+  @media (min-width: 48rem) and (min-height: 32rem) {
+    @slot;
+  }
+}
+
+.ff-food-editor, .ff-registration-form {
+  background-color: var(--ff-bg);
+  color-scheme: dark;
+}
+
+:root[data-ff-theme="light"] .ff-food-editor,
+:root[data-ff-theme="light"] .ff-registration-form {
+  color-scheme: light;
+}
+
 /* Preserve v3 focus outlines for existing outline-none controls in forced colors. */
 @layer utilities {
   .outline-none {

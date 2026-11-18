@@ -20,6 +20,7 @@ import FoodStreakCard from './components/FoodStreakCard';
 import AchievementsPanel from './components/AchievementsPanel';
 import type { AchievementDefinition } from './achievements/catalog';
 import type { UnlockedAchievement } from './useAchievements';
+import { StateStorageNotice } from './ui/StateStorageNotice';
 
 const DashboardCharts = React.lazy(() => import('./charts'));
 
@@ -51,7 +52,6 @@ type WeeklyAnalytics = {
 
 type DashboardScreenProps = {
   currentUser: UserProfile | null;
-  paywallPlan: string;
   canUsePro: boolean;
   dailyStats: NutritionIntake;
   targets: NutritionIntake;
@@ -108,6 +108,7 @@ type DashboardScreenProps = {
   measurementsHistory?: UserProfile['measurementsHistory'];
   progressPhotos?: UserProfile['progressPhotos'];
   onOpenProgress: () => void;
+  onAddFood: () => void;
 };
 
 const formatShortDateTime = (iso?: string | null) => {
@@ -121,7 +122,6 @@ const formatShortDateTime = (iso?: string | null) => {
 
 export default function DashboardScreen({
   currentUser,
-  paywallPlan,
   canUsePro,
   dailyStats,
   targets,
@@ -170,6 +170,7 @@ export default function DashboardScreen({
   measurementsHistory,
   progressPhotos,
   onOpenProgress,
+  onAddFood,
 }: DashboardScreenProps) {
   const aiRefeedLabel =
     refeedSuggestion.type === 'refeed'
@@ -231,15 +232,23 @@ export default function DashboardScreen({
     : '—';
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="text-left">
-          <h1 className="text-[2.25rem] leading-none md:text-4xl font-black text-slate-200 mb-2">
-            Привет, <span className="text-slate-50">{currentUser?.name}</span>! 👋
-          </h1>
-          <p className="text-slate-400 font-medium text-base md:text-lg">Ваш путь к цели под контролем ({paywallPlan})</p>
+    <div className="space-y-6 animate-in fade-in duration-700">
+      <header className="rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between sm:gap-4 sm:p-5">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-black text-slate-50 sm:text-3xl">Сегодня</h1>
+          <p className="mt-1 text-sm text-slate-300">Привет, {currentUser?.name}!</p>
+          <p className="mt-3 text-sm text-slate-300">
+            <strong className="text-lg tabular-nums text-slate-100">{Math.round(dailyStats.calories).toLocaleString('ru-RU')}</strong>
+            {targets.calories > 0 && <> / {Math.round(targets.calories).toLocaleString('ru-RU')}</>} ккал
+          </p>
         </div>
-        <div className="w-full md:w-auto flex flex-col gap-3 bg-slate-900 p-2 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-800 overflow-hidden">
+        <button type="button" onClick={onAddFood} className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-2 text-base font-bold text-white hover:bg-indigo-700 sm:mt-0 sm:w-auto">
+          <Plus size={20} /> Добавить еду
+        </button>
+      </header>
+      <StateStorageNotice accountId={currentUser?.id} reserveSpace={false} />
+      <section className="grid min-w-0 gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-3 desktop-nav:grid-cols-2">
+        <div className="min-w-0 px-2 order-2 desktop-nav:order-none">
           <div className="px-2 pt-1">
             <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Отчёты</div>
             <p className="mt-1 text-[11px] text-slate-500 font-semibold">Экспорт дневного режима и детализации.</p>
@@ -247,14 +256,15 @@ export default function DashboardScreen({
           <div className="flex-1 min-w-0 flex flex-col gap-2 items-stretch px-1">
             <div className="grid grid-cols-2 gap-2">
               <button onClick={exportShortPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Краткий PDF</button>
-              <button onClick={exportDetailedPdf} className="p-3 bg-indigo-600 text-white rounded-[1.2rem] hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/20 text-center min-w-0"><Download size={14} /> Детальный PDF</button>
+              <button onClick={exportDetailedPdf} className="p-3 bg-slate-800 text-slate-200 rounded-[1.2rem] hover:bg-slate-700 transition-all flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest text-center min-w-0"><Download size={14} /> Детальный PDF</button>
             </div>
             <label className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest cursor-pointer px-2 py-1 rounded-xl bg-slate-950/40 border border-slate-800/60">
               <input type="checkbox" className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500" checked={pdfIncludeMealLog} onChange={(e) => setPdfIncludeMealLog(e.target.checked)} />
               Детально: лог еды
             </label>
           </div>
-          <div className="px-2 pt-2 border-t border-slate-800/70">
+        </div>
+          <div className="min-w-0 px-2 pt-1">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Вес сегодня</div>
@@ -266,15 +276,14 @@ export default function DashboardScreen({
             </div>
             <div className="mt-2 grid grid-cols-[minmax(0,1fr)_52px] gap-2 w-full">
               <div className="min-w-0 flex items-center bg-indigo-500/10 rounded-[1.5rem] px-4 py-2 border border-indigo-500/20">
-                <input type="number" aria-label="Вес сегодня" placeholder="90.0" disabled={weightSaving} className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder-indigo-700 tabular-nums min-w-0 disabled:opacity-60" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveWeight(); }} />
+                <input type="number" aria-label="Вес сегодня" placeholder="Введите вес" disabled={weightSaving} className="bg-transparent w-full text-sm focus:outline-none font-black text-indigo-100 placeholder:text-slate-400 tabular-nums min-w-0 disabled:opacity-60" value={newWeight} onChange={e => setNewWeight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveWeight(); }} />
                 <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-indigo-300">кг</span>
               </div>
               <button type="button" onClick={() => void saveWeight()} disabled={weightSaving} aria-busy={weightSaving} aria-label="Сохранить вес" className="shrink-0 w-[52px] h-[52px] bg-indigo-600 text-white rounded-[1.3rem] hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-wait shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center"><Plus size={18} /></button>
             </div>
             {weightSaveError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-300">{weightSaveError}</p>}
           </div>
-        </div>
-      </header>
+      </section>
 
       <section className="rounded-[2rem] md:rounded-[2.5rem] border border-slate-800 bg-slate-900/80 p-5 md:p-6 shadow-xl shadow-black/20 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-500">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

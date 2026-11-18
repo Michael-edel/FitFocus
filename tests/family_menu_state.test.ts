@@ -75,6 +75,16 @@ it('returns a pure preview and leaves canonical and legacy menu/item tables unto
   }
   expect(await generateFamilyMenu({ db: fixture.db, userId: owner, weekStart: week })).toEqual({ kind: 'state-required' });
 });
+it('keeps shared meals available below the supported nutrition age without a prescribed portion or calories', async () => {
+  fixture.sqlite.prepare('UPDATE family_members SET age=17, sex=?, height_cm=150, weight_kg=50 WHERE user_id=?')
+    .run('FEMALE', owner);
+  const preview = await generateFamilyMenu({ db: fixture.db, userId: owner, familyId, weekStart: week, preview: true });
+  expect(preview).toMatchObject({ kind: 'generated', menu: { shoppingListItems: [] } });
+  if (preview.kind !== 'generated') throw new Error('Expected a family menu');
+  const portion = (preview.menu as FamilyWeeklyMenu).days[0].breakfast.portions[owner];
+  expect(portion).toContain('Овсянка');
+  expect(portion).not.toMatch(/\d+\s*(г|ккал)/);
+});
 const migration = () => readFileSync(new URL('../migrations/0021_family_menu_generations.sql', import.meta.url), 'utf8');
 function seedLegacy() {
   for (const trigger of ['family_menu_legacy_insert_block', 'family_menu_legacy_update_block', 'family_items_legacy_insert_block', 'family_items_legacy_update_block']) fixture.sqlite.exec(`DROP TRIGGER ${trigger}`);

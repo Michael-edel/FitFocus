@@ -6,6 +6,7 @@ import { aggregateShoppingRows, normalizeShoppingIngredient } from './ingredient
 import { isJsonObject, safeJsonParse } from './json';
 import { requireFamilyPlan } from './plans';
 import { calculateDailyTargets } from '../../../domain/profileMath';
+import { supportsNutritionTargets } from '../../../domain/nutritionAge';
 import { ActivityLevel, Gender, Goal } from '../../../domain/types';
 
 type ItemKey =
@@ -44,11 +45,11 @@ type RestrictionsPayload = { allergens?: unknown; intolerances?: unknown; exclud
 type SharedMeal = { title: string; items: ItemKey[] };
 type SharedDay = { name: string; breakfast: SharedMeal; lunch: SharedMeal; dinner: SharedMeal; snack: SharedMeal };
 type SharedMenu = { version: number; days: SharedDay[] };
-type PortionIngredient = { key: ItemKey; originalKey: ItemKey; name: string; grams: number };
+type PortionIngredient = { key: ItemKey; originalKey: ItemKey; name: string; grams?: number };
 type PortionMeal = { title: string; ingredients: PortionIngredient[] };
 type PortionDay = { name: string; meals: Record<'breakfast' | 'lunch' | 'dinner' | 'snack', PortionMeal> };
 type PortionTotals = { name: string; grams: number };
-type MemberPortions = { portions: PortionDay[]; totals: PortionTotals[]; kcalPerDay: number; replacements: Record<string, string> };
+type MemberPortions = { portions: PortionDay[]; totals: PortionTotals[]; kcalPerDay: number | null; replacements: Record<string, string> };
 type FamilyMemberRow = { user_id: string; goal?: string | null; sex?: string | null; age?: number | null; height_cm?: number | null; weight_kg?: number | null; activity?: number | null; restrictions_json?: string | null };
 type WeeklyMenuRow = { id?: string };
 
@@ -97,7 +98,8 @@ function buildDeterministicSharedMenu(): SharedMenu {
   return { version: 1, days: days.map((name) => ({ name, ...sharedDay() })) };
 }
 
-function memberTargetKcal(member: FamilyMemberRow): number {
+function memberTargetKcal(member: FamilyMemberRow): number | null {
+  if (!supportsNutritionTargets(member.age)) return null;
   const goal = String(member.goal || '').toUpperCase() === 'LOSS' ? Goal.LOSS : Goal.MAINTAIN;
   const sex = String(member.sex || '').toUpperCase();
   const age = Number(member.age || 0), height = Number(member.height_cm || 0), weight = Number(member.weight_kg || 0), activity = Number(member.activity || 0);
@@ -112,8 +114,8 @@ function memberTargetKcal(member: FamilyMemberRow): number {
   return goal === Goal.LOSS ? 1700 : 2000;
 }
 
-function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number, restrictions: MemberRestrictions): MemberPortions {
-  const factor = Math.max(0.6, Math.min(1.8, kcalPerDay / BASE_DAY_KCAL));
+function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number | null, restrictions: MemberRestrictions): MemberPortions {
+  const factor = kcalPerDay === null ? null : Math.max(0.6, Math.min(1.8, kcalPerDay / BASE_DAY_KCAL));
   const totals: Record<string, number> = {}, replacements: Record<string, string> = {};
   const portions = shared.days.map((day) => {
     const meals = {} as Record<'breakfast' | 'lunch' | 'dinner' | 'snack', PortionMeal>;
@@ -124,7 +126,9 @@ function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number, restrict
           ? (SUBSTITUTES[key] || []).find((candidate) => !isRestrictedItem(candidate, restrictions)) || key
           : key;
         if (resolvedKey !== key) replacements[ITEM_META[key].name] = ITEM_META[resolvedKey].name;
-        const meta = ITEM_META[resolvedKey], grams = Math.max(1, Math.round(meta.grams * factor));
+        const meta = ITEM_META[resolvedKey];
+        if (factor === null) return { key: resolvedKey, originalKey: key, name: meta.name };
+        const grams = Math.max(1, Math.round(meta.grams * factor));
         totals[meta.name] = (totals[meta.name] || 0) + grams;
         return { key: resolvedKey, originalKey: key, name: meta.name, grams };
       });
@@ -135,7 +139,8 @@ function buildPortionsForMember(shared: SharedMenu, kcalPerDay: number, restrict
   return { portions, totals: Object.entries(totals).map(([name, grams]) => ({ name, grams })).sort((a, b) => a.name.localeCompare(b.name, 'ru')), kcalPerDay, replacements };
 }
 
-function formatMealPortion(ingredients: { name: string; grams: number }[], kcal: number) {
+function formatMealPortion(ingredients: PortionIngredient[], kcal: number | null) {
+  if (kcal === null) return `${ingredients.map((ingredient) => ingredient.name).join(' + ')} (без расчёта порции и калорий)`;
   return `${ingredients.map((ingredient) => `${ingredient.name} ${Math.max(1, Math.round(Number(ingredient.grams || 0)))}г`).join(' + ')} (≈${Math.max(1, Math.round(kcal))} ккал)`;
 }
 
@@ -187,8 +192,11 @@ export async function generateFamilyMenu({ db, userId, weekStart, preview, famil
       const buildMeal = (mealKey: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
         const portions: Record<string, string> = {};
         for (const member of memberList) {
-          const memberId = String(member.user_id), meal = portionsByUser[memberId]?.portions?.[dayIndex]?.meals?.[mealKey];
-          portions[memberId] = formatMealPortion(Array.isArray(meal?.ingredients) ? meal.ingredients : [], memberTargetKcal(member) * mealShares[mealKey]);
+          const memberId = String(member.user_id);
+          const memberPortions = portionsByUser[memberId];
+          const meal = memberPortions.portions[dayIndex].meals[mealKey];
+          const dailyKcal = memberPortions.kcalPerDay;
+          portions[memberId] = formatMealPortion(meal.ingredients, dailyKcal === null ? null : dailyKcal * mealShares[mealKey]);
         }
         return { base: String(day[mealKey]?.title || ''), portions };
       };

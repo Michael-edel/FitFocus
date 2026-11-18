@@ -24,6 +24,7 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
   const sessions = await allRows(db, 'SELECT id, created_at, expires_at, revoked, user_agent, ip FROM sessions WHERE user_id = ? ORDER BY created_at DESC', userId);
   const roles = await allRows(db, 'SELECT role FROM user_roles WHERE user_id = ? ORDER BY role', userId);
   const subscriptions = await allRows(db, 'SELECT plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at FROM subscriptions WHERE user_id = ?', userId);
+  const stripeSubscriptions = await allRows(db, 'SELECT plan, status, stripe_customer_id, stripe_subscription_id, current_period_end, updated_at FROM stripe_subscriptions WHERE user_id = ?', userId);
   const usageDaily = await allRows(db, 'SELECT day, feature, count FROM usage_daily WHERE user_id = ? ORDER BY day DESC, feature', userId);
   const aiEvents = await allRows(db, 'SELECT id, ts, feature, status, latency_ms, safe_mode, model, input_tokens, output_tokens, total_tokens, estimated_cost_usd, is_fallback, request_json, response_json, error FROM ai_events WHERE user_id = ? ORDER BY ts DESC', userId);
   const aiRateLimits = await allRows(db, 'SELECT kind, bucket_key, feature, window_start_ms, count, updated_at FROM ai_rate_limits WHERE user_id = ? ORDER BY updated_at DESC', userId);
@@ -61,6 +62,7 @@ export async function buildUserDataExport(db: D1Database, user: SessionUser) {
     sessions,
     roles,
     subscriptions,
+    stripe_subscriptions: stripeSubscriptions,
     usage_daily: usageDaily,
     ai_events: aiEvents,
     ai_rate_limits: aiRateLimits,

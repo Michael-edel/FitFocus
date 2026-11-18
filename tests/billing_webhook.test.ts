@@ -69,9 +69,9 @@ describe('billing webhook subscription updates', () => {
     const old = subscription('sub-old', 10);
     await apply(tracked);
 
-    await expect(apply({ ...old, status: 'canceled' })).resolves.toMatchObject({ reason: 'OTHER_SUBSCRIPTION' });
+    await expect(apply({ ...old, status: 'canceled' })).resolves.toMatchObject({ ok: true });
     await expect(applyStripeSubscriptionUpdate(db, old, prices, async id => id === old.id ? old : tracked))
-      .resolves.toMatchObject({ reason: 'OTHER_SUBSCRIPTION' });
+      .resolves.toMatchObject({ ok: true });
     expect(await loadActivePlan(db, 'user-1')).toBe('family');
     expect(sqlite.prepare('SELECT stripe_subscription_id FROM subscriptions').get()?.stripe_subscription_id).toBe(tracked.id);
   });
@@ -85,7 +85,26 @@ describe('billing webhook subscription updates', () => {
       .resolves.toMatchObject({ ok: true, plan: 'family' });
     expect(await loadActivePlan(db, 'user-1')).toBe('family');
     await expect(apply({ ...next, status: 'canceled' })).resolves.toMatchObject({ ok: true, status: 'canceled', plan: 'free' });
+    expect(await loadActivePlan(db, 'user-1')).toBe('pro');
+    await apply({ ...previous, status: 'canceled' });
     expect(await loadActivePlan(db, 'user-1')).toBe('free');
+  });
+
+  it('restores a paid subscription lost from the old single-row projection', async () => {
+    const { db, sqlite } = fixture();
+    const current = subscription('sub-current', 20, prices.PRICE_FAMILY_MONTHLY);
+    const older = subscription('sub-historical', 10);
+    sqlite.prepare(`INSERT INTO subscriptions (user_id, plan, status, stripe_subscription_id, updated_at)
+      VALUES ('user-1', 'family', 'active', ?, 1)`).run(current.id);
+    const canceled = { ...current, status: 'canceled' };
+    const result = await applyStripeSubscriptionUpdate(db, canceled, prices, async () => canceled, async function* (userId) {
+      expect(userId).toBe('user-1');
+      yield older;
+      yield { ...older, id: 'sub-unrelated', metadata: { ff_uid: 'other' } };
+    });
+    expect(result.ok).toBe(true);
+    expect(await loadActivePlan(db, 'user-1')).toBe('pro');
+    expect(sqlite.prepare(`SELECT count(*) AS count FROM stripe_subscriptions WHERE stripe_subscription_id = 'sub-unrelated'`).get()?.count).toBe(0);
   });
 
   it('rejects a Stripe result fetched across a concurrent local update', async () => {
@@ -98,6 +117,21 @@ describe('billing webhook subscription updates', () => {
     });
     expect(result).toMatchObject({ reason: 'CONCURRENT_SUBSCRIPTION_UPDATE' });
     expect(await loadActivePlan(db, 'user-1')).toBe('family');
+  });
+
+  it('keeps the bound account when Stripe metadata still has its previous account ID', async () => {
+    const { db, sqlite, apply } = fixture();
+    const pro = subscription('sub-pro');
+    const family = subscription('sub-family', 20, prices.PRICE_FAMILY_MONTHLY);
+    await apply(pro);
+    await apply(family);
+    sqlite.exec(`INSERT INTO users (id, created_at) VALUES ('migrated-user', 1);
+      UPDATE subscriptions SET user_id = 'migrated-user';
+      UPDATE stripe_subscriptions SET user_id = 'migrated-user';`);
+    await expect(apply({ ...family, status: 'canceled' }))
+      .resolves.toMatchObject({ ok: true, user_id: 'migrated-user' });
+    expect(await loadActivePlan(db, 'migrated-user')).toBe('pro');
+    expect(await loadActivePlan(db, 'user-1')).toBe('free');
   });
 
   it('asks Stripe to retry when retrieval fails and leaves the current plan in place', async () => {

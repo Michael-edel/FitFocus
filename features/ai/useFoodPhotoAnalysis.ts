@@ -5,16 +5,13 @@ import { isExpectedAiSessionFailure } from '../../services/frontendErrors';
 import type { OutboxCommitGuard, OutboxReadGuard, OutboxOperation } from '../../storage/durableOutbox';
 import { AiProxyError, type FoodPhotoAnalysisResult } from '../../geminiService';
 import type { FastLogItem } from '../../storage/foodDiary';
-import type { FoodInsight, FoodItem } from '../../types';
+import type { FoodInsight } from '../../types';
 import { AiActionScope } from './actionScope';
 import { RejectedFoodPhotoError } from '../../services/foodPhotoGuard';
 
-export type FoodPhotoInsight = {
-  id: string;
-  photo: string;
-  name: string;
-  insight: FoodInsight;
-  nonFood?: boolean;
+export type FoodPhotoDraft = {
+  item: FastLogItem & { insight: FoodInsight };
+  guard: OutboxCommitGuard;
 };
 
 type CompressedPhoto = {
@@ -74,13 +71,8 @@ export type FoodPhotoAnalysisRunParams = {
   setScanning: (scanning: boolean) => void;
   compressPhoto: (file: File) => Promise<CompressedPhoto>;
   analyzePhoto: (base64: string, session: AiSession) => Promise<FoodPhotoAnalysisResult | null>;
-  addFoodToDiary: (
-    item: FastLogItem,
-    guard: OutboxCommitGuard,
-    isCurrent: () => boolean,
-  ) => Promise<FoodItem | undefined>;
   incrementUsage: (guard: OutboxCommitGuard) => Promise<OutboxOperation | null>;
-  showInsight: (insight: FoodPhotoInsight) => void;
+  showDraft: (draft: FoodPhotoDraft) => void;
   showRejection: (message: string | null) => void;
   logError?: (error: unknown) => void;
   prepareSession?: typeof prepareAiSession;
@@ -131,9 +123,8 @@ export async function processFoodPhotoFiles({
   setScanning,
   compressPhoto,
   analyzePhoto,
-  addFoodToDiary,
   incrementUsage,
-  showInsight,
+  showDraft,
   showRejection,
   logError = console.error,
   prepareSession = prepareAiSession,
@@ -184,26 +175,14 @@ export async function processFoodPhotoFiles({
         if (result.nonFood !== false) throw new RejectedFoodPhotoError('non_food');
 
         const guard: OutboxCommitGuard = { readGuard: session.guard, canCommit: current };
-        const item = buildPhotoDiaryItem(result, photo);
-        const newEntry = await addFoodToDiary(item, guard, current);
-        if (!current() || !await stillCurrent(session, current, assertSession)) break;
-        if (!newEntry) {
-          reportFailure('Не удалось сохранить фото в дневнике.');
-          continue;
-        }
-        processed += 1;
-
         const usageOperation = await incrementUsage(guard);
         if (!current() || !await stillCurrent(session, current, assertSession)) break;
-        if (usageOperation?.status !== 'pending') continue;
-
-        showInsight({
-          id: newEntry.id,
-          photo: photo.dataUrl,
-          name: result.name,
-          insight: item.insight,
-          nonFood: newEntry.nonFood === true,
-        });
+        if (usageOperation?.status !== 'pending') {
+          reportFailure('Не удалось сохранить состояние анализа.');
+          continue;
+        }
+        showDraft({ item: buildPhotoDiaryItem(result, photo), guard });
+        processed += 1;
       } catch (error) {
         if (!await stillCurrent(session, current, assertSession) || isExpectedAiSessionFailure(error)) break;
         if (error instanceof RejectedFoodPhotoError) {
@@ -239,7 +218,7 @@ export async function processFoodPhotoFiles({
   return processed;
 }
 
-type UseFoodPhotoAnalysisParams = Omit<FoodPhotoAnalysisRunParams, 'files' | 'controller'>;
+type UseFoodPhotoAnalysisParams = Omit<FoodPhotoAnalysisRunParams, 'files' | 'controller'> & { clearDrafts: () => void };
 
 export function useFoodPhotoAnalysis({
   userId,
@@ -250,9 +229,9 @@ export function useFoodPhotoAnalysis({
   setScanning,
   compressPhoto,
   analyzePhoto,
-  addFoodToDiary,
   incrementUsage,
-  showInsight,
+  showDraft,
+  clearDrafts,
   showRejection,
   logError,
   prepareSession,
@@ -262,7 +241,7 @@ export function useFoodPhotoAnalysis({
   useLayoutEffect(() => {
     scope.activate();
     setScanning(false);
-    const hide = () => scope.invalidate();
+    const hide = () => { scope.invalidate(); clearDrafts(); };
     const show = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
       scope.activate();
@@ -275,11 +254,12 @@ export function useFoodPhotoAnalysis({
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
     };
-  }, [scope, setScanning]);
+  }, [scope, setScanning, clearDrafts]);
 
   return useCallback((files: File[]) => {
     const attempt = scope.begin();
     if (!attempt) return Promise.resolve(0);
+    clearDrafts();
     return processFoodPhotoFiles({
       userId,
       loginGuard,
@@ -291,14 +271,13 @@ export function useFoodPhotoAnalysis({
       setScanning: scanning => { if (attempt.isCurrent()) setScanning(scanning); },
       compressPhoto,
       analyzePhoto,
-      addFoodToDiary,
       incrementUsage,
-      showInsight: insight => { if (attempt.isCurrent()) showInsight(insight); },
+      showDraft: draft => { if (attempt.isCurrent()) showDraft(draft); },
       showRejection: message => { if (attempt.isCurrent()) showRejection(message); },
       logError,
       prepareSession,
       assertSession,
     }).finally(attempt.finish);
-  }, [addFoodToDiary, analyzePhoto, assertSession, compressPhoto, incrementUsage, isCurrentSession, loginGuard, logError,
-    openPaywall, prepareSession, remainingScans, scope, setScanning, showInsight, showRejection, userId]);
+  }, [analyzePhoto, assertSession, clearDrafts, compressPhoto, incrementUsage, loginGuard, logError,
+    openPaywall, prepareSession, remainingScans, scope, setScanning, showDraft, showRejection, userId]);
 }

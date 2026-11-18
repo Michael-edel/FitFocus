@@ -50,7 +50,8 @@ async function handleWebhookPost({ request, env }: { request: Request; env: Env 
       event.type === "customer.subscription.deleted") {
     try {
       const result = await applyStripeSubscriptionUpdate(env.DB, event.data.object as SubscriptionLike, env,
-        id => stripe.subscriptions.retrieve(id));
+        id => stripe.subscriptions.retrieve(id),
+        uid => stripe.subscriptions.search({ query: `metadata["ff_uid"]:${JSON.stringify(uid)}`, limit: 100 }));
       if (result.reason === 'CONCURRENT_SUBSCRIPTION_UPDATE') {
         return new Response("Webhook Error: please retry", { status: 503 });
       }

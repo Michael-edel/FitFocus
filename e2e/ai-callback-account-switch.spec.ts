@@ -2847,6 +2847,7 @@ test('an open food insight from account A is hidden after another tab activates 
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
   await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
@@ -2884,6 +2885,7 @@ test('an open food insight and editor from a retired session are hidden after sa
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
   await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
@@ -3682,7 +3684,7 @@ test('food photo analysis rejects a depiction before saving nutrition', async ({
   expect(fixture.counts.profileWrites).toEqual(profileWritesBefore);
 });
 
-test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
+test('food photo analysis persists the diary entry and history only after confirmation', async ({ page }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -3697,6 +3699,14 @@ test('food photo analysis persists the diary entry, history and usage for its ac
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
 
+  const confirm = page.getByRole('dialog', { name: 'Подтвердите запись по фото' });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole('button', { name: 'Подтвердить и записать' })).toBeInViewport({ ratio: 1 });
+  const beforeConfirm = await readDurableSnapshot(page);
+  expect(JSON.parse(rawValue(beforeConfirm, diaryKey(accountA.id)) ?? '[]')).toEqual([]);
+  expect(JSON.parse(rawValue(beforeConfirm, historyKey(accountA.id)) ?? '[]')).toEqual([]);
+  await confirm.getByRole('textbox', { name: 'Ккал', exact: true }).fill('330');
+  await confirm.getByRole('button', { name: 'Подтвердить и записать' }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3707,8 +3717,8 @@ test('food photo analysis persists the diary entry, history and usage for its ac
 
   expect(snapshot.activeSession?.accountId).toBe(accountA.id);
   expect(profile?.usage.aiFoodPhotoCount).toBe(1);
-  expect(diary).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
-  expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
+  expect(diary).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 330 })]));
+  expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 330 })]));
   expect(operationsFor(snapshot, accountA)).toEqual([]);
   expect(fixture.counts.profileWrites).toEqual([accountA.id]);
   expect(fixture.counts.achievementChecks).toBeGreaterThan(0);
@@ -3731,6 +3741,10 @@ test('food photo analysis retries a batch cooldown and saves both photos once', 
 
   await expect.poll(() => fixture.counts.completedAiFeatures.filter(feature => feature === 'foodphoto')).toHaveLength(2);
   await expect(page.getByText('Анализирую фото...')).toHaveCount(0);
+  const confirm = page.getByRole('button', { name: 'Подтвердить и записать', exact: true });
+  await confirm.click();
+  await confirm.click();
+  await expect(confirm).toHaveCount(0);
   const snapshot = await readDurableSnapshot(page);
   const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
   const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ id: string; name: string }>;
@@ -3738,6 +3752,57 @@ test('food photo analysis retries a batch cooldown and saves both photos once', 
   expect(diary.map(item => item.name)).toEqual(['Тестовый омлет', 'Тестовый омлет']);
   expect(new Set(diary.map(item => item.id)).size).toBe(2);
   expect(profile?.usage.aiFoodPhotoCount).toBe(2);
+});
+
+test('food photo analysis can be discarded and the first meal can be written manually', async ({ page }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'discard.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>'),
+  });
+  const preview = page.getByRole('dialog', { name: 'Подтвердите запись по фото' });
+  await preview.getByRole('button', { name: 'Отмена' }).click();
+  expect(JSON.parse(rawValue(await readDurableSnapshot(page), diaryKey(accountA.id)) ?? '[]')).toEqual([]);
+
+  await page.getByRole('button', { name: 'Добавить вручную' }).click();
+  const form = page.getByRole('dialog', { name: 'Добавить блюдо вручную' });
+  await expect(form).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Добавить в дневник' })).toBeInViewport({ ratio: 1 });
+  await form.getByRole('textbox', { name: 'Название' }).fill('Каша вручную');
+  await form.getByRole('textbox', { name: 'Ккал', exact: true }).fill('245');
+  await form.getByText('Детали записи', { exact: true }).click();
+  await form.getByLabel('Вес порции, г (если известен)').fill('180');
+  await form.getByRole('button', { name: 'Добавить в дневник' }).click();
+  await expect(page.getByText('Каша вручную', { exact: true }).first()).toBeVisible();
+  const diary = JSON.parse(rawValue(await readDurableSnapshot(page), diaryKey(accountA.id)) ?? '[]');
+  expect(diary).toEqual([expect.objectContaining({ name: 'Каша вручную', calories: 245, portionGrams: 180 })]);
+});
+
+test('mobile landscape keeps food upload and navigation available', async ({ page }, info) => {
+  test.skip(info.project.name !== 'android-chrome', 'Checks the Android landscape breakpoint.');
+  await page.setViewportSize({ width: 802, height: 350 });
+  await installAccountApi(page, { current: accountA, profile: profileFor(accountA.id) });
+  await openApp(page, '/#nutrition');
+
+  const upload = page.getByText('Загрузить', { exact: true });
+  await expect(upload).toBeInViewport({ ratio: 1 });
+  await expect(page.getByText('Без лимита', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(802);
+  await expect.poll(() => upload.evaluate(element =>
+    element.getBoundingClientRect().bottom < (document.querySelector('nav')?.getBoundingClientRect().top ?? 0),
+  )).toBe(true);
+
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  const menu = page.getByRole('dialog', { name: 'Ещё разделы' });
+  await expect(menu.getByRole('button', { name: 'Инструкция', exact: true })).toHaveCount(1);
+  await expect(menu.getByRole('button', { name: 'Настройки', exact: true })).toBeInViewport({ ratio: 1 });
+  await menu.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('button', { name: 'Выйти из аккаунта', exact: true })).toBeVisible();
 });
 
 test('a favorite recipe draft stays open when its durable commit fails and can be retried', async ({ page }) => {
@@ -3806,6 +3871,7 @@ test('a held step-by-step recipe response cannot update the diary or usage after
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3870,6 +3936,7 @@ test('a held step-by-step recipe response cannot update after the same account s
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3960,6 +4027,7 @@ test('step-by-step recipe generation and favorite saving commit to the active se
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);

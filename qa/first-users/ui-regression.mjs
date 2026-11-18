@@ -33,7 +33,7 @@ try {
   const age=page.getByRole('spinbutton',{name:'Возраст',exact:true});
   await age.fill('999');
   await expect(create).toBeDisabled();
-  await expect(page.locator('#registration-age-help')).toContainText('от 1 до 130');
+  await expect(page.locator('#registration-age-help')).toContainText('от 19 до 78');
   await expect(page.getByText('AI Инициализация',{exact:true})).toHaveCount(0);
   expect(mutationCounts).toEqual({profile:0,ai:0});
   await page.screenshot({path:resolve(artifacts,'regression-age999.png')});
@@ -41,7 +41,10 @@ try {
   await page.goForward({waitUntil:'networkidle'});
   await expect(age).toHaveValue('999');
   await expect(create).toBeDisabled();
+  await page.getByRole('spinbutton',{name:'Вес (кг)',exact:true}).fill('72');
+  await page.getByRole('spinbutton',{name:'Рост (см)',exact:true}).fill('170');
   await age.fill('31');
+  await page.getByText('Настройки цели',{exact:true}).click();
   const intensity=page.getByRole('spinbutton',{name:'Дефицит (ккал/день)',exact:true});
   await intensity.fill('1000');
   const ack=page.getByRole('checkbox',{name:/Я понимаю риски/});
@@ -73,6 +76,9 @@ try {
     await cdp.send('Network.enable');
     await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:400,downloadThroughput:500000/8,uploadThroughput:500000/8,connectionType:'cellular3g'});
     await login(page,port);
+    await page.getByRole('spinbutton',{name:'Вес (кг)',exact:true}).fill('72');
+    await page.getByRole('spinbutton',{name:'Рост (см)',exact:true}).fill('170');
+    await page.getByRole('spinbutton',{name:'Возраст',exact:true}).fill('32');
     const create=page.getByRole('button',{name:'Создать AI-план',exact:true});
     await create.click();
     await expect(page.getByRole('heading',{name:/Ваш AI/})).toBeVisible({timeout:60000});

@@ -67,7 +67,7 @@ type AppWorkspaceData = {
     loginGuard: OutboxReadGuard | null;
     isCurrentSession: () => boolean;
   };
-  nutrition: Record<string, PassThroughProp>;
+  nutrition: Record<string, PassThroughProp> & { onAddManualFood: () => void };
   progress: Record<string, PassThroughProp> & {
     onPatchUser?: (patch: Partial<UserProfile>) => Promise<boolean | void> | boolean | void;
     syncState?: PassThroughProp;
@@ -190,7 +190,6 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
           <DashboardScreen
             key={screenSessionKey}
             currentUser={currentUser}
-            paywallPlan={paywall.plan}
             canUsePro={paywall.canUsePro}
             dailyStats={dailyStats}
             targets={targets}
@@ -238,6 +237,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             achievementsLoading={achievementsLoading}
             onDismissAchievementToast={dismissAchievementToast}
             onOpenProgress={() => setActiveTab('progress')}
+            onAddFood={() => setActiveTab('nutrition')}
           />
         </React.Suspense>
       )}
@@ -340,6 +340,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
         <React.Suspense fallback={<div className="py-16 text-center text-slate-500 font-medium">Загрузка анализа еды...</div>}>
           <NutritionScreen
             key={screenSessionKey}
+            accountId={currentUser?.id}
             cameraOpen={cameraOpen}
             setCameraOpen={setCameraOpen}
             cameraFacing={cameraFacing}
@@ -353,6 +354,7 @@ export default function AppWorkspace({ workspaceProps }: AppWorkspaceProps) {
             setShowSearchResults={setShowSearchResults}
             searchResults={searchResults}
             addFoodToDiary={addFoodToDiary}
+            onAddManualFood={nutrition.onAddManualFood}
             foodDiary={foodDiary}
             selectedFoodIds={selectedFoodIds}
             toggleFoodSelected={toggleFoodSelected}

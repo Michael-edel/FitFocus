@@ -54,6 +54,12 @@ describe('retained release integrity', () => {
     writeFileSync(resolve(root, 'release.json'), JSON.stringify(manifest));
     expect(() => verifyReleaseArtifact(root)).toThrow('storage contract');
   });
+  it('requires the Stripe migration when the artifact declares D1 0022', () => {
+    const { root, manifest } = fixture();
+    manifest.compatibility.d1Migration = '0022_stripe_subscriptions.sql';
+    writeFileSync(resolve(root, 'release.json'), JSON.stringify(manifest));
+    expect(() => verifyReleaseArtifact(root)).toThrow('Missing release file: migrations/0022_stripe_subscriptions.sql');
+  });
   it('refuses mutable references and an output inside the source checkout', () => {
     expect(() => buildReleaseArtifact({ sourceSha: 'HEAD', output: '/unused' })).toThrow('immutable Git');
     expect(() => buildReleaseArtifact({ sourceSha: 'a'.repeat(40), output: resolve('uncreated-release-output') }))

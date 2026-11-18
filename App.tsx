@@ -106,7 +106,8 @@ import { useFoodDiary } from './features/diary/useFoodDiary';
 import { useCoachAdvice } from './features/ai/useCoachAdvice';
 import { usePlateauExplanation } from './features/ai/usePlateauExplanation';
 import { AiActionScope } from './features/ai/actionScope';
-import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis } from './features/ai/useFoodPhotoAnalysis';
+import { getRemainingFoodPhotoScans, useFoodPhotoAnalysis, type FoodPhotoDraft } from './features/ai/useFoodPhotoAnalysis';
+import { supportsNutritionTargets } from './domain/nutritionAge';
 import { useWeeklyMenuGeneration } from './features/ai/useWeeklyMenuGeneration';
 import { retryLastAiAction } from './features/ai/aiRetry';
 import { useWeeklyAiReport } from './features/ai/useWeeklyAiReport';
@@ -218,15 +219,17 @@ const INITIAL_HABITS: UserHabit[] = [
   { id: 'h_sleep', title: 'Сон 8 часов', goal: 8, current: 0, unit: 'ч.', streak: 0, lastCompletedDate: null }
 ];
 
+const EMPTY_PHOTO_DRAFTS: Array<FoodPhotoDraft & { form: FoodCorrectionDraft }> = [];
+
 const INITIAL_REGISTRATION_DATA: RegistrationData = {
   name: '',
   gender: Gender.MALE,
-  weight: 70,
-  height: 170,
-  age: 25,
+  weight: 0,
+  height: 0,
+  age: 0,
   activityLevel: ActivityLevel.MODERATELY_ACTIVE,
   goal: Goal.LOSS,
-  targetWeight: 65,
+  targetWeight: 0,
   dietary: { allergens: [], intolerances: [], excludedFoods: [], severity: 'strict', notes: '' },
   medicalRestrictions: '',
   bloodPressureSystolic: 0,
@@ -568,6 +571,13 @@ const App: React.FC = () => {
     rootAccountSessionScope,
     null,
   );
+  const { value: manualFood, setValue: setManualFood } = useAccountScopedUiState<FoodCorrectionDraft | null>(
+    rootAccountSessionScope, null,
+  );
+  const { value: photoDrafts, setValue: setPhotoDrafts } = useAccountScopedUiState<Array<FoodPhotoDraft & { form: FoodCorrectionDraft }>>(
+    rootAccountSessionScope, EMPTY_PHOTO_DRAFTS,
+  );
+  const photoDraft = photoDrafts[0];
   const insightEntry = useMemo(() => (insightModal ? foodDiary.find(it => it.id === insightModal.id) ?? null : null), [insightModal, foodDiary]);
   const { activeTab, setActiveTab } = useHashTabNavigation('dashboard');
   const { value: mobileMoreOpen, setValue: setMobileMoreOpen } = useAccountScopedUiState(rootAccountSessionScope, false);
@@ -864,12 +874,12 @@ const App: React.FC = () => {
   });
 
   const targets = useMemo(() => {
-    if (!currentUser) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
+    if (!currentUser || !supportsNutritionTargets(currentUser.age)) return { calories: 0, protein: 0, fat: 0, carbs: 0 };
     return calculateDailyTargets(currentUser);
   }, [currentUser]);
 
   const weekly = useMemo(() => {
-    if (!currentUser) return null;
+    if (!currentUser || !supportsNutritionTargets(currentUser.age)) return null;
     return generateWeeklyIntelligence(currentUser, foodDiary, habits, targets.calories);
   }, [currentUser, foodDiary, habits, targets.calories]);
 
@@ -1177,7 +1187,7 @@ const App: React.FC = () => {
   const weightDeltaN = adaptationWeightProgress.weightDelta;
 
   const expectedN = useMemo(
-    () => currentUser ? calculateExpectedWeightDelta(currentUser, deltaDays) : 0,
+    () => currentUser && supportsNutritionTargets(currentUser.age) ? calculateExpectedWeightDelta(currentUser, deltaDays) : 0,
     [currentUser, deltaDays],
   );
 
@@ -1192,12 +1202,12 @@ const App: React.FC = () => {
   );
 
   const adaptationStatus = useMemo(
-    () => currentUser ? getAdaptationStatus(currentUser.goal, adaptationIndex) : { label: '—', color: 'text-slate-400', level: 'none' as const },
+    () => currentUser && supportsNutritionTargets(currentUser.age) ? getAdaptationStatus(currentUser.goal, adaptationIndex) : { label: '—', color: 'text-slate-400', level: 'none' as const },
     [currentUser, adaptationIndex],
   );
 
   const refeedSuggestion = useMemo(
-    () => currentUser ? getRefeedSuggestion(currentUser.goal, compliancePct, adaptationIndex, targets.calories) : { type: 'stay' as const },
+    () => currentUser && supportsNutritionTargets(currentUser.age) ? getRefeedSuggestion(currentUser.goal, compliancePct, adaptationIndex, targets.calories) : { type: 'stay' as const },
     [currentUser, compliancePct, adaptationIndex, targets.calories],
   );
 
@@ -1225,6 +1235,13 @@ const App: React.FC = () => {
     }), guard);
   }, [currentUser, persistUser]);
 
+  const clearPhotoDrafts = useCallback(() => setPhotoDrafts(EMPTY_PHOTO_DRAFTS), [setPhotoDrafts]);
+  const queuePhotoDraft = useCallback((draft: FoodPhotoDraft) => {
+    const timestamp = new Date().toISOString();
+    const mealType = inferMealType(timestamp);
+    const form = buildFoodCorrectionDraft({ ...draft.item, id: crypto.randomUUID(), timestamp }, mealType);
+    setPhotoDrafts(current => [...current, { ...draft, form }]);
+  }, [setPhotoDrafts]);
   const processPhotoFiles = useFoodPhotoAnalysis({
     userId: currentUser?.id,
     loginGuard: loginReadGuard,
@@ -1234,9 +1251,9 @@ const App: React.FC = () => {
     setScanning: setIsScanning,
     compressPhoto: compressFoodPhoto,
     analyzePhoto: analyzeFoodPhoto,
-    addFoodToDiary: addFoodToDiaryGuarded,
     incrementUsage: incrementPhotoUsage,
-    showInsight: setInsightModal,
+    showDraft: queuePhotoDraft,
+    clearDrafts: clearPhotoDrafts,
     showRejection: setPhotoRejection,
   });
 
@@ -1637,7 +1654,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
   });
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !supportsNutritionTargets(currentUser.age)) return;
     if (currentUser.aiPlan) return;
     if (hasProfileDraftRef.current) return;
     if (loginReadGuard && loginReadGuard.accountId !== currentUser.id) return;
@@ -1677,7 +1694,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     return currentUser?.tasks?.find(t => t.date === today);
   }, [currentUser]);
 
-  const plateau = useMemo(() => currentUser ? detectPlateau(currentUser) : false, [currentUser]);
+  const plateau = useMemo(() => Boolean(currentUser && supportsNutritionTargets(currentUser.age) && detectPlateau(currentUser)), [currentUser]);
 
   const aiBadge = useMemo(() => buildAiActivityBadge(aiStatus), [aiStatus]);
 
@@ -1827,7 +1844,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       weeklyMenuLoading,
       handleGenerateWeeklyMenu,
       weeklyMenuError,
-      currentUserAiPlan: currentUser?.aiPlan,
+      currentUserAiPlan: currentUser && supportsNutritionTargets(currentUser.age) ? currentUser.aiPlan : null,
       currentUserTargetWeight: currentUser?.targetWeight,
       formatGramsPretty,
       MealParts,
@@ -1866,6 +1883,13 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       setShowSearchResults,
       searchResults,
       addFoodToDiary,
+      onAddManualFood: () => {
+        const timestamp = new Date().toISOString();
+        setManualFood({
+          id: 'manual', timestamp, mealType: inferMealType(timestamp),
+          name: '', calories: '', protein: '', fat: '', carbs: '', ingredientsText: '', notesText: '', nonFood: false,
+        });
+      },
       foodDiary,
       selectedFoodIds,
       toggleFoodSelected,
@@ -1989,8 +2013,10 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
   );
 
   return (
-    <div className="min-h-[100dvh] md:min-h-screen md:pl-64 bg-slate-950 text-slate-100 text-left">
-      {allowCachedUiStateRestore && <StateStorageNotice accountId={currentUser?.id} />}
+    <div className="min-h-[100dvh] desktop-nav:min-h-screen desktop-nav:pl-64 bg-slate-950 text-slate-100 text-left">
+      {allowCachedUiStateRestore && activeTab !== 'dashboard' && activeTab !== 'nutrition' && (
+        <StateStorageNotice accountId={currentUser?.id} />
+      )}
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {allowCachedUiStateRestore && photoRejection && !isScanning && (
         <div role="alert" className="fixed inset-x-4 bottom-24 z-[100] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-white shadow-xl">
@@ -2016,6 +2042,40 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         />
       )}
       
+      {allowCachedUiStateRestore && manualFood && (
+        <FoodEditModal
+          mode="manual"
+          draft={manualFood}
+          onChange={setManualFood}
+          onClose={() => setManualFood(null)}
+          onSave={async () => {
+            const patch = buildCorrectedFoodPatch(manualFood);
+            const saved = await addFoodToDiary({ name: '', calories: 0, protein: 0, fat: 0, carbs: 0, ...patch });
+            if (!saved) return false;
+            setManualFood(null);
+            return true;
+          }}
+        />
+      )}
+      {allowCachedUiStateRestore && !isScanning && photoDraft?.guard.canCommit() && (
+        <div key={photoDraft.form.id}><FoodEditModal
+          mode="photo"
+          photo={photoDraft.item.photo}
+          draft={photoDraft.form}
+          onChange={form => setPhotoDrafts(current => current.map(item => item.form.id === form.id ? { ...item, form } : item))}
+          onClose={() => setPhotoDrafts(current => current.filter(item => item.form.id !== photoDraft.form.id))}
+          onSave={async () => {
+            const patch = buildCorrectedFoodPatch(photoDraft.form, photoDraft.item.insight);
+            const saved = await addFoodToDiaryGuarded({ ...photoDraft.item, ...patch }, photoDraft.guard, photoDraft.guard.canCommit);
+            if (!saved || !photoDraft.guard.canCommit()) return false;
+            setPhotoDrafts(current => current.filter(item => item.form.id !== photoDraft.form.id));
+            if (photoDrafts.length === 1 && photoDraft.item.photo && saved.insight) {
+              setInsightModal({ id: saved.id, photo: photoDraft.item.photo, name: saved.name, insight: saved.insight });
+            }
+            return true;
+          }}
+        /></div>
+      )}
       {allowCachedUiStateRestore && editFoodModal && (
         <FoodEditModal
           draft={editFoodModal}
@@ -2117,7 +2177,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
         </React.Suspense>
       )}
 
-      {allowCachedUiStateRestore && (
+      {allowCachedUiStateRestore && currentUser && supportsNutritionTargets(currentUser.age) && (
         <React.Suspense fallback={null}>
           <PlanIntroModal
             currentUser={currentUser}
