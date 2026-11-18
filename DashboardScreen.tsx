@@ -236,7 +236,7 @@ export default function DashboardScreen({
       <header className="rounded-3xl border border-slate-800 bg-slate-900 p-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between sm:gap-4 sm:p-5">
         <div className="min-w-0">
           <h1 className="text-2xl font-black text-slate-50 sm:text-3xl">Сегодня</h1>
-          <p className="mt-1 text-sm text-slate-300">Привет, {currentUser?.name}!</p>
+          <p className="mt-1 text-sm text-slate-300">Привет, <span>{currentUser?.name}</span>!</p>
           <p className="mt-3 text-sm text-slate-300">
             <strong className="text-lg tabular-nums text-slate-100">{Math.round(dailyStats.calories).toLocaleString('ru-RU')}</strong>
             {targets.calories > 0 && <> / {Math.round(targets.calories).toLocaleString('ru-RU')}</>} ккал
