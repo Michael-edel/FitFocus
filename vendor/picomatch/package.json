@@ -1,0 +1,11 @@
+{
+  "name": "picomatch",
+  "version": "4.0.7",
+  "private": true,
+  "description": "Picomatch 4.0.7 with a FitFocus restriction for CVE-2026-112366",
+  "main": "index.js",
+  "license": "MIT",
+  "repository": "micromatch/picomatch",
+  "sideEffects": false,
+  "engines": { "node": ">=12" }
+}
