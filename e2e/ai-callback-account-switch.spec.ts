@@ -3620,7 +3620,8 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
   const edit = page.getByRole('button', { name: 'Правка', exact: true });
   if (!await edit.isVisible()) await page.getByRole('button', { name: 'Действия', exact: true }).click();
   await edit.click();
-  const name = page.getByPlaceholder('Например: манты свинина/говядина с манго-чили соусом');
+  const editor = page.getByRole('dialog', { name: 'Корректировать блюдо' });
+  const name = editor.getByRole('textbox', { name: 'Название', exact: true });
   await name.fill('Исправленное блюдо');
 
   await page.evaluate(key => {
