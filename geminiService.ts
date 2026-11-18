@@ -6,7 +6,8 @@ import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 import { postScopedAiJson, type AiSession } from './services/aiSession';
 import { SessionReadError } from './storage/sessionRead';
-import { assertRealFoodPhoto, FOOD_PHOTO_KIND_SCHEMA, FOOD_PHOTO_RULE } from './services/foodPhotoGuard';
+import { assertRealFoodPhoto, FOOD_PHOTO_KIND_SCHEMA, FOOD_PHOTO_RULE, RejectedFoodPhotoError } from './services/foodPhotoGuard';
+import { getLocalWeekStart } from './dateUtils';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -30,7 +31,7 @@ type AiProxyResponse = JsonRecord & {
   text: string;
 };
 export class AiProxyError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly code?: string, readonly retryAfterMs?: number) {
     super(message);
     this.name = 'AiProxyError';
   }
@@ -437,7 +438,10 @@ async function callAiProxy(
       } catch {}
     }
     const msg = stringValue(error.message) || stringValue(data.message) || `AI proxy error: ${res.status}`;
-    throw new AiProxyError(msg, res.status);
+    const meta = asRecord(error.meta ?? data.meta);
+    const code = stringValue(error.code) || stringValue(data.error);
+    const retryAfterMs = typeof meta.retryAfterMs === 'number' ? meta.retryAfterMs : undefined;
+    throw new AiProxyError(msg, res.status, code, retryAfterMs);
   }
 
   // Нормализуем ответ: UI ожидает поле `text`,
@@ -700,6 +704,7 @@ export const getLastAiAction = (userId?: string | null): AiActionRecord | null =
  */
 export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, session: AiSession): Promise<WeeklyMenu> {
   if (session.guard.accountId !== user.id) throw new Error('LOGIN_SESSION_CHANGED');
+  const weekStart = getLocalWeekStart(new Date());
   const schema = {
     type: "OBJECT",
     properties: {
@@ -783,16 +788,6 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, sessio
 
   const shoppingListItems = normalizeShoppingListItems(obj.shoppingListItems, shoppingList)
     .slice(0, 120);
-
-  // weekStart (UTC Monday) for storage/export
-  const weekStart = (() => {
-    const d0 = new Date();
-    const date = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()));
-    const day = date.getUTCDay();
-    const diff = (day === 0 ? -6 : 1 - day);
-    date.setUTCDate(date.getUTCDate() + diff);
-    return date.toISOString().slice(0, 10);
-  })();
 
   // Legacy list fallback from items if shoppingList empty
   const legacyFromItems = shoppingListItems.map((it) => `${it.name} — ${it.grams} г`);
@@ -1394,5 +1389,7 @@ export async function getRecipeFromPhoto(photoBase64: string, session: AiSession
   }, session);
   const result = safeJsonObject(response.text);
   assertRealFoodPhoto(result);
-  return normalizeRecipe(result);
+  const recipe = normalizeRecipe(result);
+  if (!recipe.steps.length) throw new RejectedFoodPhotoError('uncertain');
+  return recipe;
 }

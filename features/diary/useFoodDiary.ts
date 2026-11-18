@@ -43,7 +43,10 @@ export function createFoodDiaryEntry(
 export function appendFoodHistory(previousHistory: FastLogItem[], item: FastLogItem): FastLogItem[] {
   const historyItem = { ...item };
   delete historyItem.photo;
-  if (historyItem.insight) delete historyItem.insight.recipe;
+  if (historyItem.insight) {
+    historyItem.insight = { ...historyItem.insight };
+    delete historyItem.insight.recipe;
+  }
   return [historyItem, ...previousHistory.filter((history) => history.name !== item.name)]
     .slice(0, MAX_HISTORY_ITEMS);
 }

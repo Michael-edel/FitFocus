@@ -51,13 +51,23 @@ describe('food photo response normalization', () => {
     { photoKind: 'uncertain', nonFood: false },
     { photoKind: 'real_food', nonFood: false, title: 'Запечённая целая птица с горошком' },
     { photoKind: 'real_food', nonFood: false, ingredients: [{ name: 'индейка целая' }] },
+    { photoKind: 'real_food', nonFood: false, name: ' ', calories: 0, ingredients: [] },
+    { photoKind: 'real_food', nonFood: false, title: 'Рецепт', ingredients: [{ name: 'Рис' }] },
     { nonFood: false, name: 'Рамен' },
   ])('rejects a photo without a consistent real-food verdict: %j', result => {
     expect(() => assertRealFoodPhoto(result)).toThrow(RejectedFoodPhotoError);
   });
 
   it('accepts a photo with actual visible food and consistent classification', () => {
-    expect(() => assertRealFoodPhoto({ photoKind: 'real_food', nonFood: false, name: 'Рамен' })).not.toThrow();
+    expect(() => assertRealFoodPhoto({
+      photoKind: 'real_food', nonFood: false, name: 'Рамен', ingredients: [{ name: 'Лапша' }],
+    })).not.toThrow();
+  });
+
+  it('accepts an identified drink with zero calories', () => {
+    expect(() => assertRealFoodPhoto({
+      photoKind: 'real_food', nonFood: false, name: 'Стакан воды', calories: 0, ingredients: [{ name: 'Вода' }],
+    })).not.toThrow();
   });
   it('forces non-food payloads to zero nutrition', () => {
     expect(normalizeFoodPhotoAnalysis({

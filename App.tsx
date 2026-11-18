@@ -1994,7 +1994,7 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
       <VersionInfoModal open={versionInfoOpen} onClose={() => setVersionInfoOpen(false)} />
       {allowCachedUiStateRestore && photoRejection && !isScanning && (
         <div role="alert" className="fixed inset-x-4 bottom-24 z-[100] mx-auto max-w-md rounded-xl bg-slate-900 p-4 text-white shadow-xl">
-          <p>{photoRejection}</p>
+          <p className="max-h-[35dvh] overflow-auto whitespace-pre-line break-words">{photoRejection}</p>
           <button type="button" className="mt-2 underline" onClick={() => setPhotoRejection(null)}>Закрыть</button>
         </div>
       )}

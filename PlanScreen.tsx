@@ -17,6 +17,7 @@ import {
 } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { getAccountScopedUiValue, useAccountScopedUiSetter } from './features/state/accountScopedUi';
+import { getLocalWeekStart } from './dateUtils';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -111,18 +112,11 @@ export default function PlanScreen({
   isCurrentSession,
   ShoppingListCardComponent,
 }: PlanScreenProps) {
-  const getWeekStartISO = React.useCallback((date: Date) => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const day = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() - day + 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
   const tasks = currentUserAiPlan?.firstTasks ?? [];
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
-  const shoppingWeekStart = weeklyMenu?.weekStart || getWeekStartISO(new Date());
+  const shoppingWeekStart = weeklyMenu?.weekStart || getLocalWeekStart(new Date());
   const activeWeekDayStorageKey = React.useMemo(
     () => `fitfocus.plan.active-day.v1:${currentUser?.id ?? 'anon'}`,
     [currentUser?.id],

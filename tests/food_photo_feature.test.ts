@@ -5,7 +5,7 @@ import {
   processFoodPhotoFiles,
   type FoodPhotoAnalysisRunParams,
 } from '../features/ai/useFoodPhotoAnalysis';
-import type { FoodPhotoAnalysisResult } from '../geminiService';
+import { AiProxyError, type FoodPhotoAnalysisResult } from '../geminiService';
 import { SessionReadError } from '../storage/sessionRead';
 import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
 import type { AiSession } from '../services/aiSession';
@@ -233,6 +233,53 @@ describe('food photo feature', () => {
     expect(input.analyzePhoto).toHaveBeenCalledOnce();
     expect(input.addFoodToDiary).toHaveBeenCalledOnce();
     expect(input.incrementUsage).toHaveBeenCalledOnce();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringContaining('broken.jpg'));
     expect(input.setScanning).toHaveBeenLastCalledWith(false);
+  });
+
+  it('retries a second photo after the server cooldown and saves both exactly once', async () => {
+    vi.useFakeTimers();
+    try {
+      const { input } = setup();
+      input.files = [{ name: 'one.jpg' }, { name: 'two.jpg' }] as File[];
+      input.remainingScans = 2;
+      vi.mocked(input.analyzePhoto).mockResolvedValueOnce(analysis)
+        .mockRejectedValueOnce(new AiProxyError('Cooldown', 429, 'AI_COOLDOWN', 4000));
+
+      const pending = processFoodPhotoFiles(input);
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(input.analyzePhoto).toHaveBeenCalledTimes(2);
+      expect(input.addFoodToDiary).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toBe(2);
+      expect(input.analyzePhoto).toHaveBeenCalledTimes(3);
+      expect(input.addFoodToDiary).toHaveBeenCalledTimes(2);
+      expect(input.incrementUsage).toHaveBeenCalledTimes(2);
+      expect(input.showRejection).toHaveBeenCalledExactlyOnceWith(null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a pending cooldown retry when the login closes', async () => {
+    const { input, close } = setup();
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new AiProxyError('Cooldown', 429, 'AI_COOLDOWN', 4000));
+    const pending = processFoodPhotoFiles(input);
+    await vi.waitFor(() => expect(input.analyzePhoto).toHaveBeenCalledOnce());
+    close();
+    await expect(pending).resolves.toBe(0);
+    expect(input.analyzePhoto).toHaveBeenCalledOnce();
+    expect(input.addFoodToDiary).not.toHaveBeenCalled();
+  });
+
+  it('stops on a daily quota response and reports remaining unprocessed photos', async () => {
+    const { input } = setup();
+    input.files = [{ name: 'one.jpg' }, { name: 'two.jpg' }, { name: 'three.jpg' }] as File[];
+    input.remainingScans = 2;
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new AiProxyError('Daily limit', 429, 'DAILY_LIMIT'));
+
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+    expect(input.analyzePhoto).toHaveBeenCalledOnce();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringMatching(/one\.jpg[^\n]+Лимит анализа AI исчерпан\.([^\n]*)\nФото за пределами лимита: 2\./));
   });
 });

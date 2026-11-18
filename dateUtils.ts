@@ -21,6 +21,13 @@ export function getWeekKey(date: Date): string {
   return `${utcDate.getUTCFullYear()}-${String(weekNumber).padStart(2, '0')}`;
 }
 
+export function getLocalWeekStart(date: Date): string {
+  const monday = new Date(date);
+  const day = monday.getDay() || 7;
+  monday.setDate(monday.getDate() - day + 1);
+  return getDayKey(monday);
+}
+
 export function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;

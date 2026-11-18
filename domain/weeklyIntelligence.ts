@@ -36,6 +36,7 @@ function calculateCompliance(
 
   const sums: Record<string, number> = {};
   for (const f of foods) {
+    if (f.nonFood === true) continue;
     const key = toLocalDayKey(f.timestamp);
     if (!key) continue;
     sums[key] = (sums[key] ?? 0) + (f.calories ?? 0);

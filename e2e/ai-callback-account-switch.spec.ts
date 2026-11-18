@@ -30,6 +30,7 @@ type FixtureState = {
   holdProfileWrite?: { active: boolean; started: () => void; wait: Promise<void> };
   unauthorizedAiFeature?: string;
   foodPhotoResponse?: Record<string, unknown>;
+  foodPhotoCooldownOnRequest?: number;
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -202,6 +203,15 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/ai' && method === 'POST') {
       const feature = request.postDataJSON()?.feature;
       if (typeof feature === 'string') counts.aiRequests.push({ feature, account: requestedAccount, session: requestedSession });
+      if (feature === 'foodphoto' && state.foodPhotoCooldownOnRequest
+        === counts.aiRequests.filter(entry => entry.feature === 'foodphoto').length) {
+        return route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: scopedHeaders(responseAccount),
+          body: JSON.stringify({ error: { code: 'AI_COOLDOWN', meta: { retryAfterMs: 200 } } }),
+        });
+      }
       if (feature === state.unauthorizedAiFeature) {
         return route.fulfill({
           status: 401,
@@ -3704,6 +3714,30 @@ test('food photo analysis persists the diary entry, history and usage for its ac
   expect(fixture.counts.achievementChecks).toBeGreaterThan(0);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('food-photo-analysis-success.png') });
+});
+
+test('food photo analysis retries a batch cooldown and saves both photos once', async ({ page }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id), foodPhotoCooldownOnRequest: 2 };
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const upload = page.locator('input[type="file"][multiple]').first();
+  await upload.setInputFiles(['red', 'blue'].map(color => ({
+    name: `${color}.svg`,
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="${color}"/></svg>`),
+  })));
+
+  await expect.poll(() => fixture.counts.completedAiFeatures.filter(feature => feature === 'foodphoto')).toHaveLength(2);
+  await expect(page.getByText('Анализирую фото...')).toHaveCount(0);
+  const snapshot = await readDurableSnapshot(page);
+  const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
+  const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ id: string; name: string }>;
+  expect(fixture.counts.aiRequests.filter(entry => entry.feature === 'foodphoto')).toHaveLength(3);
+  expect(diary.map(item => item.name)).toEqual(['Тестовый омлет', 'Тестовый омлет']);
+  expect(new Set(diary.map(item => item.id)).size).toBe(2);
+  expect(profile?.usage.aiFoodPhotoCount).toBe(2);
 });
 
 test('a favorite recipe draft stays open when its durable commit fails and can be retried', async ({ page }) => {

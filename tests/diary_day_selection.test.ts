@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculateDiaryDayStats, getDiaryDayKeys, resolveDiaryDayKey } from '../features/diary/useDiaryDaySelection';
+import { calculateDailyNutrition } from '../features/dashboard/dashboardMetrics';
 import type { FoodItem } from '../types';
 
 const entry = (id: string, timestamp: string, calories: number): FoodItem => ({
@@ -17,6 +18,7 @@ describe('diary day selection', () => {
     entry('1', '2026-10-05T08:00:00.000Z', 250),
     entry('2', '2026-10-05T12:00:00.000Z', 450),
     entry('3', '2026-10-04T08:00:00.000Z', 300),
+    { ...entry('legacy-non-food', '2026-10-05T08:00:00.000Z', 400), nonFood: true },
   ];
 
   it('orders available days from newest to oldest', () => {
@@ -35,5 +37,6 @@ describe('diary day selection', () => {
       fat: 10,
       carbs: 40,
     });
+    expect(calculateDailyNutrition(diary, new Date(2026, 9, 5))).toEqual(calculateDiaryDayStats(diary, '2026-10-05'));
   });
 });

@@ -51,7 +51,8 @@ export function calculateAdaptationCompliance(
   calorieTarget: number,
   nowMs = Date.now(),
 ): number {
-  const lastSevenDays = foodDiary.filter((item) => nowMs - new Date(item.timestamp).getTime() <= 7 * 86_400_000);
+  const lastSevenDays = foodDiary.filter((item) => item.nonFood !== true
+    && nowMs - new Date(item.timestamp).getTime() <= 7 * 86_400_000);
   if (!lastSevenDays.length) return 0;
   const caloriesByDay: Record<string, number> = {};
   for (const item of lastSevenDays) {

@@ -1,149 +1,127 @@
-import { describe, expect, it } from 'vitest';
+import Stripe from 'stripe';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyStripeSubscriptionUpdate, onRequestPost } from '../functions/api/billing/webhook';
+import { loadActivePlan } from '../functions/api/_lib/plans';
+import { sqliteD1 } from './_helpers/sqliteD1';
 
-type PreparedStatement = {
-  sql: string;
-  binds: unknown[];
-  bind: (...args: unknown[]) => PreparedStatement;
-  first: () => Promise<unknown>;
-  run: () => Promise<{ success: boolean; meta: { changes: number } }>;
-};
-
-function makeDb(options: { userExists?: boolean; storedUserId?: string } = {}) {
-  const runs: Array<{ sql: string; binds: unknown[] }> = [];
-
-  const db = {
-    runs,
-    prepare(sql: string): PreparedStatement {
-      const stmt: PreparedStatement = {
-        sql,
-        binds: [],
-        bind(...args: unknown[]) {
-          this.binds = args;
-          return this;
-        },
-        async first() {
-          if (sql.includes('FROM subscriptions')) {
-            return options.storedUserId ? { user_id: options.storedUserId } : null;
-          }
-          if (sql.includes('SELECT id FROM users')) {
-            return options.userExists === false ? null : { id: this.binds[0] };
-          }
-          return null;
-        },
-        async run() {
-          runs.push({ sql, binds: this.binds });
-          return { success: true, meta: { changes: 1 } };
-        },
-      };
-      return stmt;
-    },
-  };
-
-  return db;
-}
-
-const env = {
+const prices = {
   PRICE_PRO_MONTHLY: 'price_pro_monthly',
   PRICE_PRO_YEARLY: 'price_pro_yearly',
   PRICE_FAMILY_MONTHLY: 'price_family_monthly',
 };
+const subscription = (id: string, created = 10, priceId = prices.PRICE_PRO_MONTHLY) => ({
+  id, created, customer: `cus-${id}`, status: 'active', metadata: { ff_uid: 'user-1' },
+  items: { data: [{ price: { id: priceId } }] },
+});
 
-describe('billing webhook subscription updates', () => {
-  it('does not expose Stripe signature verification details', async () => {
-    const response = await onRequestPost({
+function fixture() {
+  const { db, sqlite } = sqliteD1();
+  sqlite.prepare('INSERT INTO users (id, created_at) VALUES (?, 1)').run('user-1');
+  const webhookSecret = 'whsec_unit';
+  const stripe = new Stripe('sk_test_unit', { apiVersion: '2023-10-16' });
+  const post = async (sub: ReturnType<typeof subscription>, type = 'customer.subscription.updated', sign = true) => {
+    const body = JSON.stringify({ id: 'evt-test', type, data: { object: sub } });
+    const signature = sign ? stripe.webhooks.generateTestHeaderString({ payload: body, secret: webhookSecret })
+      : 'bad-signature';
+    return onRequestPost({
       request: new Request('https://fitfocus.test/api/billing/webhook', {
         method: 'POST',
-        headers: { 'stripe-signature': 'bad-signature', 'X-Request-ID': 'billing-webhook-test-01' },
-        body: '{}',
+        headers: { 'stripe-signature': signature, 'X-Request-ID': 'billing-webhook-test-01' },
+        body,
       }),
-      env: {
-        DB: makeDb() as unknown as D1Database,
-        STRIPE_SECRET_KEY: 'sk_test_unit',
-        STRIPE_WEBHOOK_SECRET: 'whsec_unit',
-        ...env,
-      },
+      env: { DB: db, STRIPE_SECRET_KEY: 'sk_test_unit', STRIPE_WEBHOOK_SECRET: webhookSecret, ...prices },
     });
+  };
+  const apply = (sub: Parameters<typeof applyStripeSubscriptionUpdate>[1]) =>
+    applyStripeSubscriptionUpdate(db, sub, prices, async () => sub);
+  return { db, sqlite, post, apply };
+}
 
-    const text = await response.text();
+afterEach(() => vi.unstubAllGlobals());
 
+describe('billing webhook subscription updates', () => {
+  it('rejects invalid signatures before fetching Stripe data', async () => {
+    const { post } = fixture();
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const response = await post(subscription('sub-1'), 'customer.subscription.updated', false);
     expect(response.status).toBe(400);
     expect(response.headers.get('X-Request-ID')).toBe('billing-webhook-test-01');
-    expect(text).toBe('Webhook Error: invalid signature');
-    expect(text).not.toContain('bad-signature');
-    expect(text).not.toContain('No signatures found');
-    expect(text).not.toContain('stripe-signature');
+    expect(await response.text()).toBe('Webhook Error: invalid signature');
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('updates an active existing user subscription for known prices', async () => {
-    const db = makeDb();
+  it('reads current Stripe state for a signed delayed event about the same subscription', async () => {
+    const { db, post } = fixture();
+    const previous = subscription('sub-1');
+    const active = subscription('sub-1', 10, prices.PRICE_FAMILY_MONTHLY);
+    const fetch = vi.fn(async (_input: RequestInfo | URL) => Response.json(active));
+    vi.stubGlobal('fetch', fetch);
 
-    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
-      id: 'sub-1',
-      customer: 'cus-1',
-      status: 'active',
-      current_period_end: 123,
-      metadata: { ff_uid: 'user-1' },
-      items: { data: [{ price: { id: 'price_pro_monthly' } }] },
-    }, env);
-
-    expect(result).toMatchObject({ ok: true, user_id: 'user-1', plan: 'pro', status: 'active' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions') && run.binds[1] === 'pro')).toBe(true);
+    expect((await post(previous)).status).toBe(200);
+    expect(String(fetch.mock.calls[0]?.[0])).toContain('/v1/subscriptions/sub-1');
+    expect(await loadActivePlan(db, 'user-1')).toBe('family');
   });
 
-  it('skips subscription updates for missing or deleted users', async () => {
-    const db = makeDb({ userExists: false });
+  it('keeps the current paid subscription when an old one is canceled or delivered again as active', async () => {
+    const { db, sqlite, apply } = fixture();
+    const tracked = subscription('sub-new', 20, prices.PRICE_FAMILY_MONTHLY);
+    const old = subscription('sub-old', 10);
+    await apply(tracked);
 
-    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
-      id: 'sub-1',
-      status: 'active',
-      metadata: { ff_uid: 'deleted-user' },
-      items: { data: [{ price: { id: 'price_pro_monthly' } }] },
-    }, env);
-
-    expect(result).toEqual({ ok: false, reason: 'USER_NOT_FOUND' });
-    expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
+    await expect(apply({ ...old, status: 'canceled' })).resolves.toMatchObject({ reason: 'OTHER_SUBSCRIPTION' });
+    await expect(applyStripeSubscriptionUpdate(db, old, prices, async id => id === old.id ? old : tracked))
+      .resolves.toMatchObject({ reason: 'OTHER_SUBSCRIPTION' });
+    expect(await loadActivePlan(db, 'user-1')).toBe('family');
+    expect(sqlite.prepare('SELECT stripe_subscription_id FROM subscriptions').get()?.stripe_subscription_id).toBe(tracked.id);
   });
 
-  it('skips active subscription updates for unknown prices', async () => {
-    const db = makeDb();
-
-    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
-      id: 'sub-1',
-      status: 'active',
-      metadata: { ff_uid: 'user-1' },
-      items: { data: [{ price: { id: 'price_unknown' } }] },
-    }, env);
-
-    expect(result).toEqual({ ok: false, reason: 'UNKNOWN_PRICE' });
-    expect(db.runs.some((run) => run.sql.includes('subscriptions'))).toBe(false);
+  it('allows a newer active subscription and applies a cancellation of the tracked subscription', async () => {
+    const { db, apply } = fixture();
+    const previous = subscription('sub-old', 10);
+    const next = subscription('sub-new', 20, prices.PRICE_FAMILY_MONTHLY);
+    await apply(previous);
+    await expect(applyStripeSubscriptionUpdate(db, next, prices, async id => id === previous.id ? previous : next))
+      .resolves.toMatchObject({ ok: true, plan: 'family' });
+    expect(await loadActivePlan(db, 'user-1')).toBe('family');
+    await expect(apply({ ...next, status: 'canceled' })).resolves.toMatchObject({ ok: true, status: 'canceled', plan: 'free' });
+    expect(await loadActivePlan(db, 'user-1')).toBe('free');
   });
 
-  it('records deleted subscriptions as free while preserving Stripe status', async () => {
-    const db = makeDb();
-
-    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
-      id: 'sub-1',
-      status: 'canceled',
-      metadata: { ff_uid: 'user-1' },
-      items: { data: [{ price: { id: 'price_unknown' } }] },
-    }, env);
-
-    expect(result).toMatchObject({ ok: true, plan: 'free', status: 'canceled' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions') && run.binds[1] === 'free')).toBe(true);
+  it('rejects a Stripe result fetched across a concurrent local update', async () => {
+    const { db, apply } = fixture();
+    const initial = subscription('sub-1');
+    await apply(initial);
+    const result = await applyStripeSubscriptionUpdate(db, initial, prices, async () => {
+      await apply(subscription('sub-1', 10, prices.PRICE_FAMILY_MONTHLY));
+      return initial;
+    });
+    expect(result).toMatchObject({ reason: 'CONCURRENT_SUBSCRIPTION_UPDATE' });
+    expect(await loadActivePlan(db, 'user-1')).toBe('family');
   });
 
-  it('falls back to stored Stripe identifiers when webhook metadata has no user id', async () => {
-    const db = makeDb({ storedUserId: 'user-1' });
+  it('asks Stripe to retry when retrieval fails and leaves the current plan in place', async () => {
+    const { db, post, apply } = fixture();
+    const current = subscription('sub-1', 10, prices.PRICE_FAMILY_MONTHLY);
+    await apply(current);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 500 })));
 
-    const result = await applyStripeSubscriptionUpdate(db as unknown as D1Database, {
-      id: 'sub-1',
-      customer: 'cus-1',
-      status: 'canceled',
-      items: { data: [{ price: { id: 'price_unknown' } }] },
-    }, env);
+    expect((await post({ ...current, status: 'canceled' }, 'customer.subscription.deleted')).status).toBe(503);
+    expect(await loadActivePlan(db, 'user-1')).toBe('family');
+  });
 
-    expect(result).toMatchObject({ ok: true, user_id: 'user-1', plan: 'free', status: 'canceled' });
-    expect(db.runs.some((run) => run.sql.includes('INSERT INTO subscriptions') && run.binds[0] === 'user-1')).toBe(true);
+  it('skips missing or deleted users and active subscriptions with an unknown price', async () => {
+    const { apply } = fixture();
+    await expect(apply({ ...subscription('sub-1'), metadata: { ff_uid: 'missing' } }))
+      .resolves.toMatchObject({ reason: 'USER_NOT_FOUND' });
+    await expect(apply(subscription('sub-1', 10, 'price_unknown'))).resolves.toMatchObject({ reason: 'UNKNOWN_PRICE' });
+  });
+
+  it('falls back to stored Stripe identifiers when subscription metadata has no user id', async () => {
+    const { apply } = fixture();
+    const stored = subscription('sub-1');
+    await apply(stored);
+    await expect(apply({ ...stored, status: 'canceled', metadata: {} }))
+      .resolves.toMatchObject({ ok: true, user_id: 'user-1', plan: 'free', status: 'canceled' });
   });
 });
