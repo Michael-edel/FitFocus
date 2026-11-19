@@ -371,6 +371,7 @@ export interface FoodItem {
   timestamp: string; // ISO datetime
   photo?: string; // data URL
   photoThumb?: string; // small data URL (cropped/resized)
+  portionGrams?: number;
   insight?: FoodInsight;
   mealType?: MealType;
   nonFood?: boolean;

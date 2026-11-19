@@ -9,6 +9,7 @@ export type FoodCorrectionDraft = {
   protein: string;
   fat: string;
   carbs: string;
+  portionGrams?: string;
   ingredientsText: string;
   notesText: string;
   nonFood: boolean;
@@ -85,6 +86,7 @@ export function buildFoodCorrectionDraft(item: FoodItem, fallbackMealType: MealT
     protein: nonFood ? '0' : numberToDraft(item.protein),
     fat: nonFood ? '0' : numberToDraft(item.fat),
     carbs: nonFood ? '0' : numberToDraft(item.carbs),
+    portionGrams: item.portionGrams ? numberToDraft(item.portionGrams) : '',
     ingredientsText: nonFood ? '' : formatIngredientsForCorrection(insight?.ingredients),
     notesText: (insight?.notes || []).join('\n'),
     nonFood,
@@ -97,7 +99,9 @@ export function buildCorrectedFoodPatch(draft: FoodCorrectionDraft, previousInsi
   const protein = parseNonNegativeNumber(draft.protein);
   const fat = parseNonNegativeNumber(draft.fat);
   const carbs = parseNonNegativeNumber(draft.carbs);
-  const ingredients = parseIngredientsForCorrection(draft.ingredientsText);
+  const ingredients = previousInsight && draft.ingredientsText === formatIngredientsForCorrection(previousInsight.ingredients)
+    ? previousInsight.ingredients
+    : parseIngredientsForCorrection(draft.ingredientsText);
   const notes = parseNotesForCorrection(draft.notesText);
   const hasFoodData = calories > 0 || protein > 0 || fat > 0 || carbs > 0 || ingredients.length > 0;
 
@@ -110,6 +114,7 @@ export function buildCorrectedFoodPatch(draft: FoodCorrectionDraft, previousInsi
       protein: 0,
       fat: 0,
       carbs: 0,
+      portionGrams: undefined,
       nonFood: true,
       insight: {
         calories: 0,
@@ -136,6 +141,7 @@ export function buildCorrectedFoodPatch(draft: FoodCorrectionDraft, previousInsi
     protein,
     fat,
     carbs,
+    portionGrams: parseNonNegativeNumber(draft.portionGrams) || undefined,
     nonFood: false,
     insight,
   };

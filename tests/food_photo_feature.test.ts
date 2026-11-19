@@ -5,11 +5,10 @@ import {
   processFoodPhotoFiles,
   type FoodPhotoAnalysisRunParams,
 } from '../features/ai/useFoodPhotoAnalysis';
-import type { FoodPhotoAnalysisResult } from '../geminiService';
+import { AiProxyError, type FoodPhotoAnalysisResult } from '../geminiService';
 import { SessionReadError } from '../storage/sessionRead';
 import { DurableOutbox, type OutboxOperation } from '../storage/durableOutbox';
 import type { AiSession } from '../services/aiSession';
-import type { FoodItem } from '../types';
 
 const analysis: FoodPhotoAnalysisResult = {
   name: 'Омлет',
@@ -21,7 +20,6 @@ const analysis: FoodPhotoAnalysisResult = {
   ingredients: [{ name: 'Яйца', percent: 70 }],
   notes: ['Оценка по фото'],
 };
-const entry = { id: 'entry-1', ...analysis, timestamp: '2026-10-07T10:00:00.000Z' } as FoodItem;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -64,17 +62,16 @@ function setup() {
       expect(captured).toBe(session);
       return analysis;
     }),
-    addFoodToDiary: vi.fn(async (_item, guard, isCurrent) => {
-      calls.push('diary');
-      expect(guard.readGuard).toBe(session.guard);
-      expect(guard.canCommit()).toBe(isCurrent());
-      return entry;
-    }),
     incrementUsage: vi.fn(async () => {
       calls.push('usage');
       return { status: 'pending' } as OutboxOperation;
     }),
-    showInsight: vi.fn(insight => calls.push(`insight:${insight.id}:${insight.insight.calories}`)),
+    showDraft: vi.fn(({ item, guard }) => {
+      expect(guard.readGuard).toBe(session.guard);
+      expect(guard.canCommit()).toBe(true);
+      calls.push(`draft:${item.insight.calories}`);
+    }),
+    showRejection: vi.fn(),
     logError: vi.fn(error => calls.push(`error:${(error as Error).message}`)),
   };
   return {
@@ -87,6 +84,13 @@ function setup() {
 }
 
 describe('food photo feature', () => {
+  it('does not save a rejected photo even when the response contains nutrition values', async () => {
+    const { input } = setup();
+    vi.mocked(input.analyzePhoto).mockResolvedValue({ ...analysis, nonFood: true });
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+    expect(input.showDraft).not.toHaveBeenCalled();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringContaining('не видно еды'));
+  });
   it('keeps non-food scans out of nutrition totals', () => {
     expect(buildFoodInsight({
       ...analysis,
@@ -101,7 +105,7 @@ describe('food photo feature', () => {
     });
   });
 
-  it('scopes each AI attempt and commits diary, usage and insight only for its current session', async () => {
+  it('accounts for the scan and prepares only a session-scoped review draft', async () => {
     const { input, calls } = setup();
 
     await expect(processFoodPhotoFiles(input)).resolves.toBe(1);
@@ -112,11 +116,9 @@ describe('food photo feature', () => {
       'assert',
       'analyze',
       'assert',
-      'diary',
-      'assert',
       'usage',
       'assert',
-      'insight:entry-1:320',
+      'draft:320',
       'scanning:false',
     ]);
     expect(input.prepareSession).toHaveBeenCalledWith(
@@ -132,9 +134,8 @@ describe('food photo feature', () => {
     await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
     expect(calls).toEqual([]);
     expect(input.prepareSession).not.toHaveBeenCalled();
-    expect(input.addFoodToDiary).not.toHaveBeenCalled();
     expect(input.incrementUsage).not.toHaveBeenCalled();
-    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.showDraft).not.toHaveBeenCalled();
   });
 
   it.each(['success', 'failure'])('ignores delayed AI %s after the original login closes', async outcome => {
@@ -149,9 +150,8 @@ describe('food photo feature', () => {
     else request.reject(new Error('late AI failure'));
 
     await expect(pending).resolves.toBe(0);
-    expect(input.addFoodToDiary).not.toHaveBeenCalled();
     expect(input.incrementUsage).not.toHaveBeenCalled();
-    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.showDraft).not.toHaveBeenCalled();
     expect(input.logError).not.toHaveBeenCalled();
     expect(input.setScanning).toHaveBeenCalledTimes(1);
   });
@@ -167,9 +167,8 @@ describe('food photo feature', () => {
     request.resolve(analysis);
 
     await expect(pending).resolves.toBe(0);
-    expect(input.addFoodToDiary).not.toHaveBeenCalled();
     expect(input.incrementUsage).not.toHaveBeenCalled();
-    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.showDraft).not.toHaveBeenCalled();
     expect(input.logError).not.toHaveBeenCalled();
   });
 
@@ -180,9 +179,8 @@ describe('food photo feature', () => {
     await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
 
     expect(input.logError).not.toHaveBeenCalled();
-    expect(input.addFoodToDiary).not.toHaveBeenCalled();
     expect(input.incrementUsage).not.toHaveBeenCalled();
-    expect(input.showInsight).not.toHaveBeenCalled();
+    expect(input.showDraft).not.toHaveBeenCalled();
     expect(input.setScanning).toHaveBeenLastCalledWith(false);
   });
 
@@ -193,7 +191,6 @@ describe('food photo feature', () => {
     await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
 
     expect(input.logError).toHaveBeenCalledWith(expect.objectContaining({ kind: 'access' }));
-    expect(input.addFoodToDiary).not.toHaveBeenCalled();
     expect(input.incrementUsage).not.toHaveBeenCalled();
   });
 
@@ -222,8 +219,54 @@ describe('food photo feature', () => {
     await expect(processFoodPhotoFiles(input)).resolves.toBe(1);
     expect(calls).toContain('error:invalid image');
     expect(input.analyzePhoto).toHaveBeenCalledOnce();
-    expect(input.addFoodToDiary).toHaveBeenCalledOnce();
+    expect(input.showDraft).toHaveBeenCalledOnce();
     expect(input.incrementUsage).toHaveBeenCalledOnce();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringContaining('broken.jpg'));
     expect(input.setScanning).toHaveBeenLastCalledWith(false);
+  });
+
+  it('retries a second photo after the server cooldown and prepares both drafts exactly once', async () => {
+    vi.useFakeTimers();
+    try {
+      const { input } = setup();
+      input.files = [{ name: 'one.jpg' }, { name: 'two.jpg' }] as File[];
+      input.remainingScans = 2;
+      vi.mocked(input.analyzePhoto).mockResolvedValueOnce(analysis)
+        .mockRejectedValueOnce(new AiProxyError('Cooldown', 429, 'AI_COOLDOWN', 4000));
+
+      const pending = processFoodPhotoFiles(input);
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(input.analyzePhoto).toHaveBeenCalledTimes(2);
+      expect(input.showDraft).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toBe(2);
+      expect(input.analyzePhoto).toHaveBeenCalledTimes(3);
+      expect(input.showDraft).toHaveBeenCalledTimes(2);
+      expect(input.incrementUsage).toHaveBeenCalledTimes(2);
+      expect(input.showRejection).toHaveBeenCalledExactlyOnceWith(null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a pending cooldown retry when the login closes', async () => {
+    const { input, close } = setup();
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new AiProxyError('Cooldown', 429, 'AI_COOLDOWN', 4000));
+    const pending = processFoodPhotoFiles(input);
+    await vi.waitFor(() => expect(input.analyzePhoto).toHaveBeenCalledOnce());
+    close();
+    await expect(pending).resolves.toBe(0);
+    expect(input.analyzePhoto).toHaveBeenCalledOnce();
+  });
+
+  it('stops on a daily quota response and reports remaining unprocessed photos', async () => {
+    const { input } = setup();
+    input.files = [{ name: 'one.jpg' }, { name: 'two.jpg' }, { name: 'three.jpg' }] as File[];
+    input.remainingScans = 2;
+    vi.mocked(input.analyzePhoto).mockRejectedValue(new AiProxyError('Daily limit', 429, 'DAILY_LIMIT'));
+
+    await expect(processFoodPhotoFiles(input)).resolves.toBe(0);
+    expect(input.analyzePhoto).toHaveBeenCalledOnce();
+    expect(input.showRejection).toHaveBeenLastCalledWith(expect.stringMatching(/one\.jpg[^\n]+Лимит анализа AI исчерпан\.([^\n]*)\nФото за пределами лимита: 2\./));
   });
 });

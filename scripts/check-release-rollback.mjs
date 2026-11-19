@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -58,7 +58,12 @@ INSERT INTO weekly_menus(id,family_id,week_start,menu_json,created_by_user_id,cr
 INSERT INTO weekly_menu_items(id,user_id,family_id,week_start,ingredient_name,grams,created_at) VALUES('rollback-old-family','rollback-owner','${familyId}','${week}','Legacy family',999,${now});
 INSERT INTO weekly_menu_items(id,user_id,family_id,week_start,ingredient_name,grams,created_at) VALUES('rollback-old-personal','rollback-owner',NULL,'${week}','Legacy personal',333,${now});
 `;
-seed += readFileSync(resolve(artifact, 'migrations/0021_family_menu_generations.sql'), 'utf8');
+const candidateMigrations = resolve(current, '../migrations');
+for (const file of readdirSync(candidateMigrations).sort()) {
+  if (/^\d{4}_.+\.sql$/.test(file) && file >= '0021_family_menu_generations.sql') {
+    seed += '\n' + readFileSync(resolve(candidateMigrations, file), 'utf8');
+  }
+}
 writeFileSync(resolve(root, 'seed.sql'), seed);
 execFileSync(process.execPath, [cli, 'd1', 'execute', 'DB', '--local', '--config', config, '--persist-to', state,
   '--file', resolve(root, 'seed.sql')], { cwd: root, env, stdio: 'inherit' });

@@ -236,6 +236,7 @@ export async function deleteUserAccountAndAllData(
     db.prepare("DELETE FROM user_kv WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM usage_daily WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM subscriptions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM stripe_subscriptions WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM invite_redemptions WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM ai_events WHERE user_id = ?").bind(userId),
     db.prepare("DELETE FROM user_profiles WHERE user_id = ?").bind(userId),

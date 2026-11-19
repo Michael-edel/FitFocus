@@ -7,10 +7,12 @@ test('preserves keyboard focus in Windows forced-colors mode', async ({ page }, 
   await page.emulateMedia({ forcedColors: 'active' });
   await mockApp(page, { session: 'register' });
   await openApp(page, '/');
-  const input = page.locator('input[type="number"].outline-none').first();
-  await input.waitFor({ state: 'visible' });
+  const input = page.getByRole('spinbutton', { name: 'Рост (см)', exact: true });
+  const previous = page.getByRole('spinbutton', { name: 'Вес (кг)', exact: true });
+  await expect(input).toBeVisible();
   await input.focus();
   await page.keyboard.press('Shift+Tab');
+  await expect(previous).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(input).toBeFocused();
   const outline = await input.evaluate((element) => {

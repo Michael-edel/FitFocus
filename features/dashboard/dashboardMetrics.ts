@@ -23,7 +23,7 @@ const emptyNutrition: NutritionSnapshot = { calories: 0, protein: 0, fat: 0, car
 export function calculateDailyNutrition(foodDiary: FoodItem[], day = new Date()): NutritionSnapshot {
   const dayKey = toLocalDayKey(day);
   return foodDiary.reduce<NutritionSnapshot>((totals, item) => {
-    if (toLocalDayKey(item.timestamp) !== dayKey) return totals;
+    if (item.nonFood === true || toLocalDayKey(item.timestamp) !== dayKey) return totals;
     return {
       calories: totals.calories + item.calories,
       protein: totals.protein + item.protein,

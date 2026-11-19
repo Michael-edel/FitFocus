@@ -31,7 +31,7 @@ export function resolveDiaryDayKey(dayKeys: string[], selectedDayKey: string, no
 export function calculateDiaryDayStats(foodDiary: FoodItem[], dayKey: string): DiaryDayStats {
   if (!dayKey) return EMPTY_DAY_STATS;
   return foodDiary
-    .filter((item) => toLocalDayKey(item.timestamp) === dayKey)
+    .filter((item) => item.nonFood !== true && toLocalDayKey(item.timestamp) === dayKey)
     .reduce<DiaryDayStats>((total, item) => ({
       calories: total.calories + (item.calories || 0),
       protein: total.protein + (item.protein || 0),

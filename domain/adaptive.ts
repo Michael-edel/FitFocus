@@ -11,7 +11,7 @@ export function calculateCompliance(foods: FoodItem[], habits: UserHabit[], prof
   const targets = calculateDailyTargets(profile);
   
   // Комплаенс по питанию (сумма калорий за день vs цель)
-  const dailyCalories = foods.reduce((sum, f) => sum + f.calories, 0);
+  const dailyCalories = foods.reduce((sum, food) => sum + (food.nonFood === true ? 0 : food.calories), 0);
   // Допускаем отклонение в 10%
   const caloriesCompliance = dailyCalories > 0 && dailyCalories <= targets.calories * 1.1 ? 1 : 0;
 

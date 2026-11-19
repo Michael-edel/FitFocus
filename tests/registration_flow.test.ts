@@ -86,7 +86,7 @@ describe('durable registration', () => {
     expect(await new DurableOutbox().list(account)).toEqual([]);
     expect((await new DurableOutbox().snapshot(account, `fitfocus_data_${account}_profile`)).value).toBeNull();
   });
-  it.each([999, 131, 0, -1, NaN, Infinity, 32.5])('rejects invalid age %s before any profile, invite or AI work', async age => {
+  it.each([999, 79, 18, 12, 0, -1, NaN, Infinity, 32.5])('rejects invalid age %s before any profile, invite or AI work', async age => {
     const d = deps(); d.regData.age = age; d.requireInvite = true;
     await runRegistrationFlow(d);
     expect(d.setPlanError).toHaveBeenLastCalledWith(expect.stringContaining('возраст'));

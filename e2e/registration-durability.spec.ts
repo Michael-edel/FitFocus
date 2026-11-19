@@ -7,6 +7,11 @@ const scope = { 'X-FitFocus-State-Protocol': '2', 'X-FitFocus-State-Guard': '1',
   'X-FitFocus-AI-Protocol': '1', 'X-FitFocus-AI-Guard': '1',
   'X-FitFocus-Profile-Protocol': '1', 'X-FitFocus-Profile-Guard': '1',
   'X-FitFocus-State-Account': account, 'X-FitFocus-State-Session': sid };
+async function fillRequiredMeasurements(page: Page) {
+  await page.getByRole('spinbutton', { name: 'Вес (кг)', exact: true }).fill('80');
+  await page.getByRole('spinbutton', { name: 'Рост (см)', exact: true }).fill('180');
+  await page.getByRole('spinbutton', { name: 'Возраст', exact: true }).fill('30');
+}
 async function saved(page: Page) {
   return page.evaluate(async key => {
     const opening = indexedDB.open('fitfocus-user-state-v1');
@@ -81,8 +86,8 @@ test('target validation blocks impossible loss targets and the create action doe
   await openApp(page, '/?auth=google');
   const create = page.getByRole('button', { name: 'Создать AI-план', exact: true });
   await expect(create).toBeVisible();
-  await page.getByRole('spinbutton', { name: 'Вес (кг)', exact: true }).fill('80');
-  await page.getByRole('spinbutton', { name: 'Рост (см)', exact: true }).fill('180');
+  await fillRequiredMeasurements(page);
+  await page.getByText('Настройки цели', { exact: true }).click();
   const target = page.getByRole('spinbutton', { name: 'Целевой вес (кг)', exact: true });
   await target.fill('999');
   await expect(target).toHaveValue('999');
@@ -96,12 +101,12 @@ test('target validation blocks impossible loss targets and the create action doe
   expect((await saved(page)).value).toBeNull();
   expect((await saved(page)).operations).toEqual([]);
   await target.fill('75'); await expect(create).toBeEnabled();
-  const lastGoal = page.getByRole('button', { name: /Набор.*Выбрать/ });
+  const lastGoal = page.getByRole('button', { name: 'Набор', exact: true });
   await lastGoal.scrollIntoViewIfNeeded();
   const goalBox = await lastGoal.boundingBox(); const createBox = await create.boundingBox();
   expect(goalBox).not.toBeNull(); expect(createBox).not.toBeNull();
   expect(createBox!.y).toBeGreaterThanOrEqual(goalBox!.y + goalBox!.height);
-  expect(await create.locator('..').evaluate(node => getComputedStyle(node).position)).toBe('static');
+  await expect(create).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: info.outputPath('pass2-goal-choices-375.png') });
   await create.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath('pass2-create-375.png') });
@@ -111,6 +116,7 @@ test('target validation blocks impossible loss targets and the create action doe
 test('registration is durable before AI and reload restores it without an OAuth marker during auth pause', async ({ page }, info) => {
   const { errors, requests } = await setup(page);
   await openApp(page, '/?auth=google#plan'); await expect(page).toHaveTitle(/FitFocus/);
+  await fillRequiredMeasurements(page);
   const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
   await expect(page.getByText(/Ваш AI/)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('AI Инициализация')).toHaveCount(0);
@@ -137,6 +143,7 @@ test('registration remains on the form and sends no AI or profile request after 
     };
   });
   await openApp(page, '/?auth=google'); await expect(page).toHaveTitle(/FitFocus/);
+  await fillRequiredMeasurements(page);
   const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
   await expect(page.getByText('Не удалось сохранить профиль на устройстве. Освободите место и повторите сохранение.')).toBeVisible();
   await expect(page.getByText('AI Инициализация')).toHaveCount(0); await expect(create).toBeEnabled();
@@ -175,6 +182,7 @@ test('pagehide aborts registration AI after the base profile is durable', async 
   await page.evaluate(marker => {
     for (const suffix of ['request', 'signal', 'beforeunload', 'pagehide', 'controller']) localStorage.removeItem(`${marker}:${suffix}`);
   }, abortMarker);
+  await fillRequiredMeasurements(page);
   const create = page.getByRole('button', { name: 'Создать AI-план' }); await expect(create).toBeVisible(); await create.click();
   await aiStarted;
   expect((await saved(page)).value).toMatchObject({ id: account });

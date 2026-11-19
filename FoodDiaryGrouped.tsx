@@ -93,12 +93,12 @@ const FoodDiaryGrouped: React.FC<FoodDiaryGroupedProps> = ({
               .filter((x) => x.mealType === mt)
               .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             if (!groupItems.length) return null;
-            const calories = groupItems.reduce((s, x) => s + (x.calories || 0), 0);
+            const calories = groupItems.reduce((s, x) => s + (x.nonFood === true ? 0 : x.calories || 0), 0);
             return { mt, title: mealTypeLabel(mt), calories, groupItems };
           })
           .filter(Boolean) as Array<{ mt: MealType; title: string; calories: number; groupItems: FoodEntry[] }>;
 
-        const calories = dayItems.reduce((s, x) => s + (x.calories || 0), 0);
+        const calories = dayItems.reduce((s, x) => s + (x.nonFood === true ? 0 : x.calories || 0), 0);
         const photos = dayItems.filter((x) => x.photo || x.photoThumb).length;
         return {
           dayKey,

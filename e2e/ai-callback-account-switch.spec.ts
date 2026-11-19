@@ -29,6 +29,8 @@ type FixtureState = {
   holdProfileRead?: { active: boolean; started: () => void; wait: Promise<void>; profile: ReturnType<typeof profileFor> };
   holdProfileWrite?: { active: boolean; started: () => void; wait: Promise<void> };
   unauthorizedAiFeature?: string;
+  foodPhotoResponse?: Record<string, unknown>;
+  foodPhotoCooldownOnRequest?: number;
 };
 
 function profileFor(accountId: string, plateau = false) {
@@ -201,6 +203,15 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
     if (path === '/api/ai' && method === 'POST') {
       const feature = request.postDataJSON()?.feature;
       if (typeof feature === 'string') counts.aiRequests.push({ feature, account: requestedAccount, session: requestedSession });
+      if (feature === 'foodphoto' && state.foodPhotoCooldownOnRequest
+        === counts.aiRequests.filter(entry => entry.feature === 'foodphoto').length) {
+        return route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: scopedHeaders(responseAccount),
+          body: JSON.stringify({ error: { code: 'AI_COOLDOWN', meta: { retryAfterMs: 200 } } }),
+        });
+      }
       if (feature === state.unauthorizedAiFeature) {
         return route.fulfill({
           status: 401,
@@ -235,18 +246,18 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
               })
               : feature === 'foodphoto'
                 ? JSON.stringify({
-                  name: 'Поздняя еда A', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
+                  name: 'Поздняя еда A', photoKind: 'real_food', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
                   ingredients: [{ name: 'Старые данные A', percent: 100 }], notes: ['Поздний анализ аккаунта A'],
                 })
                 : feature === 'foodphoto_enhanced'
                   ? JSON.stringify({
-                    name: 'Поздний рецепт A', calories: 412, protein: 24, fat: 18, carbs: 39,
+                    name: 'Поздний рецепт A', photoKind: 'real_food', nonFood: false, calories: 412, protein: 24, fat: 18, carbs: 39,
                     ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
                     notes: ['Поздний анализ рецепта'], portionGrams: 200, modelConfidence: 0.95,
                   })
                 : feature === 'recipe'
                   ? JSON.stringify({
-                    title: 'Поздний пошаговый рецепт A', servings: 2, timeMinutes: 15,
+                    title: 'Поздний пошаговый рецепт A', photoKind: 'real_food', nonFood: false, servings: 2, timeMinutes: 15,
                     ingredients: [{ name: 'Ингредиент аккаунта A', amount: '100 г' }],
                     steps: [{ n: 1, text: 'Старый ответ аккаунта A', timeMin: 5 }], tips: [],
                   })
@@ -258,18 +269,18 @@ async function installAccountApi(page: Page, state: FixtureState, heldFeature?: 
         return;
       }
       const text = feature === 'foodphoto'
-        ? JSON.stringify({
-          name: 'Тестовый омлет', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
+        ? JSON.stringify(state.foodPhotoResponse ?? {
+          name: 'Тестовый омлет', photoKind: 'real_food', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
           ingredients: [{ name: 'Яйца', percent: 70 }], notes: ['Оценка по фото'],
         })
         : feature === 'foodphoto_enhanced'
           ? JSON.stringify({
-            name: 'Тестовый рецепт', calories: 320, protein: 23, fat: 21, carbs: 4,
+            name: 'Тестовый рецепт', photoKind: 'real_food', nonFood: false, calories: 320, protein: 23, fat: 21, carbs: 4,
             ingredients: [{ name: 'Яйца', amount: '100 г' }], notes: [], portionGrams: 200, modelConfidence: 0.95,
           })
           : feature === 'recipe'
             ? JSON.stringify({
-              title: 'Пошаговый тестовый рецепт', servings: 2, timeMinutes: 15,
+              title: 'Пошаговый тестовый рецепт', photoKind: 'real_food', nonFood: false, servings: 2, timeMinutes: 15,
               ingredients: [{ name: 'Яйца', amount: '100 г' }],
               steps: [{ n: 1, text: 'Приготовить блюдо', timeMin: 5 }], tips: [],
             })
@@ -2836,6 +2847,7 @@ test('an open food insight from account A is hidden after another tab activates 
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
   await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
@@ -2873,6 +2885,7 @@ test('an open food insight and editor from a retired session are hidden after sa
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await waitForAccountOutboxIdle(page, accountA);
   await expect(page.getByText('Разбор по фото: Тестовый омлет', { exact: true })).toBeVisible();
@@ -3607,7 +3620,8 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
   const edit = page.getByRole('button', { name: 'Правка', exact: true });
   if (!await edit.isVisible()) await page.getByRole('button', { name: 'Действия', exact: true }).click();
   await edit.click();
-  const name = page.getByPlaceholder('Например: манты свинина/говядина с манго-чили соусом');
+  const editor = page.getByRole('dialog', { name: 'Корректировать блюдо' });
+  const name = editor.getByRole('textbox', { name: 'Название', exact: true });
   await name.fill('Исправленное блюдо');
 
   await page.evaluate(key => {
@@ -3642,7 +3656,36 @@ test('food diary edit keeps its draft when the durable commit fails and can be r
   }).toEqual(['Исправленное блюдо']);
 });
 
-test('food photo analysis persists the diary entry, history and usage for its active account', async ({ page }, info) => {
+test('food photo analysis rejects a depiction before saving nutrition', async ({ page }) => {
+  const state: FixtureState = {
+    current: accountA,
+    profile: profileFor(accountA.id),
+    foodPhotoResponse: { name: 'Рамен', photoKind: 'depiction', nonFood: true, calories: 550 },
+  };
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await expect.poll(async () => rawValue(await readDurableSnapshot(page), profileKey(accountA.id))).not.toBeNull();
+  await waitForAccountOutboxIdle(page, accountA);
+  const before = await readDurableSnapshot(page);
+  const keys = [diaryKey(accountA.id), historyKey(accountA.id), profileKey(accountA.id)];
+  const writesBefore = fixture.counts.stateWrites.filter(key => keys.includes(key));
+  const profileWritesBefore = [...fixture.counts.profileWrites];
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'illustration.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
+  });
+  await expect(page.getByText('На фото изображение или муляж еды. Сфотографируйте настоящее блюдо.')).toBeVisible();
+  await expect(page.getByText('Рамен', { exact: true })).toHaveCount(0);
+  const after = await readDurableSnapshot(page);
+  for (const key of keys) {
+    expect(rawValue(after, key)).toBe(rawValue(before, key));
+  }
+  expect(fixture.counts.stateWrites.filter(key => keys.includes(key))).toEqual(writesBefore);
+  expect(fixture.counts.profileWrites).toEqual(profileWritesBefore);
+});
+
+test('food photo analysis persists the diary entry and history only after confirmation', async ({ page }, info) => {
   const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
   const fixture = await installAccountApi(page, state);
   await openApp(page, '/#nutrition');
@@ -3657,6 +3700,14 @@ test('food photo analysis persists the diary entry, history and usage for its ac
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
 
+  const confirm = page.getByRole('dialog', { name: 'Подтвердите запись по фото' });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole('button', { name: 'Подтвердить и записать' })).toBeInViewport({ ratio: 1 });
+  const beforeConfirm = await readDurableSnapshot(page);
+  expect(JSON.parse(rawValue(beforeConfirm, diaryKey(accountA.id)) ?? '[]')).toEqual([]);
+  expect(JSON.parse(rawValue(beforeConfirm, historyKey(accountA.id)) ?? '[]')).toEqual([]);
+  await confirm.getByRole('textbox', { name: 'Ккал', exact: true }).fill('330');
+  await confirm.getByRole('button', { name: 'Подтвердить и записать' }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3667,13 +3718,92 @@ test('food photo analysis persists the diary entry, history and usage for its ac
 
   expect(snapshot.activeSession?.accountId).toBe(accountA.id);
   expect(profile?.usage.aiFoodPhotoCount).toBe(1);
-  expect(diary).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
-  expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 320 })]));
+  expect(diary).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 330 })]));
+  expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Тестовый омлет', calories: 330 })]));
   expect(operationsFor(snapshot, accountA)).toEqual([]);
   expect(fixture.counts.profileWrites).toEqual([accountA.id]);
   expect(fixture.counts.achievementChecks).toBeGreaterThan(0);
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('food-photo-analysis-success.png') });
+});
+
+test('food photo analysis retries a batch cooldown and saves both photos once', async ({ page }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id), foodPhotoCooldownOnRequest: 2 };
+  const fixture = await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+  await waitForAccountOutboxIdle(page, accountA);
+
+  const upload = page.locator('input[type="file"][multiple]').first();
+  await upload.setInputFiles(['red', 'blue'].map(color => ({
+    name: `${color}.svg`,
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="${color}"/></svg>`),
+  })));
+
+  await expect.poll(() => fixture.counts.completedAiFeatures.filter(feature => feature === 'foodphoto')).toHaveLength(2);
+  await expect(page.getByText('Анализирую фото...')).toHaveCount(0);
+  const confirm = page.getByRole('button', { name: 'Подтвердить и записать', exact: true });
+  await confirm.click();
+  await confirm.click();
+  await expect(confirm).toHaveCount(0);
+  const snapshot = await readDurableSnapshot(page);
+  const profile = JSON.parse(rawValue(snapshot, profileKey(accountA.id)) ?? 'null') as ReturnType<typeof profileFor> | null;
+  const diary = JSON.parse(rawValue(snapshot, diaryKey(accountA.id)) ?? '[]') as Array<{ id: string; name: string }>;
+  expect(fixture.counts.aiRequests.filter(entry => entry.feature === 'foodphoto')).toHaveLength(3);
+  expect(diary.map(item => item.name)).toEqual(['Тестовый омлет', 'Тестовый омлет']);
+  expect(new Set(diary.map(item => item.id)).size).toBe(2);
+  expect(profile?.usage.aiFoodPhotoCount).toBe(2);
+});
+
+test('food photo analysis can be discarded and the first meal can be written manually', async ({ page }) => {
+  const state: FixtureState = { current: accountA, profile: profileFor(accountA.id) };
+  await installAccountApi(page, state);
+  await openApp(page, '/#nutrition');
+
+  await page.locator('input[type="file"][multiple]').first().setInputFiles({
+    name: 'discard.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>'),
+  });
+  const preview = page.getByRole('dialog', { name: 'Подтвердите запись по фото' });
+  await preview.getByRole('button', { name: 'Отмена' }).click();
+  expect(JSON.parse(rawValue(await readDurableSnapshot(page), diaryKey(accountA.id)) ?? '[]')).toEqual([]);
+
+  await page.getByRole('button', { name: 'Добавить вручную' }).click();
+  const form = page.getByRole('dialog', { name: 'Добавить блюдо вручную' });
+  await expect(form).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Добавить в дневник' })).toBeInViewport({ ratio: 1 });
+  await form.getByRole('textbox', { name: 'Название' }).fill('Каша вручную');
+  await form.getByRole('textbox', { name: 'Ккал', exact: true }).fill('245');
+  await form.getByText('Детали записи', { exact: true }).click();
+  await form.getByLabel('Вес порции, г (если известен)').fill('180');
+  await form.getByRole('button', { name: 'Добавить в дневник' }).click();
+  await expect(page.getByText('Каша вручную', { exact: true }).first()).toBeVisible();
+  const diary = JSON.parse(rawValue(await readDurableSnapshot(page), diaryKey(accountA.id)) ?? '[]');
+  expect(diary).toEqual([expect.objectContaining({ name: 'Каша вручную', calories: 245, portionGrams: 180 })]);
+});
+
+test('mobile landscape keeps food upload and navigation available', async ({ page }, info) => {
+  test.skip(info.project.name !== 'android-chrome', 'Checks the Android landscape breakpoint.');
+  await page.setViewportSize({ width: 802, height: 350 });
+  await installAccountApi(page, { current: accountA, profile: profileFor(accountA.id) });
+  await openApp(page, '/#nutrition');
+
+  const upload = page.getByText('Загрузить', { exact: true });
+  await expect(upload).toBeInViewport({ ratio: 1 });
+  await expect(page.getByText('Без лимита', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(802);
+  await expect.poll(() => upload.evaluate(element =>
+    element.getBoundingClientRect().bottom < (document.querySelector('nav')?.getBoundingClientRect().top ?? 0),
+  )).toBe(true);
+
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  const menu = page.getByRole('dialog', { name: 'Ещё разделы' });
+  await expect(menu.getByRole('button', { name: 'Инструкция', exact: true })).toHaveCount(1);
+  await expect(menu.getByRole('button', { name: 'Настройки', exact: true })).toBeInViewport({ ratio: 1 });
+  await menu.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('button', { name: 'Выйти из аккаунта', exact: true })).toBeVisible();
 });
 
 test('a favorite recipe draft stays open when its durable commit fails and can be retried', async ({ page }) => {
@@ -3742,6 +3872,7 @@ test('a held step-by-step recipe response cannot update the diary or usage after
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3806,6 +3937,7 @@ test('a held step-by-step recipe response cannot update after the same account s
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixtureA.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);
@@ -3896,6 +4028,7 @@ test('step-by-step recipe generation and favorite saving commit to the active se
     mimeType: 'image/svg+xml',
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'),
   });
+  await page.getByRole('button', { name: 'Подтвердить и записать', exact: true }).click();
   await expect(page.getByText('Тестовый омлет', { exact: true }).first()).toBeVisible();
   await expect.poll(() => fixture.counts.completedAiFeatures).toContain('foodphoto');
   await waitForAccountOutboxIdle(page, accountA);

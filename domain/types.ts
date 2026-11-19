@@ -304,6 +304,7 @@ export interface FoodItem {
     photoThumb?: string; // small data URL (cropped/resized)
 insight?: FoodInsight;
   mealType?: MealType;
+  nonFood?: boolean;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';

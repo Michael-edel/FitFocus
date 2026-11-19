@@ -18,6 +18,7 @@ USER_REF_COLUMNS = {
 EXPECTED_USER_RELATED_TABLES = {
     "users",
     "subscriptions",
+    "stripe_subscriptions",
     "usage_daily",
     "user_profiles",
     "user_kv",

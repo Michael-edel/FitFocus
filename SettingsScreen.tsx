@@ -20,6 +20,7 @@ import { SessionReadError } from './storage/sessionRead';
 import { ProfileDraftSave } from './features/settings/profileDraftSave';
 import { ProfileDraftHydration } from './features/settings/profileDraftHydration';
 import { targetWeightError, REGISTRATION_MIN_AGE, REGISTRATION_MAX_AGE } from './registrationValidation';
+import { NUTRITION_AGE_ERROR } from './domain/nutritionAge';
 import { assertPushSession, preparePushSession, requestPushJson, type PushSession } from './services/pushSession';
 
 const MIN_HEIGHT_CM = 120;
@@ -1720,8 +1721,9 @@ export default function SettingsScreen({
     const targetError = targetWeightError({ weight: user.weight, goal: draftGoal,
       targetWeight: draftTargetWeight.trim() && parsedTargetWeight !== 0 ? parsedTargetWeight : user.targetWeight });
     if (targetError) { setProfileValidationError(targetError); return; }
-    if (draftAge.trim() && (!Number.isInteger(parsedAge) || parsedAge < REGISTRATION_MIN_AGE || parsedAge > REGISTRATION_MAX_AGE)) {
-      setProfileValidationError('Укажите возраст целым числом от 1 до 130 лет.');
+    if (draftAge.trim() && parsedAge !== user.age
+        && (!Number.isInteger(parsedAge) || parsedAge < REGISTRATION_MIN_AGE || parsedAge > REGISTRATION_MAX_AGE)) {
+      setProfileValidationError(NUTRITION_AGE_ERROR);
       return;
     }
     if (Number.isFinite(parsedTargetWeight) && parsedTargetWeight > 0 && (parsedTargetWeight < MIN_WEIGHT_KG || parsedTargetWeight > MAX_WEIGHT_KG)) {

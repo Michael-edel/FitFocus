@@ -43,10 +43,10 @@ describe('registration validation', () => {
     expect(targetWeightError({ weight: 70, goal: Goal.LOSS, targetWeight: 25 })).toBeNull();
     expect(targetWeightError({ weight: 70, goal: Goal.GAIN, targetWeight: 350 })).toBeNull();
   });
-  it.each([1, 30, 130])('accepts supported integer age %s without silently changing it', age => {
+  it.each([19, 30, 78])('accepts supported integer age %s without silently changing it', age => {
     expect(registrationError({ ...data, age })).toBeNull();
   });
-  it.each([999, 131, 0, -1, NaN, Infinity, 32.5])('explains invalid age %s before risk calculation', age => {
+  it.each([999, 79, 18, 1, 0, -1, NaN, Infinity, 32.5])('explains invalid age %s before risk calculation', age => {
     expect(registrationError({ ...data, age })).toContain('возраст');
     expect(registrationRisk({ ...data, age })).toBeNull();
   });
@@ -63,9 +63,9 @@ describe('registration validation', () => {
   });
   it('renders age bounds, an inline explanation and a disabled create button for age999', () => {
     const html = screen({ ...data, age: 999 });
-    expect(html).toContain('min="1" max="130" step="1"');
+    expect(html).toContain('min="19" max="78" step="1"');
     expect(html).toContain('aria-label="Возраст" aria-invalid="true"');
-    expect(html).toContain('Укажите возраст целым числом от 1 до 130 лет.');
+    expect(html).toContain('Укажите возраст целым числом от 19 до 78 лет.');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Создать AI-план<\/button>/);
     expect(html).not.toContain('AI Инициализация');
   });

@@ -3,17 +3,15 @@ import type { AiSession } from '../../services/aiSession';
 import { assertAiSession, prepareAiSession } from '../../services/aiSession';
 import { isExpectedAiSessionFailure } from '../../services/frontendErrors';
 import type { OutboxCommitGuard, OutboxReadGuard, OutboxOperation } from '../../storage/durableOutbox';
-import type { FoodPhotoAnalysisResult } from '../../geminiService';
+import { AiProxyError, type FoodPhotoAnalysisResult } from '../../geminiService';
 import type { FastLogItem } from '../../storage/foodDiary';
-import type { FoodInsight, FoodItem } from '../../types';
+import type { FoodInsight } from '../../types';
 import { AiActionScope } from './actionScope';
+import { RejectedFoodPhotoError } from '../../services/foodPhotoGuard';
 
-export type FoodPhotoInsight = {
-  id: string;
-  photo: string;
-  name: string;
-  insight: FoodInsight;
-  nonFood?: boolean;
+export type FoodPhotoDraft = {
+  item: FastLogItem & { insight: FoodInsight };
+  guard: OutboxCommitGuard;
 };
 
 type CompressedPhoto = {
@@ -73,13 +71,9 @@ export type FoodPhotoAnalysisRunParams = {
   setScanning: (scanning: boolean) => void;
   compressPhoto: (file: File) => Promise<CompressedPhoto>;
   analyzePhoto: (base64: string, session: AiSession) => Promise<FoodPhotoAnalysisResult | null>;
-  addFoodToDiary: (
-    item: FastLogItem,
-    guard: OutboxCommitGuard,
-    isCurrent: () => boolean,
-  ) => Promise<FoodItem | undefined>;
   incrementUsage: (guard: OutboxCommitGuard) => Promise<OutboxOperation | null>;
-  showInsight: (insight: FoodPhotoInsight) => void;
+  showDraft: (draft: FoodPhotoDraft) => void;
+  showRejection: (message: string | null) => void;
   logError?: (error: unknown) => void;
   prepareSession?: typeof prepareAiSession;
   assertSession?: typeof assertAiSession;
@@ -96,6 +90,27 @@ async function stillCurrent(session: AiSession, isCurrent: () => boolean,
   }
 }
 
+const MAX_COOLDOWN_WAIT_MS = 10_000;
+
+function waitForCooldown(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+    if (signal.aborted) done();
+  });
+}
+
+function cooldownDelay(error: unknown): number | undefined {
+  if (!(error instanceof AiProxyError) || error.status !== 429 || error.code !== 'AI_COOLDOWN') return;
+  const ms = error.retryAfterMs;
+  if (ms && ms > 0 && ms <= MAX_COOLDOWN_WAIT_MS) return Math.ceil(ms);
+}
+
 /** Processes only the remaining allowance; every result and write stays with its login attempt. */
 export async function processFoodPhotoFiles({
   userId,
@@ -108,9 +123,9 @@ export async function processFoodPhotoFiles({
   setScanning,
   compressPhoto,
   analyzePhoto,
-  addFoodToDiary,
   incrementUsage,
-  showInsight,
+  showDraft,
+  showRejection,
   logError = console.error,
   prepareSession = prepareAiSession,
   assertSession = assertAiSession,
@@ -127,55 +142,83 @@ export async function processFoodPhotoFiles({
 
   const batch = unlimited ? files : files.slice(0, Math.floor(remainingScans));
   let processed = 0;
+  const failures: string[] = [];
+  let skipped = files.length - batch.length;
   let session: AiSession | undefined;
+  showRejection(null);
   setScanning(true);
   try {
     session = await prepareSession(userId, controller, current, { previous: loginGuard });
     if (!current()) return 0;
 
-    for (const file of batch) {
+    for (const [index, file] of batch.entries()) {
       if (!current()) break;
+      const reportFailure = (message: string) => {
+        failures.push(files.length === 1 ? message : `Фото ${index + 1} (${file.name}). ${message}`);
+      };
       try {
         const photo = await compressPhoto(file);
         if (!current() || !await stillCurrent(session, current, assertSession)) break;
 
-        const result = await analyzePhoto(photo.base64, session);
+        let result: FoodPhotoAnalysisResult | null;
+        try {
+          result = await analyzePhoto(photo.base64, session);
+        } catch (error) {
+          const delay = cooldownDelay(error);
+          if (!delay || !current()) throw error;
+          await waitForCooldown(delay, controller.signal);
+          if (!await stillCurrent(session, current, assertSession)) break;
+          result = await analyzePhoto(photo.base64, session);
+        }
         if (!current() || !await stillCurrent(session, current, assertSession)) break;
-        if (!result) continue;
+        if (!result) throw new Error('Missing food photo analysis');
+        if (result.nonFood !== false) throw new RejectedFoodPhotoError('non_food');
 
         const guard: OutboxCommitGuard = { readGuard: session.guard, canCommit: current };
-        const item = buildPhotoDiaryItem(result, photo);
-        const newEntry = await addFoodToDiary(item, guard, current);
-        if (!newEntry || !current() || !await stillCurrent(session, current, assertSession)) break;
-
         const usageOperation = await incrementUsage(guard);
         if (!current() || !await stillCurrent(session, current, assertSession)) break;
-        if (usageOperation?.status !== 'pending') continue;
-
-        showInsight({
-          id: newEntry.id,
-          photo: photo.dataUrl,
-          name: result.name,
-          insight: item.insight,
-          nonFood: newEntry.nonFood === true,
-        });
+        if (usageOperation?.status !== 'pending') {
+          reportFailure('Не удалось сохранить состояние анализа.');
+          continue;
+        }
+        showDraft({ item: buildPhotoDiaryItem(result, photo), guard });
         processed += 1;
       } catch (error) {
-        if (current() && (!session || await stillCurrent(session, current, assertSession))) {
-          if (!isExpectedAiSessionFailure(error)) logError(error);
+        if (!await stillCurrent(session, current, assertSession) || isExpectedAiSessionFailure(error)) break;
+        if (error instanceof RejectedFoodPhotoError) {
+          reportFailure(error.message);
+          continue;
         }
+        if (error instanceof AiProxyError && ['PAYWALL', 'DAILY_LIMIT', 'AI_LIMIT'].includes(error.code ?? '')) {
+          reportFailure('Лимит анализа AI исчерпан. Повторите попытку позже.');
+          skipped += batch.length - index - 1;
+          break;
+        }
+        logError(error);
+        reportFailure(error instanceof AiProxyError && error.status === 429
+          ? 'Слишком много запросов. Повторите попытку чуть позже.'
+          : 'Не удалось обработать фото. Попробуйте ещё раз.');
       }
     }
   } catch (error) {
-    if (current() && !isExpectedAiSessionFailure(error)) logError(error);
+    if (current() && !isExpectedAiSessionFailure(error)) {
+      logError(error);
+      failures.push('Не удалось начать анализ фото. Попробуйте ещё раз.');
+    }
   } finally {
-    if (current()) setScanning(false);
+    if (current()) {
+      if (skipped) failures.push(`Фото за пределами лимита: ${skipped}.`);
+      if (failures.length && (!session || await stillCurrent(session, current, assertSession))) {
+        showRejection(failures.join('\n'));
+      }
+      if (current()) setScanning(false);
+    }
   }
 
   return processed;
 }
 
-type UseFoodPhotoAnalysisParams = Omit<FoodPhotoAnalysisRunParams, 'files' | 'controller'>;
+type UseFoodPhotoAnalysisParams = Omit<FoodPhotoAnalysisRunParams, 'files' | 'controller'> & { clearDrafts: () => void };
 
 export function useFoodPhotoAnalysis({
   userId,
@@ -186,9 +229,10 @@ export function useFoodPhotoAnalysis({
   setScanning,
   compressPhoto,
   analyzePhoto,
-  addFoodToDiary,
   incrementUsage,
-  showInsight,
+  showDraft,
+  clearDrafts,
+  showRejection,
   logError,
   prepareSession,
   assertSession,
@@ -197,7 +241,7 @@ export function useFoodPhotoAnalysis({
   useLayoutEffect(() => {
     scope.activate();
     setScanning(false);
-    const hide = () => scope.invalidate();
+    const hide = () => { scope.invalidate(); clearDrafts(); };
     const show = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
       scope.activate();
@@ -210,11 +254,12 @@ export function useFoodPhotoAnalysis({
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
     };
-  }, [scope, setScanning]);
+  }, [scope, setScanning, clearDrafts]);
 
   return useCallback((files: File[]) => {
     const attempt = scope.begin();
     if (!attempt) return Promise.resolve(0);
+    clearDrafts();
     return processFoodPhotoFiles({
       userId,
       loginGuard,
@@ -226,13 +271,13 @@ export function useFoodPhotoAnalysis({
       setScanning: scanning => { if (attempt.isCurrent()) setScanning(scanning); },
       compressPhoto,
       analyzePhoto,
-      addFoodToDiary,
       incrementUsage,
-      showInsight: insight => { if (attempt.isCurrent()) showInsight(insight); },
+      showDraft: draft => { if (attempt.isCurrent()) showDraft(draft); },
+      showRejection: message => { if (attempt.isCurrent()) showRejection(message); },
       logError,
       prepareSession,
       assertSession,
     }).finally(attempt.finish);
-  }, [addFoodToDiary, analyzePhoto, assertSession, compressPhoto, incrementUsage, isCurrentSession, loginGuard, logError,
-    openPaywall, prepareSession, remainingScans, scope, setScanning, showInsight, userId]);
+  }, [analyzePhoto, assertSession, clearDrafts, compressPhoto, incrementUsage, loginGuard, logError,
+    openPaywall, prepareSession, remainingScans, scope, setScanning, showDraft, showRejection, userId]);
 }

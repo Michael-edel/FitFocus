@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDayKey, getWeekKey, last7DayKeys, toLocalDayKey } from '../dateUtils';
+import { getDayKey, getLocalWeekStart, getWeekKey, last7DayKeys, toLocalDayKey } from '../dateUtils';
 
 describe('date utilities', () => {
   it('formats local day keys consistently', () => {
@@ -10,6 +10,11 @@ describe('date utilities', () => {
   it('uses ISO week boundaries across a new year', () => {
     expect(getWeekKey(new Date(2026, 11, 31))).toBe('2026-53');
     expect(getWeekKey(new Date(2027, 0, 1))).toBe('2026-53');
+  });
+
+  it('starts the next week at local Monday midnight', () => {
+    expect(getLocalWeekStart(new Date(2026, 10, 15, 23, 59))).toBe('2026-11-09');
+    expect(getLocalWeekStart(new Date(2026, 10, 16, 0, 0))).toBe('2026-11-16');
   });
 
   it('returns seven consecutive day keys ending at the anchor date', () => {

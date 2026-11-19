@@ -17,6 +17,8 @@ import {
 } from './types';
 import type { OutboxReadGuard } from './storage/durableOutbox';
 import { getAccountScopedUiValue, useAccountScopedUiSetter } from './features/state/accountScopedUi';
+import { getLocalWeekStart } from './dateUtils';
+import { MAX_NUTRITION_AGE, MIN_NUTRITION_AGE, supportsNutritionTargets } from './domain/nutritionAge';
 
 type MealPartsComponent = React.ComponentType<{ value: string }>;
 type ShoppingListCardComponent = React.ComponentType<{
@@ -111,18 +113,12 @@ export default function PlanScreen({
   isCurrentSession,
   ShoppingListCardComponent,
 }: PlanScreenProps) {
-  const getWeekStartISO = React.useCallback((date: Date) => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const day = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() - day + 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
+  const nutritionTargetsAvailable = supportsNutritionTargets(currentUser?.age);
   const tasks = currentUserAiPlan?.firstTasks ?? [];
   const firstThree = tasks.slice(0, 3);
   const weeklyMenu = currentUserAiPlan?.weeklyMenu;
   const rules = currentUserAiPlan?.rules ?? [];
-  const shoppingWeekStart = weeklyMenu?.weekStart || getWeekStartISO(new Date());
+  const shoppingWeekStart = weeklyMenu?.weekStart || getLocalWeekStart(new Date());
   const activeWeekDayStorageKey = React.useMemo(
     () => `fitfocus.plan.active-day.v1:${currentUser?.id ?? 'anon'}`,
     [currentUser?.id],
@@ -261,9 +257,9 @@ export default function PlanScreen({
             <ShieldCheck size={14} className="text-indigo-300" />Интенсивность учтена
           </div>
         </div>
-        <button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all min-h-[44px]">
+        {currentUserAiPlan && <button onClick={() => setPlanIntroOpen(true)} className="inline-flex items-center gap-2 px-4 py-3 rounded-[1.5rem] bg-slate-950 border border-slate-800 text-slate-200 font-black hover:border-indigo-500/30 transition-all min-h-[44px]">
           <Sparkles size={16} /> Показать кратко
-        </button>
+        </button>}
       </header>
 
       {!currentUserAiPlan && (
@@ -271,8 +267,10 @@ export default function PlanScreen({
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-300 shrink-0"><Sparkles size={18} /></div>
             <div>
-              <p className="text-sm font-black text-amber-100">План ещё подготавливается</p>
-              <p className="mt-1 text-sm text-amber-200/80 font-semibold">Сначала заполните профиль и дождитесь генерации AI-плана. Пока план не готов, разделы показывают безопасные заглушки вместо пустого экрана.</p>
+              <p className="text-sm font-black text-amber-100">{nutritionTargetsAvailable ? 'План ещё подготавливается' : 'Персональный план недоступен'}</p>
+              <p className="mt-1 text-sm text-amber-200/80 font-semibold">{nutritionTargetsAvailable
+                ? 'Заполните профиль и дождитесь генерации AI-плана.'
+                : `FitFocus рассчитывает персональные цели в возрасте ${MIN_NUTRITION_AGE}–${MAX_NUTRITION_AGE} лет. Дневник питания доступен.`}</p>
             </div>
           </div>
         </div>

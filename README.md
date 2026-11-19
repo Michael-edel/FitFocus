@@ -67,12 +67,6 @@ npm run test:e2e
 
 ## Текущий этап
 
-Рабочий локальный checkout — `durable-outbox`; удалённая ветка PR —
-`fix/durable-outbox`, [draft PR #93](https://github.com/Michael-edel/FitFocus/pull/93).
-Проект находится на этапе P0 стабилизации: общая IndexedDB outbox, миграция
-legacy-очереди, атомарная запись профиля и меню, session guards и восстановление
-конфликтов реализованы, но полный lifecycle и release acceptance продолжаются.
-Staging/OAuth/D1, совместимый откат и интеграция в защищённую `main` ещё не
-подтверждены. Текущие HEAD/CI, выполненные проверки, оставшиеся пункты и их
-ограничения ведутся отдельно в [статусе проекта](docs/project-status.md),
+Текущие HEAD/CI, выполненные проверки, оставшиеся пункты и их
+ограничения ведутся в [статусе проекта](docs/project-status.md),
 [журнале](docs/stabilization-progress.md) и [плане](TASKS.md).

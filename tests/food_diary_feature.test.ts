@@ -40,5 +40,6 @@ describe('food diary feature', () => {
     expect(replaced[0]).toMatchObject({ name: 'Овсянка', calories: 370 });
     expect(replaced[0].photo).toBeUndefined();
     expect(replaced[0].insight?.recipe).toBeUndefined();
+    expect(food.insight?.recipe?.title).toBe('Каша');
   });
 });

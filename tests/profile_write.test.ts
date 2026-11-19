@@ -63,6 +63,19 @@ describe('profile write use case', () => {
     })).toEqual({ weight: 63.5, wearableEnabled: true, name: 'Анна' });
   });
 
+  it('rejects a change to an unsupported nutrition age while allowing unrelated edits to a legacy profile', async () => {
+    const user = { sub: 'user-1', email: 'user@example.com' };
+    const db = makeDb({ userId: user.sub, profileJson: JSON.stringify({ age: 17, name: 'До' }), version: 3 });
+    await expect(writeProfile(db, user, { age: 18, baseVersion: 3 }, 'patch'))
+      .resolves.toEqual({ kind: 'invalid-nutrition-age' });
+    await expect(writeProfile(db, user, { age: 'unknown', baseVersion: 3 }, 'patch'))
+      .resolves.toEqual({ kind: 'invalid-nutrition-age' });
+    await expect(writeProfile(db, user, { age: 17, name: 'После', baseVersion: 3 }, 'patch'))
+      .resolves.toMatchObject({ kind: 'saved', profile: { age: 17, name: 'После' } });
+    await expect(writeProfile(db, user, { age: 19, baseVersion: 4 }, 'patch'))
+      .resolves.toMatchObject({ kind: 'saved', profile: { age: 19 } });
+  });
+
   it('writes a versioned patch with server-owned identity and plan', async () => {
     const db = makeDb({
       userId: 'user-1',

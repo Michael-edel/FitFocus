@@ -6,6 +6,9 @@ import { runCouncil } from "./orchestrator";
 import { calculateDailyTargets, getBloodGlucoseGuidance } from "./profileMath";
 import { postScopedAiJson, type AiSession } from './services/aiSession';
 import { SessionReadError } from './storage/sessionRead';
+import { assertRealFoodPhoto, FOOD_PHOTO_KIND_SCHEMA, FOOD_PHOTO_RULE, RejectedFoodPhotoError } from './services/foodPhotoGuard';
+import { getLocalWeekStart } from './dateUtils';
+import { NUTRITION_AGE_ERROR, supportsNutritionTargets } from './domain/nutritionAge';
 
 // IMPORTANT (SECURITY):
 // Ключ Gemini НЕ должен находиться во фронтенде. Любые вызовы Gemini выполняются ТОЛЬКО
@@ -29,7 +32,7 @@ type AiProxyResponse = JsonRecord & {
   text: string;
 };
 export class AiProxyError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly code?: string, readonly retryAfterMs?: number) {
     super(message);
     this.name = 'AiProxyError';
   }
@@ -436,7 +439,10 @@ async function callAiProxy(
       } catch {}
     }
     const msg = stringValue(error.message) || stringValue(data.message) || `AI proxy error: ${res.status}`;
-    throw new AiProxyError(msg, res.status);
+    const meta = asRecord(error.meta ?? data.meta);
+    const code = stringValue(error.code) || stringValue(data.error);
+    const retryAfterMs = typeof meta.retryAfterMs === 'number' ? meta.retryAfterMs : undefined;
+    throw new AiProxyError(msg, res.status, code, retryAfterMs);
   }
 
   // Нормализуем ответ: UI ожидает поле `text`,
@@ -698,7 +704,9 @@ export const getLastAiAction = (userId?: string | null): AiActionRecord | null =
  * Меню на неделю (строгий JSON + schema). Используется для вкладки "План".
  */
 export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, session: AiSession): Promise<WeeklyMenu> {
+  if (!supportsNutritionTargets(user.age)) throw new Error(NUTRITION_AGE_ERROR);
   if (session.guard.accountId !== user.id) throw new Error('LOGIN_SESSION_CHANGED');
+  const weekStart = getLocalWeekStart(new Date());
   const schema = {
     type: "OBJECT",
     properties: {
@@ -783,16 +791,6 @@ export async function generateWeeklyMenu(user: UserProfile, plan: AIPlan, sessio
   const shoppingListItems = normalizeShoppingListItems(obj.shoppingListItems, shoppingList)
     .slice(0, 120);
 
-  // weekStart (UTC Monday) for storage/export
-  const weekStart = (() => {
-    const d0 = new Date();
-    const date = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()));
-    const day = date.getUTCDay();
-    const diff = (day === 0 ? -6 : 1 - day);
-    date.setUTCDate(date.getUTCDate() + diff);
-    return date.toISOString().slice(0, 10);
-  })();
-
   // Legacy list fallback from items if shoppingList empty
   const legacyFromItems = shoppingListItems.map((it) => `${it.name} — ${it.grams} г`);
   const finalShoppingList = shoppingList.length ? shoppingList : legacyFromItems;
@@ -816,7 +814,7 @@ export async function generateFamilyWeeklyMenu(
   [owner, ...(familyProfiles || [])].forEach(p => uniqueById.set(p.id, p));
   const allProfiles = Array.from(uniqueById.values());
   const allPeople = allProfiles.map(p => {
-    const targets = p.aiPlan?.dailyKpi || calculateDailyTargets(p);
+    const targets = supportsNutritionTargets(p.age) ? p.aiPlan?.dailyKpi || calculateDailyTargets(p) : null;
     return {
       id: p.id,
       name: p.name,
@@ -935,10 +933,11 @@ const dietaryBlock = (() => {
   const dayNames = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
   const peopleLine = people.map(p => {
     const t = p.targets;
+    if (!t) return `${p.name} (ID: ${p.id}): только общие блюда, без индивидуальной граммовки или калорий.`;
     return `${p.name} (${p.gender}, ${p.age} лет): цель ${t?.calories ?? "?"} ккал/день; Б${t?.protein ?? "?"} Ж${t?.fat ?? "?"} У${t?.carbs ?? "?"}`;
   }).join("\n");
 
-  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- КАЖДАЯ строка portions ОБЯЗАНА содержать: (1) ориентир по общему весу порции, (2) примерные калории.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
+  const prompt = `Ты — диетолог-организатор меню для семьи.\n\nЗадача: составить единое меню на 7 дней, где готовим ОДНИ и те же блюда для всех,\nно порции/граммовки отличаются под разные калории.\n\nРЕЖИМ ГОТОВКИ: ${prefs.cookingMode === "once_per_day" ? "готовим 1 раз в день (ужин + остатки/контейнеры на следующий день)" : "готовим для каждого приёма пищи"}.\nБЮДЖЕТ (если указан): ${prefs.budgetPerWeek ? `${prefs.budgetPerWeek} ${prefs.currency || ""}` : "не задан"}.\n\nСостав семьи (учесть ВСЕХ ниже):\n${peopleLine}\n\nОБЩИЕ ИСКЛЮЧЕНИЯ (нельзя в общей готовке): ${globalExcl || "нет"}.\nИНДИВИДУАЛЬНЫЕ ИСКЛЮЧЕНИЯ (учесть порциями/заменами): ${individualExcl || "нет"}.\nМЕДИЦИНСКИЕ ОГРАНИЧЕНИЯ: ${medicalBlock || "нет"}.\n\nТребования к результату:\n- Верни СТРОГО валидный JSON по schema (без текста, без markdown).\n- days: 7 дней, порядок: Понедельник..Воскресенье.\n- Для каждого приёма: base — одно блюдо для всех (коротко: "рыба + рис + салат").\n- portions — объект вида {"<personId>": "граммовки/порция кратко"}. Должен содержать ВСЕ id из списка семьи.\n- Если есть индивидуальные исключения: делай замены внутри portions (например, без молока, без мёда) НЕ меняя base радикально.\n- Пиши граммовки (пример: "курица 160г + гречка 80г + овощи") и/или количество ("2 яйца").\n- Для участника с заданной целью укажи (1) общий вес порции и (2) примерные калории. Для участника без цели укажи только общее блюдо без граммовки и калорий.\n  Формат-ориентир: "всего ~420г: курица 160г + рис 80г + салат 180г (≈560 ккал)".\n- Если режим once_per_day: допускаются контейнеры/остатки, но всё равно укажи вес/ккал порции.\n- shoppingList: общий список покупок на неделю, 20–40 пунктов, без запрещённых продуктов.\n\nВажно: не задавай вопросов — входные данные уже переданы.`;
 
   const res = await callAiProxy(AI_DEFAULT_MODEL, prompt, "family_menu", {
     responseMimeType: "application/json",
@@ -953,7 +952,7 @@ const dietaryBlock = (() => {
     const portions = asRecord(meal.portions);
     const normPortions: Record<string, string> = {};
     for (const p of people) {
-      normPortions[p.id] = stringValue(portions[p.id]).trim();
+      normPortions[p.id] = p.targets ? stringValue(portions[p.id]).trim() : 'Общее блюдо без расчёта порции и калорий';
     }
     return { base: stringValue(meal.base).trim(), portions: normPortions };
   };
@@ -1047,7 +1046,7 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         },
       },
       {
-        text: 'Определи, является ли изображение едой или напитком для человека. Если это не еда и не напиток, верни nonFood=true, calories=0, protein=0, fat=0, carbs=0, ingredients=[] и notes с кратким объяснением НА РУССКОМ; не оценивай калорийность непищевого объекта. Если это еда или напиток, анализируй блюдо. Верни JSON с полями: nonFood (boolean), name (название НА РУССКОМ), calories (число), protein (г), fat (г), carbs (г), ingredients (массив объектов с name НА РУССКОМ и percent), notes (массив строк НА РУССКОМ). Не используй латиницу. Ответ строго в формате JSON.',
+        text: FOOD_PHOTO_RULE + ' Укажи nonFood=false только для real_food. Для настоящего блюда оцени КБЖУ и доли ингредиентов. Название, ингредиенты и заметки пиши по-русски. Ответ строго в формате JSON.',
       },
     ],
   }, 'foodphoto', {
@@ -1056,6 +1055,7 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
       type: "OBJECT",
       properties: {
         name: { type: "STRING" },
+        photoKind: FOOD_PHOTO_KIND_SCHEMA,
         nonFood: { type: "BOOLEAN" },
         calories: { type: "NUMBER" },
         protein: { type: "NUMBER" },
@@ -1073,10 +1073,12 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         },
         notes: { type: "ARRAY", items: { type: "STRING" } }
       },
-      required: ["name", "nonFood", "calories", "protein", "fat", "carbs", "ingredients"]
+      required: ["name", "photoKind", "nonFood", "calories", "protein", "fat", "carbs", "ingredients", "notes"]
     }
   }, session);
-  return normalizeFoodPhotoAnalysis(safeJsonObject(response.text));
+  const result = safeJsonObject(response.text);
+  assertRealFoodPhoto(result);
+  return normalizeFoodPhotoAnalysis(result);
 }
 
     // Enhanced re-analysis: stricter prompt, portion grams estimate, more detailed ingredients
@@ -1084,6 +1086,8 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
       const schema = {
         type: "OBJECT",
         properties: {
+          photoKind: FOOD_PHOTO_KIND_SCHEMA,
+          nonFood: { type: "BOOLEAN" },
           name: { type: "STRING" },
           calories: { type: "NUMBER" },
           protein: { type: "NUMBER" },
@@ -1103,11 +1107,11 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
           portionGrams: { type: "NUMBER" },
           modelConfidence: { type: "NUMBER" }
         },
-        required: ["name","calories","protein","fat","carbs","ingredients","notes"]
+        required: ["photoKind","nonFood","name","calories","protein","fat","carbs","ingredients","notes","portionGrams","modelConfidence"]
       };
 
-      const prompt = `Ты — эксперт по нутрициологии и пищевому анализу по фото.
-Проанализируй изображение максимально детально.
+      const prompt = `${FOOD_PHOTO_RULE}
+Укажи nonFood=false только для real_food. Продолжай анализ только для real_food.
 Обязательно:
 - Оцени примерный вес порции (portionGrams) в граммах
 - Раздели крем/соусы по типу, если применимо
@@ -1131,7 +1135,9 @@ export async function analyzeFoodPhoto(base64: string, session: AiSession): Prom
         responseSchema: schema,
       }, session);
 
-      return normalizeEnhancedFoodPhotoAnalysis(safeJsonObject(response.text));
+      const result = safeJsonObject(response.text);
+      assertRealFoodPhoto(result);
+      return normalizeEnhancedFoodPhotoAnalysis(result);
     }
 
 /**
@@ -1162,6 +1168,7 @@ export async function getCoachAdvice(data: unknown, session: AiSession): Promise
  * Генерация персонального плана (используется Gemini Pro)
  */
 export async function generatePersonalPlan(user: UserProfile, session: AiSession): Promise<AIPlan> {
+  if (!supportsNutritionTargets(user.age)) throw new Error(NUTRITION_AGE_ERROR);
   const schema = {
     type: "OBJECT",
     properties: {
@@ -1346,13 +1353,15 @@ export async function getRecipeFromPhoto(photoBase64: string, session: AiSession
   const response = await callAiProxy(AI_DEFAULT_MODEL, {
     parts: [
       { inlineData: { mimeType: 'image/jpeg', data: photoBase64 } },
-      { text: 'Напиши пошаговый рецепт этого блюда на русском. Верни JSON с полями: title, servings, timeMinutes, ingredients (массив объектов name, amount), steps (массив объектов n, text, timeMin), tips (массив строк). Для каждого ингредиента указывай amount как короткую измеримую строку: например "200 г", "1 шт.", "150 мл", "1 ст. л.". Если точный вес по фото неизвестен, дай реалистичную оценку, но не оставляй amount пустым без необходимости.' }
+      { text: FOOD_PHOTO_RULE + ' Укажи nonFood=false только для real_food. Только для real_food напиши пошаговый рецепт на русском. Указывай количество каждого ингредиента в измеримых единицах, например "200 г" или "150 мл".' }
     ]
   }, 'recipe', {
     responseMimeType: "application/json",
     responseSchema: {
       type: "OBJECT",
       properties: {
+        photoKind: FOOD_PHOTO_KIND_SCHEMA,
+        nonFood: { type: "BOOLEAN" },
         title: { type: "STRING" },
         servings: { type: "NUMBER" },
         timeMinutes: { type: "NUMBER" },
@@ -1379,8 +1388,12 @@ export async function getRecipeFromPhoto(photoBase64: string, session: AiSession
         },
         tips: { type: "ARRAY", items: { type: "STRING" } }
       },
-      required: ["title", "ingredients", "steps"]
+      required: ["photoKind", "nonFood", "title", "servings", "timeMinutes", "ingredients", "steps", "tips"]
     }
   }, session);
-  return normalizeRecipe(safeJsonObject(response.text));
+  const result = safeJsonObject(response.text);
+  assertRealFoodPhoto(result);
+  const recipe = normalizeRecipe(result);
+  if (!recipe.steps.length) throw new RejectedFoodPhotoError('uncertain');
+  return recipe;
 }

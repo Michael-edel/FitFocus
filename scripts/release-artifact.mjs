@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const required = ['dist/index.html', 'dist/sw.js', 'dist/_routes.json', 'dist/_worker.js/index.js',
   'source.tar', 'package-lock.json', 'wrangler.toml', 'migrations/0021_family_menu_generations.sql'];
+const supportedMigrations = new Set(['0021_family_menu_generations.sql', '0022_stripe_subscriptions.sql']);
 
 function inventory(root, directory = root) {
   return readdirSync(directory).sort().flatMap(name => {
@@ -26,11 +27,13 @@ export function verifyReleaseArtifact(root) {
   const manifest = JSON.parse(readFileSync(resolve(root, 'release.json'), 'utf8'));
   if (manifest.format !== 1 || !/^[a-f0-9]{40}$/.test(manifest.sourceSha)
     || manifest.compatibility?.idbVersion !== 3
-    || manifest.compatibility?.d1Migration !== '0021_family_menu_generations.sql') {
+    || !supportedMigrations.has(manifest.compatibility?.d1Migration)) {
     throw new Error('Unsupported release identity or storage contract');
   }
   const files = inventory(root);
-  for (const file of required) if (!files.some(entry => entry.path === file)) throw new Error(`Missing release file: ${file}`);
+  for (const file of new Set([...required, `migrations/${manifest.compatibility.d1Migration}`])) {
+    if (!files.some(entry => entry.path === file)) throw new Error(`Missing release file: ${file}`);
+  }
   if (JSON.stringify(files) !== JSON.stringify(manifest.files)) throw new Error('Release file inventory or SHA-256 mismatch');
   return manifest;
 }
@@ -48,9 +51,9 @@ export function buildReleaseArtifact({ sourceSha, output, project = process.cwd(
   const git = args => execFileSync('git', args, { cwd: project, encoding: 'utf8' }).trim();
   git(['cat-file', '-e', `${sourceSha}^{commit}`]);
   const source = file => git(['show', `${sourceSha}:${file}`]);
-  if (!/STATE_DATABASE_VERSION\s*=\s*3\s*;/.test(source('storage/stateDatabase.ts'))
-    || !/DB_MIGRATION_VERSION\s*=\s*"0021_family_menu_generations.sql"/.test(source('versioning.ts'))) {
-    throw new Error('This packager only supports the reviewed IDB v3 / D1 0021 contract');
+  const d1Migration = source('versioning.ts').match(/DB_MIGRATION_VERSION\s*=\s*"([^"]+)"/)?.[1];
+  if (!/STATE_DATABASE_VERSION\s*=\s*3\s*;/.test(source('storage/stateDatabase.ts')) || !supportedMigrations.has(d1Migration)) {
+    throw new Error('Unsupported IDB or D1 storage contract');
   }
   const require = createRequire(resolve(project, 'package.json'));
   wranglerCli ??= resolve(dirname(require.resolve('wrangler/package.json')), 'bin/wrangler.js');
@@ -81,7 +84,7 @@ export function buildReleaseArtifact({ sourceSha, output, project = process.cwd(
   }
   const manifest = { format: 1, sourceSha, builtAt: new Date().toISOString(),
     toolchain: { node: process.version, wrangler: wranglerVersion },
-    compatibility: { idbVersion: 3, d1Migration: '0021_family_menu_generations.sql',
+    compatibility: { idbVersion: 3, d1Migration,
       date: '2026-02-17', flags: ['nodejs_compat'] }, files: inventory(output) };
   writeFileSync(resolve(output, 'release.json'), JSON.stringify(manifest, null, 2) + '\n');
   verifyReleaseArtifact(output);

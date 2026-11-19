@@ -18,14 +18,14 @@ for (const mobile of [false, true]) {
       await expect(page.locator('vite-error-overlay')).toHaveCount(0);
       const active = nav.locator('button.ff-navigation-active:visible').first();
       await expect(active).toBeVisible();
-      const surface = await nav.evaluate(element => {
+      const surface = await nav.evaluate((element, mobile) => {
         const probe = document.createElement('span');
-        probe.style.backgroundColor = 'var(--ff-card)';
+        probe.style.backgroundColor = mobile ? 'var(--ff-bg)' : 'var(--ff-card)';
         element.append(probe);
         const expected = getComputedStyle(probe).backgroundColor;
         probe.remove();
         return { actual: getComputedStyle(element).backgroundColor, expected };
-      });
+      }, mobile);
       expect(surface.actual).toBe(surface.expected);
       const expectedActiveColor = await active.evaluate((element, theme) => {
         const probe = document.createElement('span');

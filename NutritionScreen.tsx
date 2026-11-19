@@ -4,12 +4,14 @@ import type { FoodEntry, FoodItem, MealType } from './types';
 import type { FastLogItem } from './storage/foodDiary';
 import type { MacroBarProps } from './components/MacroBar';
 import type { FoodDiaryGroupedProps } from './FoodDiaryGrouped';
+import { StateStorageNotice } from './ui/StateStorageNotice';
 
 const CameraCapture = React.lazy(() => import('./ui/components/CameraCapture'));
 
 type SearchResult = FastLogItem;
 
 type NutritionScreenProps = {
+  accountId?: string;
   cameraOpen: boolean;
   setCameraOpen: (open: boolean) => void;
   cameraFacing: 'user' | 'environment';
@@ -23,6 +25,7 @@ type NutritionScreenProps = {
   setShowSearchResults: (value: boolean) => void;
   searchResults: SearchResult[];
   addFoodToDiary: (item: FastLogItem) => Promise<FoodItem | undefined>;
+  onAddManualFood: () => void;
   foodDiary: FoodItem[];
   selectedFoodIds: ReadonlySet<string>;
   toggleFoodSelected: (id: string) => void;
@@ -44,6 +47,7 @@ type NutritionScreenProps = {
 };
 
 export default function NutritionScreen({
+  accountId,
   cameraOpen,
   setCameraOpen,
   cameraFacing,
@@ -56,6 +60,7 @@ export default function NutritionScreen({
   setShowSearchResults,
   searchResults,
   addFoodToDiary,
+  onAddManualFood,
   foodDiary,
   selectedFoodIds,
   toggleFoodSelected,
@@ -101,35 +106,39 @@ export default function NutritionScreen({
   };
 
   return (
-    <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700">
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+    <div className="min-w-0 space-y-6 animate-in slide-in-from-bottom-6 duration-700">
+      <header className="flex flex-col desktop-nav:flex-row desktop-nav:flex-wrap desktop-nav:items-end justify-between gap-4">
         <div className="text-left">
-          <h1 className="text-[2.4rem] leading-none md:text-4xl font-black text-slate-100 mb-2">Анализ еды</h1>
-          <p className="text-slate-400 font-medium">Фотографируйте — AI посчитает все сам</p>
+          <h1 className="text-3xl leading-tight md:text-4xl font-black text-slate-100 mb-1">Анализ еды</h1>
+          <p className="text-slate-400 font-medium">Оцените блюдо по фото или добавьте его вручную.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <div className="text-right hidden sm:block">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Осталось сегодня</p>
-            <p className="text-xl font-black text-indigo-400 tabular-nums">{remainingScans} AI Сканов</p>
+            <p className="text-base font-bold text-indigo-300 tabular-nums">{remainingScans === Infinity ? 'Без лимита' : `Сканов: ${remainingScans}`}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="grid min-w-0 flex-1 grid-cols-2 items-stretch gap-2 sm:flex sm:flex-none">
             {useNativeCameraCapture ? (
-              <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
-                <Camera size={24} /><span>Снять</span>
+              <label className="flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-2.5 py-2 text-sm font-bold text-white hover:bg-indigo-700 sm:px-4">
+                <Camera size={18} className="shrink-0" /><span>Снять</span>
                 <input type="file" accept="image/*" capture={cameraFacing} className="hidden" onChange={handlePhotoUpload} />
               </label>
             ) : (
-              <button type="button" onClick={() => setCameraOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-indigo-900/30 active:scale-95">
-                <Camera size={24} /><span>Снять</span>
+              <button type="button" onClick={() => setCameraOpen(true)} className="flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-2.5 py-2 text-sm font-bold text-white hover:bg-indigo-700 sm:px-4">
+                <Camera size={18} className="shrink-0" /><span>Снять</span>
               </button>
             )}
-            <label title="Можно выбрать сразу несколько фото (Shift/Ctrl)" className="bg-slate-800 hover:bg-slate-700 text-white px-7 md:px-10 py-4 md:py-5 rounded-[2rem] md:rounded-[2.5rem] font-black text-sm uppercase tracking-widest flex items-center gap-3 cursor-pointer transition-all shadow-2xl shadow-slate-900/30 active:scale-95">
-              <Plus size={24} /><span>Загрузить</span>
+            <label title="Можно выбрать несколько фото" className="flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-800 px-2.5 py-2 text-sm font-bold text-slate-100 hover:bg-slate-700 sm:px-4">
+              <Plus size={18} className="shrink-0" /><span>Загрузить</span>
               <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
             </label>
           </div>
         </div>
       </header>
+      <button type="button" onClick={onAddManualFood} className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-100">
+        <Plus size={20} /> Добавить вручную
+      </button>
+      <StateStorageNotice accountId={accountId} reserveSpace={false} />
 
       <React.Suspense fallback={null}>
         <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCaptured={(file) => processPhotoFiles([file])} facing={cameraFacing} onFacingChange={setCameraFacing} />
@@ -170,7 +179,7 @@ export default function NutritionScreen({
               <div className="p-20 text-center text-slate-600 bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-800 flex flex-col items-center gap-4 shadow-inner">
                 <Utensils size={48} className="opacity-20" />
                 <p className="font-bold text-slate-400">Вы еще ничего не ели сегодня</p>
-                <p className="text-sm font-semibold text-slate-500 max-w-md">Сделайте первый снимок еды или загрузите фото — запись появится здесь, а КБЖУ обновится автоматически.</p>
+                <p className="text-sm font-semibold text-slate-500 max-w-md">Добавьте блюдо вручную или подтвердите результат анализа фото.</p>
               </div>
             ) : (
               <FoodDiaryGroupedComponent
@@ -197,12 +206,12 @@ export default function NutritionScreen({
           <p className="text-xs font-black uppercase tracking-[0.32em] text-slate-500">
             {activeDiaryDayLabel ? `Показан день: ${activeDiaryDayLabel}` : 'Показан день: сегодня'}
           </p>
-          <div className="space-y-8">
+          {targets.calories > 0 ? <div className="space-y-8">
             <MacroBarComponent label="Калории" current={dailyStats.calories} target={targets.calories} color="#818CF8" unit="ккал" />
             <MacroBarComponent label="Белки" current={dailyStats.protein} target={targets.protein} color="#818CF8" />
             <MacroBarComponent label="Жиры" current={dailyStats.fat} target={targets.fat} color="#FCD34D" />
             <MacroBarComponent label="Углеводы" current={dailyStats.carbs} target={targets.carbs} color="#A7F3D0" />
-          </div>
+          </div> : <p className="text-sm text-slate-300">Автоматическая цель КБЖУ для этого профиля недоступна.</p>}
         </div>
       </div>
     </div>
