@@ -17,6 +17,18 @@ export { applyStripeSubscriptionUpdate };
 
 const MAX_STRIPE_WEBHOOK_BYTES = 1024 * 1024;
 
+async function* listAccountSubscriptions(stripe: Stripe, env: Env, uid: string) {
+  const prices = new Set([env.PRICE_PRO_MONTHLY, env.PRICE_PRO_YEARLY, env.PRICE_FAMILY_MONTHLY]);
+  // Different checkouts can use different Stripe customers. List each FitFocus
+  // price and match its account metadata without depending on the Search index.
+  for (const price of prices) {
+    if (!price) continue;
+    for await (const subscription of stripe.subscriptions.list({ price, limit: 100 })) {
+      if (subscription.metadata.ff_uid === uid) yield subscription;
+    }
+  }
+}
+
 async function handleWebhookPost({ request, env }: { request: Request; env: Env }) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     apiVersion: "2023-10-16",
@@ -51,8 +63,8 @@ async function handleWebhookPost({ request, env }: { request: Request; env: Env 
     try {
       const result = await applyStripeSubscriptionUpdate(env.DB, event.data.object as SubscriptionLike, env,
         id => stripe.subscriptions.retrieve(id),
-        uid => stripe.subscriptions.search({ query: `metadata["ff_uid"]:${JSON.stringify(uid)}`, limit: 100 }));
-      if (result.reason === 'CONCURRENT_SUBSCRIPTION_UPDATE') {
+        uid => listAccountSubscriptions(stripe, env, uid));
+      if (result.reason === 'CONCURRENT_SUBSCRIPTION_UPDATE' || result.reason === 'LEGACY_SUBSCRIPTION_UNRESOLVED') {
         return new Response("Webhook Error: please retry", { status: 503 });
       }
     } catch {

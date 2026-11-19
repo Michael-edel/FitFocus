@@ -17,6 +17,8 @@ INSERT OR IGNORE INTO stripe_subscriptions (
   stripe_subscription_id, user_id, stripe_customer_id, plan, status,
   current_period_end, stripe_created, updated_at, revision
 )
+-- The old table has no Stripe creation date. Zero marks a snapshot that the
+-- webhook must refresh before comparing it with another eligible subscription.
 SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status,
   current_period_end, 0, updated_at, 'legacy'
 FROM subscriptions
