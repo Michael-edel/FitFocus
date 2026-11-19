@@ -25,8 +25,6 @@ type MockAppOptions = {
   nativeApi?: boolean;
 };
 
-const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
-
 const defaultAiPlan = {
   title: 'E2E plan',
   strategySummary: 'Тестовый AI-план для production E2E.',
@@ -93,9 +91,9 @@ export async function mockApp(page: Page, options: MockAppOptions): Promise<void
   const profile = buildMockProfile();
 
   if (options.session === 'register') {
-    await page.addInitScript((key: string) => {
-      window.sessionStorage.setItem(key, '1');
-    }, AUTH_PENDING_STORAGE_KEY);
+    await page.addInitScript(() => {
+      window.history.replaceState({ ...window.history.state, fitfocusOAuthCallback: 'received' }, '');
+    });
   }
 
   const push = {

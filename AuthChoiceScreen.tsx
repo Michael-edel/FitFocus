@@ -70,28 +70,29 @@ export default function AuthChoiceScreen({
   inviteError,
   setInviteError,
   requireInvite,
-  inviteChecking,
   onOpenVersionInfo,
 }: AuthChoiceScreenProps) {
   const online = React.useSyncExternalStore(subscribeConnectivity, getOnlineSnapshot, getServerOnlineSnapshot);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-left">
-      <div className="max-w-5xl w-full space-y-8 text-center relative">
-        <button
-          type="button"
-          onClick={onOpenVersionInfo}
-          className="absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 transition-colors hover:bg-slate-800/90 hover:text-slate-200"
-        >
-          <Sparkles size={12} className="text-indigo-400" />
-          Что нового
-        </button>
-        <div className="flex justify-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-indigo-950/50">
+    <div className="min-h-screen bg-slate-950 flex justify-center p-4 text-left">
+      <div className="max-w-5xl w-full space-y-6 text-center">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onOpenVersionInfo}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-400 transition-colors hover:bg-slate-800/90 hover:text-slate-200"
+          >
+            <Sparkles size={12} className="text-indigo-400" />
+            Что нового
+          </button>
+        </div>
+        <div className="flex flex-col items-center gap-3">
+          <div aria-hidden="true" className="size-16 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-3xl flex items-center justify-center text-white font-bold text-2xl shadow-xl shadow-indigo-950/50">
             FF
           </div>
+          <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
         </div>
-        <h1 className="text-3xl font-black text-slate-100 tracking-tight">FitFocus</h1>
         {!online ? (
           <div
             role="status"
@@ -105,6 +106,29 @@ export default function AuthChoiceScreen({
             </p>
           </div>
         ) : null}
+        <section aria-label="Вход в FitFocus" className="mx-auto grid max-w-sm gap-3 text-left">
+          <div className="space-y-2">
+            <label htmlFor="invite-code" className="text-xs font-semibold text-slate-300">
+              Код приглашения
+            </label>
+            <input
+              id="invite-code"
+              name="inviteCode"
+              value={inviteCode}
+              onChange={(e) => {
+                setInviteCode(e.target.value);
+                setInviteError(null);
+              }}
+              placeholder={requireInvite ? 'Обязательно для входа' : 'Необязательно'}
+              className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
+            />
+            {requireInvite ? (
+              <p className="text-xs text-slate-400">Для создания профиля в закрытой бете нужен код приглашения.</p>
+            ) : null}
+          </div>
+          {inviteError ? <p role="alert" className="text-sm text-rose-400 font-semibold">{inviteError}</p> : null}
+          <OAuthSignInButton provider="google" inviteCode={inviteCode} />
+        </section>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 text-left">
           {introCards.map((card) => {
             const Icon = card.icon;
@@ -136,37 +160,6 @@ export default function AuthChoiceScreen({
             </p>
           </div>
 
-          <div className="space-y-2 text-left">
-            <label
-              htmlFor="invite-code"
-              className="text-[10px] font-black uppercase tracking-widest text-slate-500"
-            >
-              Код приглашения (beta)
-            </label>
-            <input
-              id="invite-code"
-              name="inviteCode"
-              value={inviteCode}
-              onChange={(e) => {
-                const v = e.target.value;
-                setInviteCode(v);
-                setInviteError(null);
-              }}
-              placeholder={requireInvite ? 'Обязательно для входа' : 'Опционально'}
-              className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-600/40"
-            />
-            {requireInvite ? (
-              <p className="text-[10px] text-slate-500">Закрытая бета: без кода приглашения профиль создать нельзя.</p>
-            ) : null}
-            {inviteError ? <p className="text-[11px] text-rose-400 font-semibold">{inviteError}</p> : null}
-          </div>
-
-          <div className="flex items-center justify-center p-5 border-2 border-dashed border-slate-800 rounded-[2rem] bg-slate-900/40">
-            <OAuthSignInButton
-              provider="google"
-              inviteCode={inviteCode}
-            />
-          </div>
           <div className="flex items-center justify-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
               <Apple size={12} className="text-slate-500" />

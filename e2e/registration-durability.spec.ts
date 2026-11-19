@@ -124,7 +124,7 @@ test('registration is durable before AI and reload restores it without an OAuth 
   await expect.poll(async () => (await saved(page)).pause).toBe('auth');
   expect(requests.profile).toBeGreaterThanOrEqual(1); expect(requests.ai).toBe(1);
   expect((await saved(page)).operations).toHaveLength(2);
-  expect(await page.evaluate(() => sessionStorage.getItem('fitfocus.auth.pending-oauth.v1'))).toBeNull();
+  expect(await page.evaluate(() => history.state?.fitfocusOAuthCallback)).toBeUndefined();
   await page.reload(); await expect(page).toHaveURL(/#plan$/); await expect(create).toHaveCount(0);
   await expect(page.getByText(/Ваш AI/)).toBeVisible();
   await expect.poll(async () => (await saved(page)).pause).toBe('auth');

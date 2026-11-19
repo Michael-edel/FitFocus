@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { type AppTabId, sidebarTabs } from '../../navigation';
 
 /** Converts a FitFocus hash route into a public application tab. */
@@ -15,12 +15,24 @@ function readInitialHashTab(): AppTabId | null {
 
 /** Keeps the selected application tab aligned with browser hash navigation. */
 export function useHashTabNavigation(defaultTab: AppTabId) {
-  const [activeTab, setActiveTab] = useState<AppTabId>(() => readInitialHashTab() || defaultTab);
+  const [activeTab, setTab] = useState<AppTabId>(() => readInitialHashTab() || defaultTab);
+  const setActiveTab = useCallback((tab: AppTabId) => {
+    const url = new URL(window.location.href);
+    const hashTab = parseHashTab(url.hash);
+    if (tab === 'nutrition' && hashTab !== 'nutrition') {
+      url.hash = 'nutrition';
+      window.history.replaceState(window.history.state, '', url);
+    } else if (tab !== 'nutrition' && hashTab === 'nutrition') {
+      url.hash = '';
+      window.history.replaceState(window.history.state, '', url);
+    }
+    setTab(tab);
+  }, []);
 
   useEffect(() => {
     const applyHashTab = () => {
       const tab = readInitialHashTab();
-      if (tab) setActiveTab(tab);
+      if (tab) setTab(tab);
     };
     applyHashTab();
     window.addEventListener('hashchange', applyHashTab);

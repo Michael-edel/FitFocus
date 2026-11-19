@@ -186,6 +186,10 @@ Bootstrap требует их через `requireScopedStateUser` и прове�
 `X-FitFocus-Bootstrap-Guard: 1`. `user` содержит публичные поля без сырого sid.
 State GET использует protocol 2 / guard 1 и ту же пару scope headers.
 
+После успешного OAuth callback клиент обрабатывает `?auth=google` или
+`?auth=apple` как сигнал начать проверку сессии через `/api/me`. Признаком
+авторизации остаётся только подтверждённая сервером сессия.
+
 Старые bundles без scope headers получают 401 до чтения данных и должны
 обновиться до rollout. До применения облачных
 данных IDB-транзакция проверяет epoch/auth-fence, revision и pending.
