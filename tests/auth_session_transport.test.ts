@@ -127,7 +127,16 @@ describe('OAuth continuation state', () => {
     vi.stubGlobal('window', { location: { href: 'https://fitfocus.test/?auth=google&x=1' }, history: { replaceState } });
     vi.stubGlobal('sessionStorage', { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() });
     expect(consumeOAuthContinuationState()).toBe(true);
-    expect(replaceState).toHaveBeenCalledWith({}, '', 'https://fitfocus.test/?x=1');
+    expect(replaceState).toHaveBeenCalledWith({ fitfocusOAuthCallback: 'received' }, '', 'https://fitfocus.test/?x=1');
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores markers left by an abandoned OAuth navigation in an older client', () => {
+    const replaceState = vi.fn();
+    vi.stubGlobal('window', { location: { href: 'https://fitfocus.test/' }, history: { replaceState } });
+    vi.stubGlobal('sessionStorage', { getItem: vi.fn(() => '1') });
+    expect(consumeOAuthContinuationState()).toBe(false);
+    expect(replaceState).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

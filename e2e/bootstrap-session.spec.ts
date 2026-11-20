@@ -17,6 +17,51 @@ async function snapshot(page: Page) {
     } finally { db.close(); }
   });
 }
+test('restores the open food diary and its entries after OAuth and reload', async ({ page }) => {
+  await mockApp(page, { session: 'app' });
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  const mealName = 'Овсянка для проверки дневника';
+  const items = [{
+    key: `fitfocus_data_${account}_diary`,
+    version: 1,
+    exists: true,
+    value: JSON.stringify([{
+      id: 'diary-reload-entry', name: mealName, mealType: 'breakfast', timestamp: date.toISOString(),
+      calories: 300, protein: 12, fat: 8, carbs: 42,
+    }]),
+  }];
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || !['/api/bootstrap', '/api/state'].includes(path)) return route.fallback();
+    const isBootstrap = path === '/api/bootstrap';
+    expect(request.headers()['x-fitfocus-state-account']).toBe(account);
+    expect(request.headers()['x-fitfocus-state-session']).toBe(sid);
+    await route.fulfill({
+      headers: scope,
+      json: isBootstrap ? { user: { sub: account }, profile: buildMockProfile(), items } : { items },
+    });
+  });
+
+  await openApp(page, '/?auth=google');
+  await expect(page).toHaveTitle(/FitFocus/);
+  await page.getByRole('button', { name: 'Питание', exact: true }).click();
+  const meal = page.getByText(mealName, { exact: true });
+  await expect(meal).toBeVisible();
+  await expect(page).toHaveURL(/\/#nutrition$/);
+  expect(await page.evaluate(() => history.state?.fitfocusOAuthCallback)).toBeUndefined();
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/#nutrition$/);
+  await expect(meal).toBeVisible();
+  await page.getByRole('button', { name: 'Обзор', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  expect(errors).toEqual([]);
+});
+
 for (const mode of ['bootstrap-scope', 'state-scope', 'late-bootstrap', 'state-me-logout'] as const) {
   test(`rejects ${mode} before activating an unverified login`, async ({ page }, info) => {
     const errors: string[] = [];

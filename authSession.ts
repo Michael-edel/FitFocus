@@ -92,56 +92,45 @@ const readJsonRecord = async (response: Response): Promise<UnknownRecord | null>
   }
 };
 
-function authRecoveryReloadKey() {
-  return 'fitfocus.auth.oauth-recovery-reloaded.v1';
-}
+const OAUTH_CALLBACK_HISTORY_KEY = 'fitfocusOAuthCallback';
 
-function hasReloadedForAuthRecovery(): boolean {
+function reloadAfterOAuthCallback(): boolean {
   try {
-    return sessionStorage.getItem(authRecoveryReloadKey()) === '1';
-  } catch {
+    if (window.history.state?.[OAUTH_CALLBACK_HISTORY_KEY] !== 'received') return false;
+    window.history.replaceState({ ...window.history.state, [OAUTH_CALLBACK_HISTORY_KEY]: 'reloading' }, '');
+    window.location.reload();
     return true;
+  } catch {
+    return false;
   }
 }
 
-function markReloadedForAuthRecovery(): void {
-  try {
-    sessionStorage.setItem(authRecoveryReloadKey(), '1');
-  } catch {}
-}
-
-function clearAuthRecoveryReloadMarker(): void {
-  try {
-    sessionStorage.removeItem(authRecoveryReloadKey());
-  } catch {}
-}
-
-const OAUTH_CONTINUATION_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
-
-/** Reads and normalizes the post-OAuth continuation marker, then removes auth from the visible URL. */
+/** Keeps the callback marker on its own history entry while removing it from the URL. */
 export function consumeOAuthContinuationState(): boolean {
-  let continueAfterOAuth = false;
-  try {
-    continueAfterOAuth = sessionStorage.getItem(OAUTH_CONTINUATION_STORAGE_KEY) === '1';
-  } catch {}
   try {
     const url = new URL(window.location.href);
     const auth = url.searchParams.get('auth');
     if (auth === 'google' || auth === 'apple') {
-      continueAfterOAuth = true;
-      try { sessionStorage.setItem(OAUTH_CONTINUATION_STORAGE_KEY, '1'); } catch {}
       url.searchParams.delete('auth');
-      window.history.replaceState({}, '', url.toString());
+      try {
+        window.history.replaceState({ ...window.history.state, [OAUTH_CALLBACK_HISTORY_KEY]: 'received' }, '', url.toString());
+      } catch {}
+      return true;
     }
+    const callback = window.history.state?.[OAUTH_CALLBACK_HISTORY_KEY];
+    return callback === 'received' || callback === 'reloading';
   } catch {}
-  return continueAfterOAuth;
+  return false;
 }
 
 export function clearOAuthContinuationState(): void {
   try {
-    sessionStorage.removeItem(OAUTH_CONTINUATION_STORAGE_KEY);
+    if (window.history.state?.[OAUTH_CALLBACK_HISTORY_KEY]) {
+      const state = { ...window.history.state };
+      delete state[OAUTH_CALLBACK_HISTORY_KEY];
+      window.history.replaceState(state, '');
+    }
   } catch {}
-  clearAuthRecoveryReloadMarker();
 }
 
 export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise<void> {
@@ -191,7 +180,6 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
       return;
     }
     const bootstrapGuard = readGuard;
-    clearAuthRecoveryReloadMarker();
     let confirmedAbsent = false;
     try {
       const { response: pr, body: pj } = await readScopedJson('/api/bootstrap', bootstrapGuard, 'bootstrap', {
@@ -264,12 +252,11 @@ export async function bootstrapAuthSession(params: BootstrapAuthParams): Promise
     return;
   }
 
-  if (params.continueAfterOAuth && !hasReloadedForAuthRecovery()) {
-    markReloadedForAuthRecovery();
-    window.location.replace(window.location.href);
-    return;
+  if (params.continueAfterOAuth) {
+    if (reloadAfterOAuthCallback()) return;
+    clearOAuthContinuationState();
+    params.setInviteError('Не удалось подтвердить вход. Попробуйте ещё раз.');
   }
-
   params.setAllUsers([]);
   params.setAuthState('auth_choice');
 }

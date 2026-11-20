@@ -1959,7 +1959,12 @@ const logWeight = useCallback(async (): Promise<'saved' | 'invalid' | 'failed'> 
     },
   };
 
-  if (authState === 'loading') return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+  if (authState === 'loading') return (
+    <div role="status" className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-200">
+      <Loader2 aria-hidden="true" className="animate-spin text-indigo-500" size={40} />
+      <span>Проверяем сессию…</span>
+    </div>
+  );
 
   if (authState === 'auth_choice') return (
     <React.Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200"><Loader2 className="h-6 w-6 animate-spin text-indigo-400" /></div>}>

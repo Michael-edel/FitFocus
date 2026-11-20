@@ -4990,7 +4990,7 @@ test('pending account A outbox pauses on logout and resumes after login with a f
 
     await openApp(page, '/#settings');
     await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
-    const googleLogin = page.getByRole('link', { name: /Google профиль/ });
+    const googleLogin = page.getByRole('link', { name: 'Войти через Google', exact: true });
     await expect(googleLogin).toBeVisible();
     await expect.poll(async () => (await readDurableSnapshot(page)).activeSession).toBeNull();
     expect(logoutRequests).toBe(1);

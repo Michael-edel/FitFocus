@@ -16,6 +16,8 @@ test.describe('production PWA shell', () => {
 
       await expect(page.getByRole('heading', { name: 'FitFocus' })).toBeVisible();
       await expect(page.getByText('Только cloud-профиль')).toBeVisible();
+      const signIn = page.getByRole('link', { name: 'Войти через Google', exact: true });
+      await expect(signIn).toBeInViewport({ ratio: 1 });
 
       const manifestHref = await page.locator('link[rel="manifest"]').first().getAttribute('href');
       expect(manifestHref).toBeTruthy();
@@ -49,7 +51,6 @@ test.describe('production PWA shell', () => {
       await expect(page).toHaveTitle(/FitFocus/);
       await page.screenshot({ path: info.outputPath('auth-shell-no-sdk.png') });
       await page.locator('#invite-code').fill('E2E-INVITE');
-      const signIn = page.getByRole('link', { name: /Google профиль/ });
       await expect(signIn).toHaveAttribute('href', /\/api\/auth\/google\/start\?/);
       await page.screenshot({ path: info.outputPath('auth-redirect-ready.png') });
       await signIn.click();
@@ -58,7 +59,13 @@ test.describe('production PWA shell', () => {
       expect(destination.pathname).toBe('/api/auth/google/start');
       expect(destination.searchParams.get('invite')).toBe('E2E-INVITE');
       expect(destination.searchParams.get('redirect')).toBe(server.origin);
-      expect(await page.evaluate(() => sessionStorage.getItem('fitfocus.auth.pending-oauth.v1'))).toBe('1');
+      expect(await page.evaluate(() => history.state?.fitfocusOAuthCallback)).toBeUndefined();
+      await page.goBack();
+      await expect(signIn).toBeInViewport({ ratio: 1, timeout: 5_000 });
+      await expect(page.getByText('Проверяем сессию…')).toHaveCount(0);
+      await page.evaluate(() => sessionStorage.setItem('fitfocus.auth.pending-oauth.v1', '1'));
+      await page.reload();
+      await expect(signIn).toBeInViewport({ ratio: 1, timeout: 5_000 });
       expect(identityRequests).toEqual([]); expect(errors).toEqual([]);
       expect(server.counts.oauth).toBe(1); expect(server.unexpectedApi).toEqual([]);
     } catch (error) {

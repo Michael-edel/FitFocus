@@ -76,7 +76,7 @@ test('native Service Worker push recovery uses the active session and stops afte
     const logout = page.getByRole('button', { name: 'Выйти из аккаунта', exact: true });
     await logout.scrollIntoViewIfNeeded();
     await logout.click();
-    await expect(page.getByRole('link', { name: /Google профиль/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Войти через Google', exact: true })).toBeVisible();
     await expect.poll(async () => activeSession(page)).toBeNull();
     await expect.poll(() => server.counts.logout).toBe(1);
 

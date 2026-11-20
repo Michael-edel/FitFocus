@@ -1,7 +1,4 @@
-import React from 'react';
 import { Apple } from 'lucide-react';
-
-const AUTH_PENDING_STORAGE_KEY = 'fitfocus.auth.pending-oauth.v1';
 
 export type OAuthProvider = 'google' | 'apple';
 
@@ -11,35 +8,22 @@ type OAuthSignInButtonProps = {
 };
 
 export default function OAuthSignInButton({ inviteCode, provider }: OAuthSignInButtonProps) {
-  const authUrl = React.useMemo(() => {
-    const params = new URLSearchParams();
-    if (inviteCode) params.set('invite', inviteCode);
-    params.set('redirect', window.location.origin);
-    return `/api/auth/${provider}/start?${params.toString()}`;
-  }, [inviteCode, provider]);
-
-  const handleClick = React.useCallback(async (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    try {
-      sessionStorage.setItem(AUTH_PENDING_STORAGE_KEY, '1');
-    } catch {}
-    window.location.assign(authUrl);
-  }, [authUrl]);
+  const params = new URLSearchParams({ redirect: window.location.origin });
+  if (inviteCode) params.set('invite', inviteCode);
 
   return (
     <a
-      href={authUrl}
+      href={`/api/auth/${provider}/start?${params.toString()}`}
       target="_top"
       rel="noreferrer"
-      onClick={handleClick}
-      className="flex items-center gap-2 rounded-full px-4 py-2 border border-white/15 bg-white/5 hover:bg-white/10 active:bg-white/15 text-sm text-white/90"
+      className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-300"
     >
       {provider === 'google' ? (
-        <img src="/google-g.svg" alt="Google" className="w-4 h-4" />
+        <img src="/google-g.svg" alt="" className="size-5 rounded-full bg-white p-0.5" />
       ) : (
-        <Apple size={16} className="text-white" />
+        <Apple size={16} aria-hidden="true" />
       )}
-      <span>{provider === 'google' ? 'Google профиль' : 'Apple профиль'}</span>
+      <span>{provider === 'google' ? 'Войти через Google' : 'Войти через Apple'}</span>
     </a>
   );
 }
