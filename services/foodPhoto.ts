@@ -20,6 +20,26 @@ function loadImageElement(file: File): Promise<HTMLImageElement> {
   });
 }
 
+async function encodeJpeg(canvas: HTMLCanvasElement, quality: number): Promise<string> {
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error('Failed to encode JPEG'));
+    }, 'image/jpeg', quality);
+  });
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to read JPEG'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read JPEG'));
+    reader.onabort = () => reject(new Error('JPEG read aborted'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function compressFoodPhoto(
   file: File,
   options?: { maxSide?: number; quality?: number; thumbSize?: number },
@@ -30,15 +50,6 @@ export async function compressFoodPhoto(
     file.type.includes('heif') ||
     lowerName.endsWith('.heic') ||
     lowerName.endsWith('.heif');
-  if (isHeic) {
-    try {
-      await createImageBitmap(file);
-    } catch (error) {
-      alert('Фото в формате HEIC/HEIF. Пожалуйста, выберите JPG/PNG или нажмите «Снять» (камера), чтобы приложение само сделало JPEG.');
-      throw error;
-    }
-  }
-
   const maxSide = options?.maxSide ?? 768;
   const quality = options?.quality ?? 0.72;
   const thumbSize = options?.thumbSize ?? 140;
@@ -46,23 +57,24 @@ export async function compressFoodPhoto(
   const sourceContext = sourceCanvas.getContext('2d');
   if (!sourceContext) throw new Error('No canvas context');
 
-  let sourceWidth = 0;
-  let sourceHeight = 0;
+  let source: ImageBitmap | HTMLImageElement;
   try {
-    const bitmap = await createImageBitmap(file);
-    sourceWidth = bitmap.width;
-    sourceHeight = bitmap.height;
+    source = await createImageBitmap(file);
+  } catch (error) {
+    if (isHeic) {
+      alert('Фото в формате HEIC/HEIF. Пожалуйста, выберите JPG/PNG или нажмите «Снять» (камера), чтобы приложение само сделало JPEG.');
+      throw error;
+    }
+    source = await loadImageElement(file);
+  }
+  const sourceWidth = ('naturalWidth' in source && source.naturalWidth) || source.width;
+  const sourceHeight = ('naturalHeight' in source && source.naturalHeight) || source.height;
+  try {
     sourceCanvas.width = sourceWidth;
     sourceCanvas.height = sourceHeight;
-    sourceContext.drawImage(bitmap, 0, 0);
-    bitmap.close?.();
-  } catch {
-    const image = await loadImageElement(file);
-    sourceWidth = image.naturalWidth || image.width;
-    sourceHeight = image.naturalHeight || image.height;
-    sourceCanvas.width = sourceWidth;
-    sourceCanvas.height = sourceHeight;
-    sourceContext.drawImage(image, 0, 0);
+    sourceContext.drawImage(source, 0, 0);
+  } finally {
+    if ('close' in source) source.close();
   }
 
   const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
@@ -75,7 +87,6 @@ export async function compressFoodPhoto(
   if (!context) throw new Error('No canvas context');
   context.drawImage(sourceCanvas, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', quality);
   const thumbnail = document.createElement('canvas');
   thumbnail.width = thumbSize;
   thumbnail.height = thumbSize;
@@ -85,7 +96,10 @@ export async function compressFoodPhoto(
   const sourceX = Math.floor((width - side) / 2);
   const sourceY = Math.floor((height - side) / 2);
   thumbnailContext.drawImage(canvas, sourceX, sourceY, side, side, 0, 0, thumbSize, thumbSize);
-  const thumbUrl = thumbnail.toDataURL('image/jpeg', Math.min(0.8, quality + 0.08));
+  const [dataUrl, thumbUrl] = await Promise.all([
+    encodeJpeg(canvas, quality),
+    encodeJpeg(thumbnail, Math.min(0.8, quality + 0.08)),
+  ]);
 
   return {
     dataUrl,
